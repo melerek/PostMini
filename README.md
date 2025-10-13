@@ -1,10 +1,18 @@
-# API Client - Postman Alternative
+# PostMini - Desktop API Client
 
-A lightweight, desktop API client application built with PyQt6, similar to a simplified version of Postman. This application allows you to create, manage, and execute HTTP requests with full support for collections, parameters, headers, authentication, and persistent storage.
+A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for collections, environment variables, OAuth 2.0, API testing, code generation, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+
+---
+
+## 📖 Documentation
+
+**[View Full Documentation (HTML)](docs/index.html)** - Open `docs/index.html` in your browser for comprehensive documentation with interactive navigation.
+
+---
 
 ## Features
 
@@ -40,7 +48,7 @@ A lightweight, desktop API client application built with PyQt6, similar to a sim
 The project follows a clean, modular architecture with clear separation of concerns:
 
 ```
-PostmanAlternative/
+PostMini/
 ├── main.py                    # Application entry point
 ├── requirements.txt           # Python dependencies  
 ├── styles.qss                 # Qt stylesheet
@@ -54,7 +62,7 @@ PostmanAlternative/
 │   └── features/             # Feature modules (OAuth, testing, etc.)
 │
 ├── tests/                    # Test suite
-└── docs/                     # Documentation
+└── docs/                     # Documentation (includes index.html)
 ```
 
 📖 **See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed architecture documentation.**
@@ -70,7 +78,7 @@ PostmanAlternative/
 
 1. Clone or download this repository:
    ```bash
-   cd PostmanAlternative
+   cd PostMini
    ```
 
 2. Create a virtual environment (recommended):
@@ -493,7 +501,8 @@ This project is licensed under the MIT License.
 
 - Built with PyQt6 for the GUI framework
 - Uses the requests library for HTTP operations
-- Inspired by Postman and similar API client tools
+- Inspired by Postman and other professional API client tools
+- PostMini - A simple yet powerful alternative for desktop API testing
 
 ## Contact
 
