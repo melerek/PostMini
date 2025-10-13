@@ -7,7 +7,7 @@ UI component for managing test assertions in the request editor.
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QComboBox, QLineEdit, QTableWidget, QTableWidgetItem,
-    QHeaderView, QCheckBox, QMessageBox, QGroupBox
+    QHeaderView, QCheckBox, QMessageBox, QGroupBox, QGridLayout, QFormLayout, QScrollArea
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -28,32 +28,35 @@ class TestTabWidget(QWidget):
     
     def _init_ui(self):
         """Initialize the user interface."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # Create scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setStyleSheet("QScrollArea { background-color: white; border: none; }")
         
-        # Info section
-        info_group = QGroupBox("Test Assertions")
-        info_layout = QVBoxLayout()
+        # Content widget
+        content = QWidget()
+        content.setStyleSheet("QWidget#testTabContent { background-color: white; }")
+        content.setObjectName("testTabContent")
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
         
+        # Info label (compact)
         info_label = QLabel(
-            "Add test assertions to automatically validate API responses. "
-            "Tests run after each request and results are saved."
+            "Add test assertions to automatically validate API responses. Tests run after each request."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #666; font-size: 11px;")
-        info_layout.addWidget(info_label)
+        info_label.setProperty("class", "secondary-text")
+        layout.addWidget(info_label)
         
-        info_group.setLayout(info_layout)
-        layout.addWidget(info_group)
+        # Single-line form
+        form_layout = QHBoxLayout()
+        form_layout.setSpacing(8)
         
-        # Add assertion section
-        add_group = QGroupBox("Add Assertion")
-        add_layout = QVBoxLayout()
-        
-        # Type selection
-        type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("Type:"))
-        
+        # Type
+        form_layout.addWidget(QLabel("Type:"))
         self.type_combo = QComboBox()
         self.type_combo.addItems([
             "Status Code",
@@ -66,50 +69,57 @@ class TestTabWidget(QWidget):
             "JSON Schema"
         ])
         self.type_combo.currentTextChanged.connect(self._on_type_changed)
-        type_layout.addWidget(self.type_combo, 1)
-        add_layout.addLayout(type_layout)
+        self.type_combo.setMinimumWidth(120)
+        form_layout.addWidget(self.type_combo)
         
-        # Field input (for headers, JSON path)
-        field_layout = QHBoxLayout()
+        # Field (conditional)
         self.field_label = QLabel("Field:")
-        field_layout.addWidget(self.field_label)
+        form_layout.addWidget(self.field_label)
         self.field_input = QLineEdit()
-        self.field_input.setPlaceholderText("e.g., Content-Type or user.name")
-        field_layout.addWidget(self.field_input, 1)
-        add_layout.addLayout(field_layout)
+        self.field_input.setPlaceholderText("e.g., Content-Type")
+        self.field_input.setMinimumWidth(100)
+        form_layout.addWidget(self.field_input)
         
-        # Operator selection
-        operator_layout = QHBoxLayout()
-        operator_layout.addWidget(QLabel("Operator:"))
-        
+        # Operator
+        form_layout.addWidget(QLabel("Op:"))
         self.operator_combo = QComboBox()
-        operator_layout.addWidget(self.operator_combo, 1)
-        add_layout.addLayout(operator_layout)
+        self.operator_combo.setMinimumWidth(100)
+        form_layout.addWidget(self.operator_combo)
         
-        # Expected value input
-        value_layout = QHBoxLayout()
-        value_layout.addWidget(QLabel("Expected:"))
+        # Expected
+        form_layout.addWidget(QLabel("Expected:"))
         self.value_input = QLineEdit()
-        self.value_input.setPlaceholderText("Expected value")
-        value_layout.addWidget(self.value_input, 1)
-        add_layout.addLayout(value_layout)
+        self.value_input.setPlaceholderText("Value")
+        self.value_input.setMinimumWidth(80)
+        form_layout.addWidget(self.value_input, 1)  # Stretch
         
         # Add button
-        add_btn_layout = QHBoxLayout()
-        add_btn_layout.addStretch()
-        self.add_btn = QPushButton("➕ Add Assertion")
+        self.add_btn = QPushButton("Add")
+        self.add_btn.setProperty("class", "primary")
         self.add_btn.clicked.connect(self._add_assertion)
-        self.add_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 6px; }")
-        add_btn_layout.addWidget(self.add_btn)
-        add_layout.addLayout(add_btn_layout)
+        form_layout.addWidget(self.add_btn)
         
-        add_group.setLayout(add_layout)
-        layout.addWidget(add_group)
+        layout.addLayout(form_layout)
+        
+        # Separator
+        separator = QLabel()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet("background-color: #E0E0E0;")
+        layout.addWidget(separator)
+        
+        # Assertions table header
+        header_layout = QHBoxLayout()
+        header_label = QLabel("Active Assertions")
+        header_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        header_layout.addWidget(header_label)
+        header_layout.addStretch()
+        
+        clear_btn = QPushButton("Clear All")
+        clear_btn.clicked.connect(self._clear_all_assertions)
+        header_layout.addWidget(clear_btn)
+        layout.addLayout(header_layout)
         
         # Assertions table
-        assertions_group = QGroupBox("Active Assertions")
-        assertions_layout = QVBoxLayout()
-        
         self.assertions_table = QTableWidget()
         self.assertions_table.setColumnCount(6)
         self.assertions_table.setHorizontalHeaderLabels([
@@ -118,20 +128,16 @@ class TestTabWidget(QWidget):
         self.assertions_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.assertions_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.assertions_table.setAlternatingRowColors(True)
-        assertions_layout.addWidget(self.assertions_table)
+        self.assertions_table.setMinimumHeight(200)  # Ensure table is always visible
+        layout.addWidget(self.assertions_table, 1)  # Stretch to fill
         
-        # Bulk actions
-        bulk_layout = QHBoxLayout()
-        bulk_layout.addStretch()
+        # Set content in scroll area
+        scroll.setWidget(content)
         
-        clear_btn = QPushButton("🗑️ Clear All")
-        clear_btn.clicked.connect(self._clear_all_assertions)
-        bulk_layout.addWidget(clear_btn)
-        
-        assertions_layout.addLayout(bulk_layout)
-        
-        assertions_group.setLayout(assertions_layout)
-        layout.addWidget(assertions_group)
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
         
         # Update operator options based on initial type
         self._on_type_changed(self.type_combo.currentText())

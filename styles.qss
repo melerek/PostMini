@@ -762,3 +762,71 @@ QProgressBar::chunk {
     border-radius: 2px;
 }
 
+/* ==================== SCROLLBAR ==================== */
+
+/* Vertical Scrollbar */
+QScrollBar:vertical {
+    background-color: #F5F5F5;
+    width: 12px;
+    border: none;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #BDBDBD;
+    min-height: 30px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #9E9E9E;
+}
+
+QScrollBar::handle:vertical:pressed {
+    background-color: #757575;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* Horizontal Scrollbar */
+QScrollBar:horizontal {
+    background-color: #F5F5F5;
+    height: 12px;
+    border: none;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #BDBDBD;
+    min-width: 30px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #9E9E9E;
+}
+
+QScrollBar::handle:horizontal:pressed {
+    background-color: #757575;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}
+

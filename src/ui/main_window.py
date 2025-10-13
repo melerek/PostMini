@@ -104,7 +104,7 @@ class MainWindow(QMainWindow):
         self.request_thread = None
         
         # Setup UI
-        self.setWindowTitle("API Client - Postman Alternative")
+        self.setWindowTitle("PostMini - Desktop API Client")
         self.setGeometry(100, 100, 1400, 900)
         
         self._init_ui()
@@ -289,11 +289,10 @@ class MainWindow(QMainWindow):
         response_viewer = self._create_response_viewer()
         splitter.addWidget(response_viewer)
         
-        # Set splitter sizes (40% request editor, 60% response viewer)
-        # Allow flexible resizing by removing minimum size constraints
-        splitter.setStretchFactor(0, 2)  # Request editor less stretch
-        splitter.setStretchFactor(1, 3)  # Response viewer more stretch
-        splitter.setSizes([360, 540])
+        # Set splitter sizes (45% request editor, 55% response viewer)
+        splitter.setStretchFactor(0, 45)  # Request editor
+        splitter.setStretchFactor(1, 55)  # Response viewer - 20% more space
+        splitter.setSizes([400, 500])
         
         layout.addWidget(splitter)
         
@@ -351,14 +350,16 @@ class MainWindow(QMainWindow):
         
         # Tabs for Params, Headers, Authorization, Body
         self.request_tabs = QTabWidget()
-        self.request_tabs.setMaximumHeight(400)  # Limit tab widget height for better panel balance
+        self.request_tabs.setMaximumHeight(350)  # Reduced height for more response space
         
         # Params tab
         self.params_table = self._create_key_value_table()
+        self.params_table.itemChanged.connect(self._update_tab_counts)
         self.request_tabs.addTab(self.params_table, "Params")
         
         # Headers tab
         self.headers_table = self._create_key_value_table()
+        self.headers_table.itemChanged.connect(self._update_tab_counts)
         self.request_tabs.addTab(self.headers_table, "Headers")
         
         # Authorization tab
@@ -443,6 +444,9 @@ class MainWindow(QMainWindow):
         self.response_body.setReadOnly(True)
         body_layout.addWidget(self.response_body)
         
+        # Add padding to body widget
+        body_layout.setContentsMargins(10, 10, 10, 10)
+        
         self.response_tabs.addTab(body_widget, "Body")
         
         # Headers tab
@@ -469,7 +473,7 @@ class MainWindow(QMainWindow):
         table.setHorizontalHeaderLabels(['Key', 'Value'])
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         table.setRowCount(3)  # Start with 3 empty rows (reduced for better space)
-        table.setMaximumHeight(250)  # Limit height to allow response panel to expand
+        # Remove max height constraint so table anchors to parent panel properly
         return table
     
     def _create_auth_widget(self) -> QWidget:
@@ -570,7 +574,7 @@ class MainWindow(QMainWindow):
             request_count = len(requests)
             
             # Create collection item with request count
-            collection_name = f"{collection['name']} ({request_count})"
+            collection_name = f"{collection['name']} [{request_count}]"
             collection_item = QTreeWidgetItem([collection_name])
             collection_item.setData(0, Qt.ItemDataRole.UserRole, 
                                    {'type': 'collection', 'id': collection['id'], 'name': collection['name']})
@@ -608,6 +612,9 @@ class MainWindow(QMainWindow):
             self.current_request_id = None
             self._clear_request_editor()
             self.workspace_pane.setVisible(False)  # Hide workspace when collection clicked
+            
+            # Toggle expansion when clicking anywhere on collection item
+            item.setExpanded(not item.isExpanded())
         elif data.get('type') == 'request':
             self.current_collection_id = data['collection_id']
             self.current_request_id = data['id']
@@ -753,6 +760,9 @@ class MainWindow(QMainWindow):
             self.has_unsaved_changes = False
             self._update_request_title()
             
+            # Update tab counts
+            self._update_tab_counts()
+            
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load request: {str(e)}")
     
@@ -785,14 +795,17 @@ class MainWindow(QMainWindow):
         
         # Handle None or empty data
         if not data:
-            table.setRowCount(5)
+            table.setRowCount(3)
             return
         
-        table.setRowCount(max(5, len(data) + 2))
+        table.setRowCount(max(3, len(data) + 2))
         
         for i, (key, value) in enumerate(data.items()):
             table.setItem(i, 0, QTableWidgetItem(key))
             table.setItem(i, 1, QTableWidgetItem(str(value)))
+        
+        # Update tab counts after loading
+        self._update_tab_counts()
     
     def _get_table_as_dict(self, table: QTableWidget) -> Dict:
         """Extract key-value pairs from a table as a dictionary."""
@@ -826,6 +839,29 @@ class MainWindow(QMainWindow):
         if not self.has_unsaved_changes:
             self.has_unsaved_changes = True
             self._update_request_title()
+    
+    def _update_tab_counts(self):
+        """Update tab labels to show item counts in square brackets."""
+        # Count params
+        params_count = 0
+        for row in range(self.params_table.rowCount()):
+            key_item = self.params_table.item(row, 0)
+            if key_item and key_item.text().strip():
+                params_count += 1
+        
+        # Count headers
+        headers_count = 0
+        for row in range(self.headers_table.rowCount()):
+            key_item = self.headers_table.item(row, 0)
+            if key_item and key_item.text().strip():
+                headers_count += 1
+        
+        # Update tab labels
+        params_label = f"Params [{params_count}]" if params_count > 0 else "Params"
+        headers_label = f"Headers [{headers_count}]" if headers_count > 0 else "Headers"
+        
+        self.request_tabs.setTabText(0, params_label)
+        self.request_tabs.setTabText(1, headers_label)
     
     def _update_request_title(self):
         """Update the request title label to show current state."""
