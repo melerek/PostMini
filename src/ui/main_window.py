@@ -101,6 +101,9 @@ class MainWindow(QMainWindow):
         self.secrets_manager = None
         self.git_workspace = None
         
+        # Theme management
+        self.current_theme = 'light'  # Will be set by main.py
+        
         # Track current selection
         self.current_collection_id = None
         self.current_request_id = None
@@ -199,10 +202,17 @@ class MainWindow(QMainWindow):
         self.env_info_label.setStyleSheet("color: #666; font-style: italic;")
         toolbar.addWidget(self.env_info_label)
         
-        # Add spacer to push help hint to the right
+        # Add spacer to push theme toggle to the right
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
+        
+        # Theme toggle button
+        self.theme_toggle_btn = QPushButton()
+        self._update_theme_button()
+        self.theme_toggle_btn.setToolTip("Toggle dark/light theme")
+        self.theme_toggle_btn.clicked.connect(self._toggle_theme)
+        toolbar.addWidget(self.theme_toggle_btn)
         
         # Help hint in top right corner
         help_hint = QLabel("💡 Press Ctrl+/ for shortcuts")
@@ -2092,12 +2102,50 @@ class MainWindow(QMainWindow):
                 f"Failed to import changes:\n{str(e)}"
             )
     
+    def _update_theme_button(self):
+        """Update the theme toggle button icon based on current theme."""
+        if self.current_theme == "dark":
+            self.theme_toggle_btn.setText("☀️")  # Sun icon for switching to light
+            self.theme_toggle_btn.setToolTip("Switch to Light Theme")
+        else:
+            self.theme_toggle_btn.setText("🌙")  # Moon icon for switching to dark
+            self.theme_toggle_btn.setToolTip("Switch to Dark Theme")
+    
+    def _toggle_theme(self):
+        """Toggle between light and dark themes."""
+        # Determine new theme
+        new_theme = "dark" if self.current_theme == "light" else "light"
+        
+        # Save preference
+        from main import save_theme_preference, load_stylesheet
+        save_theme_preference(new_theme)
+        
+        # Load new stylesheet
+        stylesheet_file = "styles_dark.qss" if new_theme == "dark" else "styles.qss"
+        stylesheet = load_stylesheet(stylesheet_file)
+        
+        if stylesheet:
+            # Apply new stylesheet
+            QApplication.instance().setStyleSheet(stylesheet)
+            self.current_theme = new_theme
+            self._update_theme_button()
+            
+            # Show confirmation message
+            theme_name = "Dark" if new_theme == "dark" else "Light"
+            self.statusBar().showMessage(f"✨ {theme_name} theme activated", 3000)
+        else:
+            QMessageBox.warning(
+                self,
+                "Theme Error",
+                f"Failed to load {new_theme} theme stylesheet."
+            )
+    
     def closeEvent(self, event):
         """Handle application close event."""
         # Stop any running request thread
         if self.request_thread and self.request_thread.isRunning():
             self.request_thread.wait(1000)  # Wait up to 1 second
-        
+
         # Clean up resources
         self.db.close()
         self.api_client.close()

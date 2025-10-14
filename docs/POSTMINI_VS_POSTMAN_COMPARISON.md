@@ -211,8 +211,8 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Learning Curve** | ✅ **Easy** | ⚠️ Moderate | ⚠️ Moderate-Hard |
 | **UI/UX** | ✅ Clean, minimal | ✅ Feature-rich | ✅ Feature-rich |
 | **Keyboard Shortcuts** | ✅ Essential | ✅ Comprehensive | ✅ Comprehensive |
-| **Dark Mode** | ❌ | ✅ | ✅ |
-| **Themes** | ⚠️ QSS stylesheet | ✅ Multiple themes | ✅ Multiple themes |
+| **Dark Mode** | ✅ **v1.1** One-click toggle | ✅ | ✅ |
+| **Themes** | ✅ Light + Dark | ✅ Multiple themes | ✅ Multiple themes |
 | **Documentation** | ✅ **HTML + Markdown** | ✅ Online | ✅ Online + in-app |
 | **Community Support** | ⚠️ GitHub issues | ✅ Large community | ✅ Dedicated support |
 | **Updates** | ⚠️ Manual | ✅ Auto-update | ✅ Auto-update |

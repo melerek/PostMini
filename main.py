@@ -52,6 +52,49 @@ def load_stylesheet(filename: str = "styles.qss") -> str:
         return ""
 
 
+def get_saved_theme() -> str:
+    """Get the saved theme preference."""
+    try:
+        from src.core.app_paths import get_app_paths
+        settings_file = get_app_paths().settings_file
+        
+        if settings_file.exists():
+            import json
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+                return settings.get('theme', 'light')
+    except Exception:
+        pass
+    
+    return 'light'  # Default to light theme
+
+
+def save_theme_preference(theme: str):
+    """Save the theme preference."""
+    try:
+        from src.core.app_paths import get_app_paths
+        import json
+        
+        settings_file = get_app_paths().settings_file
+        
+        # Load existing settings
+        settings = {}
+        if settings_file.exists():
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        
+        # Update theme
+        settings['theme'] = theme
+        
+        # Save
+        with open(settings_file, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, indent=2)
+            
+        print(f"[OK] Theme preference saved: {theme}")
+    except Exception as e:
+        print(f"Warning: Failed to save theme preference: {e}")
+
+
 def main():
     """
     Main entry point for the API Client application.
@@ -74,14 +117,19 @@ def main():
     app.setOrganizationName("PostMini")
     app.setApplicationVersion("1.0.0")
     
-    # Load and apply the professional stylesheet
-    stylesheet = load_stylesheet()
+    # Load saved theme preference
+    current_theme = get_saved_theme()
+    stylesheet_file = "styles_dark.qss" if current_theme == "dark" else "styles.qss"
+    
+    # Load and apply the stylesheet
+    stylesheet = load_stylesheet(stylesheet_file)
     if stylesheet:
         app.setStyleSheet(stylesheet)
-        print("[OK] Professional design system loaded successfully")
+        print(f"[OK] {current_theme.capitalize()} theme loaded successfully")
     
     # Create and show the main window with the database path
     main_window = MainWindow(db_path=str(app_paths.database_path))
+    main_window.current_theme = current_theme  # Store current theme
     main_window.show()
     
     # Start the event loop
