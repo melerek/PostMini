@@ -92,7 +92,8 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 
 | Feature | PostMini | Postman Free | Postman Enterprise |
 |---------|----------|--------------|-------------------|
-| **cURL** | ✅ | ✅ | ✅ |
+| **cURL Export** | ✅ | ✅ | ✅ |
+| **cURL Import** | ✅ **NEW!** | ✅ | ✅ |
 | **Python** | ✅ (requests library) | ✅ (requests + http.client) | ✅ |
 | **JavaScript/Node.js** | ✅ (fetch + axios) | ✅ (multiple libraries) | ✅ |
 | **React** | ✅ | ❌ | ❌ |
@@ -173,7 +174,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Postman Export** | ✅ v2.1 format | ✅ Native | ✅ Native |
 | **OpenAPI/Swagger** | ❌ | ✅ Full support | ✅ Full support |
 | **JSON Export** | ✅ | ✅ | ✅ |
-| **cURL Import** | ❌ | ✅ | ✅ |
+| **cURL Import** | ✅ **NEW!** | ✅ | ✅ |
 | **HAR Import** | ❌ | ✅ | ✅ |
 | **Git Integration** | ✅ **Native** | ❌ | ⚠️ Limited |
 | **GitHub Actions** | ✅ **Via Git** | ⚠️ Via Newman | ✅ Native |
@@ -346,6 +347,7 @@ These features are **only in PostMini**, not in Postman:
 6. ✨ **Open Source** - MIT License, full transparency
 7. ✨ **Conflict Resolution Helper** - Visual merge tool for collections
 8. ✨ **React Code Generation** - Generate React API hooks
+9. ✨ **Lightweight Installer** - 30MB vs 200MB
 
 ---
 
@@ -365,6 +367,12 @@ These features are **only in Postman**, not in PostMini:
 ---
 
 ## 📈 Feature Roadmap
+
+### PostMini Recent Additions (v1.1.0):
+
+- ✅ **cURL Import** - Paste cURL commands, instant requests
+- ✅ **Windows Installer** - 30MB standalone installer
+- ✅ **%APPDATA% Storage** - Safe, permission-free data storage
 
 ### PostMini Planned Features:
 

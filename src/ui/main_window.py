@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QTreeWidget, QTreeWidgetItem, QComboBox, QLineEdit,
     QTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QLabel,
     QMessageBox, QInputDialog, QHeaderView, QToolBar, QFileDialog, QApplication,
-    QSizePolicy
+    QSizePolicy, QDialog
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence, QShortcut, QBrush, QColor
@@ -33,8 +33,10 @@ from src.features.test_engine import TestEngine, TestAssertion
 from src.ui.dialogs.collection_test_runner import CollectionTestRunnerDialog
 from src.ui.dialogs.git_sync_dialog import GitSyncDialog
 from src.ui.dialogs.conflict_resolution_dialog import ConflictResolutionDialog
+from src.ui.dialogs.curl_import_dialog import CurlImportDialog
 from src.features.git_sync_manager import GitSyncManager, GitSyncConfig, SyncStatus
 from src.features.secrets_manager import SecretsManager
+from src.features.curl_converter import CurlConverter
 from datetime import datetime
 import requests
 
@@ -281,6 +283,12 @@ class MainWindow(QMainWindow):
         import_btn = QPushButton("Import Collection")
         import_btn.clicked.connect(self._import_collection)
         button_layout_2.addWidget(import_btn)
+        
+        # cURL Import button
+        curl_import_btn = QPushButton("📋 Import cURL")
+        curl_import_btn.setToolTip("Import a cURL command as a new request")
+        curl_import_btn.clicked.connect(self._import_curl)
+        button_layout_2.addWidget(curl_import_btn)
         
         layout.addLayout(button_layout_2)
         
@@ -1389,6 +1397,79 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Import failed: {str(e)}")
+    
+    def _import_curl(self):
+        """Import a cURL command and create a new request."""
+        if not self.current_collection_id:
+            QMessageBox.warning(
+                self,
+                "No Collection Selected",
+                "Please select a collection first, then import the cURL command."
+            )
+            return
+        
+        # Open cURL import dialog
+        dialog = CurlImportDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            request_data = dialog.get_request_data()
+            
+            if not request_data:
+                return
+            
+            # Ask for request name
+            from PyQt6.QtWidgets import QInputDialog
+            request_name, ok = QInputDialog.getText(
+                self,
+                "Request Name",
+                "Enter a name for this request:",
+                text=f"{request_data['method']} {request_data['url'].split('/')[-1] or 'Request'}"
+            )
+            
+            if not ok or not request_name.strip():
+                return
+            
+            try:
+                # Create the request in the database
+                request_id = self.db.create_request(
+                    collection_id=self.current_collection_id,
+                    name=request_name.strip(),
+                    url=request_data['url'],
+                    method=request_data['method']
+                )
+                
+                # Update parameters
+                if request_data.get('params'):
+                    self.db.update_request_params(request_id, request_data['params'])
+                
+                # Update headers
+                if request_data.get('headers'):
+                    self.db.update_request_headers(request_id, request_data['headers'])
+                
+                # Update body
+                if request_data.get('body'):
+                    self.db.update_request_body(request_id, request_data['body'])
+                
+                # Reload the collection tree
+                self._load_collections()
+                
+                # Select the new request
+                self._select_request_by_id(request_id)
+                
+                # Auto-sync if enabled
+                self._auto_sync_to_filesystem()
+                
+                QMessageBox.information(
+                    self,
+                    "cURL Imported",
+                    f"Successfully created request '{request_name}' from cURL command!"
+                )
+                
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Import Error",
+                    f"Failed to create request from cURL:\n{str(e)}"
+                )
     
     def _select_collection_by_id(self, collection_id: int):
         """Select a collection in the tree by its ID."""
