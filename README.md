@@ -18,6 +18,7 @@ A simple and powerful desktop API client built with PyQt6. PostMini allows you t
 
 - **Collections Management**: Organize your API requests into collections
 - **Environment Variables**: Use `{{variables}}` for reusable configurations across environments
+- **Git-Based Collaboration**: 🌟 NEW! Version control collections with Git, enabling seamless team collaboration
 - **Export/Import Collections**: Share collections with your team via JSON files
 - **Request History**: Track, review, and replay all API requests
 - **Code Generation**: Generate code in 7 languages (curl, Python, JS, Node, React, C#)
@@ -257,9 +258,36 @@ CREATE TABLE environments (
    - Select "Development" → Send → Tests against dev server
    - Select "Production" → Send → Tests against prod server
 
+## Git-Based Collaboration
+
+🌟 **NEW!** Version control your API collections with Git for seamless team collaboration! See **[GIT_SYNC_GUIDE.md](docs/GIT_SYNC_GUIDE.md)** for comprehensive documentation.
+
+**Quick Overview:**
+- Collections and environments sync to `.postmini/` folder
+- Commit `.postmini/` to Git to share with your team
+- Pull teammates' changes to auto-import their collections
+- Secrets kept local and gitignored automatically
+- Works with any Git hosting (GitHub, GitLab, Bitbucket)
+
+**How It Works:**
+1. Enable Git Sync in PostMini (click 🔄 Git Sync button)
+2. Select your project directory
+3. Collections auto-export to `.postmini/` folder on every save
+4. **YOU commit to Git:** `git add .postmini/ && git commit -m "Update API collections" && git push`
+5. Teammates run `git pull` and click "Import" in PostMini
+
+**Important:** PostMini syncs to **files**, YOU commit files to **Git**!
+
+**Use Cases:**
+- 👥 Team collaboration on API collections
+- 📝 PR reviews for API changes
+- 🔄 Version control and history
+- 🌿 Branch-based API development
+- 🔐 Secure secrets management
+
 ## Environment Variables
 
-The application includes a powerful environment variables system for team collaboration. See **[ENVIRONMENT_VARIABLES_GUIDE.md](ENVIRONMENT_VARIABLES_GUIDE.md)** for comprehensive documentation.
+The application includes a powerful environment variables system for team collaboration. See **[ENVIRONMENT_VARIABLES_GUIDE.md](docs/ENVIRONMENT_VARIABLES_GUIDE.md)** for comprehensive documentation.
 
 **Quick Overview:**
 - Use `{{variableName}}` syntax in URLs, headers, params, body, and auth tokens

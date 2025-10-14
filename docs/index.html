@@ -426,6 +426,8 @@
                     <li><a href="#sending-requests" class="nav-link">Sending Requests</a></li>
                     <li><a href="#viewing-response" class="nav-link">Viewing the Response</a></li>
                     <li><a href="#importing-postman" class="nav-link">Importing from Postman</a></li>
+                    <li><a href="#git-collaboration" class="nav-link">🌟 Git Collaboration</a></li>
+                    <li><a href="#additional-features" class="nav-link">Additional Features</a></li>
                 </ul>
             </nav>
         </aside>
@@ -465,6 +467,7 @@
                     <li><strong>Response Analysis:</strong> View beautifully formatted JSON responses, inspect response headers, and monitor status codes, response times, and payload sizes.</li>
                     <li><strong>Local Persistence:</strong> All collections and requests are automatically saved to a local SQLite database, so your work is never lost.</li>
                     <li><strong>Postman Import:</strong> Seamlessly migrate your existing Postman collections using the built-in import feature.</li>
+                    <li><strong>Git-Based Collaboration:</strong> 🌟 NEW! Version control collections with Git for seamless team collaboration.</li>
                     <li><strong>Environment Variables:</strong> Use variables across your requests for different environments (dev, staging, production).</li>
                     <li><strong>Request History:</strong> Track and replay all your previous API calls with full request and response details.</li>
                     <li><strong>Code Generation:</strong> Generate code snippets in multiple languages (Python, JavaScript, cURL, C#, etc.) from your requests.</li>
@@ -957,6 +960,107 @@
                     For these advanced features, you may need to manually reconfigure them using PostMini's native 
                     environment variables and testing capabilities.
                 </p>
+            </section>
+
+            <!-- GIT COLLABORATION SECTION -->
+            <section id="git-collaboration" class="section">
+                <h2>🌟 Git-Based Collaboration</h2>
+                <p>
+                    PostMini includes powerful Git-based collaboration features that enable seamless team workflows. 
+                    Version control your API collections alongside your code, review changes via Pull Requests, and 
+                    keep your team's API knowledge synchronized.
+                </p>
+
+                <h3>How It Works</h3>
+                <p>
+                    PostMini syncs your collections to a <code>.postmini/</code> folder as JSON files. You commit 
+                    these files to Git, and your teammates can pull and import them. It's a three-layer system:
+                </p>
+                <ul>
+                    <li><strong>PostMini Database:</strong> Your local SQLite database with all collections</li>
+                    <li><strong>.postmini/ Files:</strong> JSON export of your collections (committed to Git)</li>
+                    <li><strong>Git Repository:</strong> Version control and sharing mechanism</li>
+                </ul>
+
+                <div class="info-box">
+                    <p><strong>⚠️ Important:</strong> PostMini syncs between the database and files. 
+                    <strong>YOU</strong> still run Git commands (<code>git commit</code>, <code>git push</code>, etc.) 
+                    to share changes with your team. PostMini is a file sync tool, not a Git client.</p>
+                </div>
+
+                <h3>Getting Started</h3>
+                <ol class="steps">
+                    <li>
+                        <strong>Click the "🔄 Git Sync" button</strong> in the toolbar at the top of PostMini.
+                    </li>
+                    <li>
+                        <strong>Select your project directory</strong> (the root of your Git repository).
+                    </li>
+                    <li>
+                        <strong>Enable auto-sync</strong> to automatically export collections when you save.
+                    </li>
+                    <li>
+                        <strong>Click "🚀 Enable Git Sync"</strong> to initialize the <code>.postmini/</code> folder.
+                    </li>
+                    <li>
+                        <strong>Commit to Git:</strong> Run <code>git add .postmini/</code>, 
+                        <code>git commit -m "Add API collections"</code>, and <code>git push</code>.
+                    </li>
+                </ol>
+
+                <h3>Team Workflow</h3>
+                <p>
+                    Here's how a typical team collaboration scenario works:
+                </p>
+                <ol class="steps">
+                    <li>
+                        <strong>Engineer A creates collections</strong> in PostMini and clicks Save (auto-exports to <code>.postmini/</code>).
+                    </li>
+                    <li>
+                        <strong>Engineer A commits to Git:</strong> <code>git add .postmini/ && git commit -m "Add User API" && git push</code>
+                    </li>
+                    <li>
+                        <strong>Engineer B pulls from Git:</strong> <code>git pull</code>
+                    </li>
+                    <li>
+                        <strong>Engineer B imports in PostMini:</strong> Opens PostMini, clicks "🔄 Git Sync" → "Status" → "📥 Import from Files"
+                    </li>
+                    <li>
+                        <strong>Collections are now in sync!</strong> Both engineers have the same API collections.
+                    </li>
+                </ol>
+
+                <h3>Key Benefits</h3>
+                <ul>
+                    <li><strong>PR Reviews:</strong> Review API changes like code changes with Git diffs</li>
+                    <li><strong>Version Control:</strong> Track who changed what and when</li>
+                    <li><strong>Branch-Based Development:</strong> Use Git branches for API development</li>
+                    <li><strong>Secure Secrets:</strong> Secrets are automatically separated and gitignored</li>
+                    <li><strong>Works Offline:</strong> No cloud services required</li>
+                    <li><strong>Any Git Hosting:</strong> GitHub, GitLab, Bitbucket, or self-hosted</li>
+                </ul>
+
+                <h3>Secrets Management</h3>
+                <p>
+                    PostMini automatically detects sensitive variables (like <code>apiKey</code>, <code>authToken</code>, 
+                    <code>password</code>) and separates them:
+                </p>
+                <ul>
+                    <li><strong>Public config</strong> (in Git): Contains placeholders like <code>{{'{{'}}SECRET_PROD_APIKEY{{'}}'}}</code></li>
+                    <li><strong>Local secrets</strong> (gitignored): Contains actual secret values in <code>.postmini-secrets/</code></li>
+                </ul>
+                <p>
+                    Each team member maintains their own secrets locally. No risk of accidentally committing API keys!
+                </p>
+
+                <h3>Full Documentation</h3>
+                <p>
+                    For complete details, workflows, troubleshooting, and best practices, see:
+                </p>
+                <ul>
+                    <li><strong><a href="GIT_SYNC_GUIDE.md" style="color: var(--accent-color);">Git Sync User Guide</a></strong> - Complete user documentation with 7 real-world scenarios</li>
+                    <li><strong><a href="GIT_SYNC_SUMMARY.md" style="color: var(--accent-color);">Git Sync Technical Summary</a></strong> - Implementation details and architecture</li>
+                </ul>
             </section>
 
             <!-- ADDITIONAL FEATURES SECTION -->

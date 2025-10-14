@@ -31,6 +31,10 @@ from src.ui.widgets.test_tab_widget import TestTabWidget
 from src.ui.widgets.test_results_viewer import TestResultsViewer
 from src.features.test_engine import TestEngine, TestAssertion
 from src.ui.dialogs.collection_test_runner import CollectionTestRunnerDialog
+from src.ui.dialogs.git_sync_dialog import GitSyncDialog
+from src.ui.dialogs.conflict_resolution_dialog import ConflictResolutionDialog
+from src.features.git_sync_manager import GitSyncManager, GitSyncConfig, SyncStatus
+from src.features.secrets_manager import SecretsManager
 from datetime import datetime
 import requests
 
@@ -90,6 +94,11 @@ class MainWindow(QMainWindow):
         self.exporter = CollectionExporter(self.db)
         self.importer = CollectionImporter(self.db)
         
+        # Initialize Git sync
+        self.git_sync_manager = None
+        self.secrets_manager = None
+        self.git_workspace = None
+        
         # Track current selection
         self.current_collection_id = None
         self.current_request_id = None
@@ -111,6 +120,7 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self._load_collections()
         self._load_environments()
+        self._init_git_sync()
     
     def _init_ui(self):
         """Initialize the user interface with all components."""
@@ -166,6 +176,19 @@ class MainWindow(QMainWindow):
         history_btn = QPushButton("📋 History")
         history_btn.clicked.connect(self._open_history_dialog)
         toolbar.addWidget(history_btn)
+        
+        toolbar.addSeparator()
+        
+        # Git Sync button
+        self.git_sync_btn = QPushButton("🔄 Git Sync")
+        self.git_sync_btn.setToolTip("Manage Git-based collaboration")
+        self.git_sync_btn.clicked.connect(self._open_git_sync_dialog)
+        toolbar.addWidget(self.git_sync_btn)
+        
+        # Git sync status indicator
+        self.git_sync_status_label = QLabel("Git: Not Enabled")
+        self.git_sync_status_label.setStyleSheet("color: #999; font-size: 11px; padding: 0 10px;")
+        toolbar.addWidget(self.git_sync_status_label)
         
         toolbar.addSeparator()
         
@@ -627,6 +650,7 @@ class MainWindow(QMainWindow):
         if ok and name:
             try:
                 self.db.create_collection(name)
+                self._auto_sync_to_filesystem()
                 self._load_collections()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to create collection: {str(e)}")
@@ -702,6 +726,9 @@ class MainWindow(QMainWindow):
                         self.current_request_id = None
                         self._clear_request_editor()
                         self.workspace_pane.setVisible(False)
+                
+                # Auto-sync to filesystem if Git sync is enabled
+                self._auto_sync_to_filesystem()
                 
                 self._load_collections()
             except Exception as e:
@@ -925,6 +952,9 @@ class MainWindow(QMainWindow):
             self._store_original_request_data()
             self.has_unsaved_changes = False
             self._update_request_title()
+            
+            # Auto-sync to filesystem if Git sync is enabled
+            self._auto_sync_to_filesystem()
             
             self._load_collections()
         except Exception as e:
@@ -1828,6 +1858,158 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Error executing tests: {e}")
             # Don't show error to user, just log it
+    
+    # ==================== Git Sync Methods ====================
+    
+    def _init_git_sync(self):
+        """Initialize Git sync on startup if a workspace is configured."""
+        workspaces = self.db.get_all_git_workspaces()
+        
+        if workspaces:
+            # Get the most recently updated enabled workspace
+            active = next((w for w in workspaces if w['enabled']), None)
+            
+            if active:
+                self._setup_git_sync(active['project_path'])
+                self._update_git_sync_status()
+                
+                # Check for changes on startup
+                if self.git_sync_manager:
+                    status = self.git_sync_manager.get_sync_status()
+                    if status.status == SyncStatus.STATUS_NEEDS_PULL:
+                        # Ask user if they want to pull changes
+                        reply = QMessageBox.question(
+                            self,
+                            "Git Sync: Changes Detected",
+                            f"Found {len(status.changes.get('new_files', [])) + len(status.changes.get('modified_files', []))} updated file(s) in .postmini/\n\n"
+                            "Would you like to import these changes?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        )
+                        
+                        if reply == QMessageBox.StandardButton.Yes:
+                            self._auto_sync_from_filesystem()
+    
+    def _setup_git_sync(self, project_path: str):
+        """Setup Git sync manager for a project path."""
+        config = GitSyncConfig(project_path)
+        self.git_sync_manager = GitSyncManager(self.db, config)
+        self.secrets_manager = SecretsManager(str(config.secrets_path))
+        self.git_workspace = self.db.get_git_workspace_by_path(project_path)
+    
+    def _open_git_sync_dialog(self):
+        """Open the Git sync configuration dialog."""
+        dialog = GitSyncDialog(self.db, self)
+        
+        # Connect signals
+        dialog.sync_enabled.connect(self._on_git_sync_enabled)
+        dialog.sync_disabled.connect(self._on_git_sync_disabled)
+        dialog.sync_performed.connect(self._on_sync_performed)
+        
+        dialog.exec()
+    
+    def _on_git_sync_enabled(self, project_path: str):
+        """Handle Git sync being enabled."""
+        self._setup_git_sync(project_path)
+        self._update_git_sync_status()
+        
+        # Reload collections and environments
+        self._load_collections()
+        self._load_environments()
+    
+    def _on_git_sync_disabled(self):
+        """Handle Git sync being disabled."""
+        self.git_sync_manager = None
+        self.secrets_manager = None
+        self.git_workspace = None
+        self._update_git_sync_status()
+    
+    def _on_sync_performed(self, message: str):
+        """Handle sync operation being performed."""
+        # Reload collections and environments
+        self._load_collections()
+        self._load_environments()
+        self._update_git_sync_status()
+    
+    def _update_git_sync_status(self):
+        """Update the Git sync status indicator in toolbar."""
+        if not self.git_sync_manager or not self.git_workspace:
+            self.git_sync_status_label.setText("Files: Not Synced")
+            self.git_sync_status_label.setStyleSheet("color: #999; font-size: 11px; padding: 0 10px;")
+            self.git_sync_status_label.setToolTip("File sync not enabled - collections not saved to filesystem")
+            self.git_sync_btn.setStyleSheet("")
+            return
+        
+        # Get sync status
+        status = self.git_sync_manager.get_sync_status()
+        
+        # Update label and button style
+        if status.status == SyncStatus.STATUS_SYNCED:
+            self.git_sync_status_label.setText("Files: ✅ Synced")
+            self.git_sync_status_label.setStyleSheet("color: #4CAF50; font-size: 11px; padding: 0 10px;")
+            self.git_sync_status_label.setToolTip("Database and .postmini/ files are in sync")
+            self.git_sync_btn.setStyleSheet("")
+        elif status.status == SyncStatus.STATUS_NEEDS_PULL:
+            self.git_sync_status_label.setText("Files: 📥 Import Available")
+            self.git_sync_status_label.setStyleSheet("color: #2196F3; font-size: 11px; padding: 0 10px;")
+            self.git_sync_status_label.setToolTip("Files in .postmini/ have changes - click to import")
+            self.git_sync_btn.setStyleSheet("background-color: #E3F2FD;")
+        elif status.status == SyncStatus.STATUS_NEEDS_PUSH:
+            self.git_sync_status_label.setText("Files: 📤 Export Needed")
+            self.git_sync_status_label.setStyleSheet("color: #FF9800; font-size: 11px; padding: 0 10px;")
+            self.git_sync_status_label.setToolTip("Database has unsaved changes - click to export")
+            self.git_sync_btn.setStyleSheet("background-color: #FFF3E0;")
+        elif status.status == SyncStatus.STATUS_CONFLICT:
+            self.git_sync_status_label.setText("Files: ⚠️ Conflict")
+            self.git_sync_status_label.setStyleSheet("color: #F44336; font-size: 11px; padding: 0 10px;")
+            self.git_sync_status_label.setToolTip("Both database and files have changes")
+            self.git_sync_btn.setStyleSheet("background-color: #FFEBEE;")
+        else:
+            self.git_sync_status_label.setText("Files: Enabled")
+            self.git_sync_status_label.setStyleSheet("color: #666; font-size: 11px; padding: 0 10px;")
+            self.git_sync_status_label.setToolTip("File sync enabled")
+            self.git_sync_btn.setStyleSheet("")
+    
+    def _auto_sync_to_filesystem(self):
+        """Auto-sync database to filesystem (push) if enabled."""
+        if not self.git_sync_manager or not self.git_workspace:
+            return
+        
+        if not self.git_workspace.get('auto_sync', False):
+            return
+        
+        try:
+            success, message = self.git_sync_manager.sync_to_filesystem()
+            if success:
+                self.db.update_git_workspace_sync_timestamp(self.git_workspace['id'])
+                self._update_git_sync_status()
+        except Exception as e:
+            print(f"Auto-sync to filesystem failed: {e}")
+    
+    def _auto_sync_from_filesystem(self):
+        """Auto-sync filesystem to database (pull)."""
+        if not self.git_sync_manager:
+            return
+        
+        try:
+            success, message = self.git_sync_manager.sync_from_filesystem(update_existing=True)
+            if success:
+                if self.git_workspace:
+                    self.db.update_git_workspace_sync_timestamp(self.git_workspace['id'])
+                self._load_collections()
+                self._load_environments()
+                self._update_git_sync_status()
+                
+                QMessageBox.information(
+                    self,
+                    "Sync Complete",
+                    f"Imported changes from .postmini/ folder:\n\n{message}"
+                )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Sync Failed",
+                f"Failed to import changes:\n{str(e)}"
+            )
     
     def closeEvent(self, event):
         """Handle application close event."""

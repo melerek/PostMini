@@ -34,7 +34,9 @@ PostmanAlternative/
 │   │   │   ├── history_dialog.py          # Request history viewer
 │   │   │   ├── oauth_dialog.py            # OAuth 2.0 configuration
 │   │   │   ├── code_snippet_dialog.py     # Code generation viewer
-│   │   │   └── collection_test_runner.py  # Collection test runner
+│   │   │   ├── collection_test_runner.py  # Collection test runner
+│   │   │   ├── git_sync_dialog.py         # 🌟 NEW! Git sync settings
+│   │   │   └── conflict_resolution_dialog.py  # 🌟 NEW! Merge conflict helper
 │   │   │
 │   │   └── widgets/           # Custom widgets
 │   │       ├── __init__.py
@@ -47,7 +49,10 @@ PostmanAlternative/
 │       ├── code_generator.py           # Code snippet generation
 │       ├── collection_io.py            # Import/Export collections
 │       ├── variable_substitution.py    # Environment variable engine
-│       └── test_engine.py              # API testing assertions
+│       ├── test_engine.py              # API testing assertions
+│       ├── git_sync_manager.py         # 🌟 NEW! Git collaboration manager
+│       ├── secrets_manager.py          # 🌟 NEW! Secrets separation
+│       └── postman_converter.py        # Postman format conversion
 │
 ├── tests/                     # Test suite
 │   ├── __init__.py
@@ -58,11 +63,15 @@ PostmanAlternative/
 │   ├── test_oauth.py                  # OAuth 2.0 tests
 │   ├── test_ui_logic.py               # UI logic tests
 │   ├── test_request_history.py        # History feature tests
+│   ├── test_postman_compatibility.py  # Postman import/export tests
 │   ├── test_real_code_generation.py   # Real-world code gen tests
 │   ├── test_real_export_import.py     # Real-world import/export tests
+│   ├── test_git_sync.py               # 🌟 NEW! Git sync unit tests (40 tests)
+│   ├── test_git_sync_integration.py   # 🌟 NEW! Git sync integration tests (12 tests)
 │   └── demo_environments.py           # Demo data generator
 │
 └── docs/                      # Documentation
+    ├── index.html                           # Main documentation portal (HTML)
     ├── BUGFIXES.md
     ├── CODE_GENERATION_GUIDE.md
     ├── CODE_GENERATION_SUMMARY.md
@@ -74,15 +83,21 @@ PostmanAlternative/
     ├── ENVIRONMENT_VARIABLES_SUMMARY.md
     ├── EXPORT_IMPORT_GUIDE.md
     ├── EXPORT_IMPORT_SUMMARY.md
+    ├── GIT_SYNC_GUIDE.md                    # 🌟 NEW! Git collaboration user guide
+    ├── GIT_SYNC_SUMMARY.md                  # 🌟 NEW! Git sync technical summary
     ├── OAUTH_GUIDE.md
     ├── OAUTH_QUICKSTART.md
     ├── OAUTH_SUMMARY.md
+    ├── POSTMAN_COMPATIBILITY_GUIDE.md
+    ├── POSTMAN_COMPATIBILITY_SUMMARY.md
+    ├── REORGANIZATION_SUMMARY.md
     ├── REQUEST_HISTORY_GUIDE.md
     ├── REQUEST_HISTORY_SUMMARY.md
     ├── SAFETY_AUDIT_REPORT.md
     ├── UX_IMPROVEMENT_PLAN.md
     ├── UX_IMPROVEMENTS_IMPLEMENTED.md
-    └── VISIBILITY_FIXES.md
+    ├── VISIBILITY_FIXES.md
+    └── WIDGET_VISIBILITY_AUDIT.md
 ```
 
 ---
@@ -114,6 +129,8 @@ PostmanAlternative/
 | `oauth_dialog.py` | `OAuthConfigDialog` | Configure OAuth 2.0 |
 | `code_snippet_dialog.py` | `CodeSnippetDialog` | View and copy generated code |
 | `collection_test_runner.py` | `CollectionTestRunnerDialog` | Run tests for collections |
+| `git_sync_dialog.py` | `GitSyncDialog` | 🌟 Configure and manage Git sync |
+| `conflict_resolution_dialog.py` | `ConflictResolutionDialog` | 🌟 Resolve merge conflicts |
 
 #### Widgets (`src/ui/widgets/`)
 | File | Class | Responsibility |
@@ -131,6 +148,9 @@ PostmanAlternative/
 | `collection_io.py` | `CollectionExporter`, `CollectionImporter` | Export/Import collections as JSON |
 | `variable_substitution.py` | `VariableSubstitution`, `EnvironmentManager` | {{variable}} substitution engine |
 | `test_engine.py` | `TestEngine`, `TestAssertion` | Evaluate API test assertions |
+| `git_sync_manager.py` | `GitSyncManager`, `GitSyncConfig`, `SyncStatus` | 🌟 Git-based collaboration and file sync |
+| `secrets_manager.py` | `SecretsManager` | 🌟 Separate secrets from shareable configs |
+| `postman_converter.py` | `PostmanConverter` | Convert Postman collections to/from PostMini format |
 
 ### 🧪 Tests (`tests/`)
 **Purpose:** Automated testing
@@ -247,16 +267,16 @@ UI → Features → Core
 
 | Category | Count | Location |
 |----------|-------|----------|
-| **Source Code** | 20 files | `src/` |
+| **Source Code** | 24 files | `src/` |
 | - Core | 3 files | `src/core/` |
-| - UI Dialogs | 5 files | `src/ui/dialogs/` |
+| - UI Dialogs | 7 files | `src/ui/dialogs/` ⬆️ +2 (Git sync dialogs) |
 | - UI Widgets | 2 files | `src/ui/widgets/` |
-| - Features | 5 files | `src/features/` |
+| - Features | 8 files | `src/features/` ⬆️ +3 (Git sync features) |
 | - Main Window | 1 file | `src/ui/` |
-| **Tests** | 10 files | `tests/` |
-| **Documentation** | 18 files | `docs/` |
-| **Configuration** | 4 files | Root (main.py, requirements.txt, styles.qss, README.md) |
-| **Total** | **52 files** | |
+| **Tests** | 13 files | `tests/` ⬆️ +2 (Git sync tests) |
+| **Documentation** | 27 files | `docs/` ⬆️ +5 |
+| **Configuration** | 4 files | Root (main.py, requirements.txt, styles.qss, README.md, PROJECT_STRUCTURE.md) |
+| **Total** | **68 files** | ⬆️ +16 files |
 
 ---
 

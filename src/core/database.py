@@ -157,6 +157,21 @@ class DatabaseManager:
             )
         """)
         
+        # Create git workspaces table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS git_workspaces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_path TEXT NOT NULL UNIQUE,
+                workspace_name TEXT,
+                enabled INTEGER DEFAULT 1,
+                auto_sync INTEGER DEFAULT 1,
+                last_sync_timestamp TEXT,
+                sync_status TEXT DEFAULT 'synced',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
         self.connection.commit()
     
     # ==================== Collection Operations ====================
@@ -989,6 +1004,111 @@ class DatabaseManager:
             cursor.execute("DELETE FROM test_results WHERE request_id = ?", (request_id,))
         else:
             cursor.execute("DELETE FROM test_results")
+        self.connection.commit()
+    
+    # ==================== Git Workspace Operations ====================
+    
+    def create_git_workspace(self, project_path: str, workspace_name: Optional[str] = None,
+                            enabled: bool = True, auto_sync: bool = True) -> int:
+        """Create a new Git workspace configuration."""
+        from datetime import datetime
+        cursor = self.connection.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute("""
+            INSERT INTO git_workspaces (project_path, workspace_name, enabled, auto_sync,
+                                       created_at, updated_at, sync_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (project_path, workspace_name, 1 if enabled else 0, 1 if auto_sync else 0,
+              now, now, 'synced'))
+        self.connection.commit()
+        return cursor.lastrowid
+    
+    def get_git_workspace_by_path(self, project_path: str) -> Optional[Dict]:
+        """Get Git workspace by project path."""
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM git_workspaces WHERE project_path = ?", (project_path,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'project_path': row[1],
+                'workspace_name': row[2],
+                'enabled': bool(row[3]),
+                'auto_sync': bool(row[4]),
+                'last_sync_timestamp': row[5],
+                'sync_status': row[6],
+                'created_at': row[7],
+                'updated_at': row[8]
+            }
+        return None
+    
+    def get_all_git_workspaces(self) -> List[Dict]:
+        """Get all Git workspaces."""
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM git_workspaces ORDER BY updated_at DESC")
+        workspaces = []
+        for row in cursor.fetchall():
+            workspaces.append({
+                'id': row[0],
+                'project_path': row[1],
+                'workspace_name': row[2],
+                'enabled': bool(row[3]),
+                'auto_sync': bool(row[4]),
+                'last_sync_timestamp': row[5],
+                'sync_status': row[6],
+                'created_at': row[7],
+                'updated_at': row[8]
+            })
+        return workspaces
+    
+    def update_git_workspace(self, workspace_id: int, workspace_name: Optional[str] = None,
+                           enabled: Optional[bool] = None, auto_sync: Optional[bool] = None,
+                           sync_status: Optional[str] = None):
+        """Update Git workspace configuration."""
+        from datetime import datetime
+        cursor = self.connection.cursor()
+        
+        # Build update query dynamically
+        updates = []
+        params = []
+        
+        if workspace_name is not None:
+            updates.append("workspace_name = ?")
+            params.append(workspace_name)
+        if enabled is not None:
+            updates.append("enabled = ?")
+            params.append(1 if enabled else 0)
+        if auto_sync is not None:
+            updates.append("auto_sync = ?")
+            params.append(1 if auto_sync else 0)
+        if sync_status is not None:
+            updates.append("sync_status = ?")
+            params.append(sync_status)
+        
+        updates.append("updated_at = ?")
+        params.append(datetime.now().isoformat())
+        
+        params.append(workspace_id)
+        
+        query = f"UPDATE git_workspaces SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, params)
+        self.connection.commit()
+    
+    def update_git_workspace_sync_timestamp(self, workspace_id: int):
+        """Update last sync timestamp for a workspace."""
+        from datetime import datetime
+        cursor = self.connection.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute("""
+            UPDATE git_workspaces SET last_sync_timestamp = ?, updated_at = ?
+            WHERE id = ?
+        """, (now, now, workspace_id))
+        self.connection.commit()
+    
+    def delete_git_workspace(self, workspace_id: int):
+        """Delete a Git workspace configuration."""
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM git_workspaces WHERE id = ?", (workspace_id,))
         self.connection.commit()
     
     def close(self):
