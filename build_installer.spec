@@ -18,7 +18,8 @@ project_root = Path(SPECPATH)
 datas = [
     ('styles.qss', '.'),              # Light theme stylesheet
     ('styles_dark.qss', '.'),         # Dark theme stylesheet
-    ('postmini_logo.png', '.'),       # Application icon
+    ('postmini_logo.png', '.'),       # Application icon (PNG)
+    ('postmini_logo.ico', '.'),       # Application icon (ICO for Windows)
 ]
 
 # Hidden imports (modules that PyInstaller might miss)
@@ -71,7 +72,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='postmini_logo.png',  # Application icon
+    icon='postmini_logo.ico',  # Application icon (ICO for Windows)
 )
 
 coll = COLLECT(

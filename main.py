@@ -118,13 +118,18 @@ def main():
     app.setOrganizationName("PostMini")
     app.setApplicationVersion("1.0.0")
     
-    # Set application icon
-    icon_path = app_paths.get_resources_dir() / "postmini_logo.png"
-    if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
-        print(f"[OK] Application icon loaded from: {icon_path}")
+    # Set application icon (try ICO first for better Windows support, fallback to PNG)
+    icon_path_ico = app_paths.get_resources_dir() / "postmini_logo.ico"
+    icon_path_png = app_paths.get_resources_dir() / "postmini_logo.png"
+    
+    if icon_path_ico.exists():
+        app.setWindowIcon(QIcon(str(icon_path_ico)))
+        print(f"[OK] Application icon loaded from: {icon_path_ico}")
+    elif icon_path_png.exists():
+        app.setWindowIcon(QIcon(str(icon_path_png)))
+        print(f"[OK] Application icon loaded from: {icon_path_png}")
     else:
-        print(f"[Warning] Application icon not found at: {icon_path}")
+        print(f"[Warning] Application icon not found")
     
     # Load saved theme preference
     current_theme = get_saved_theme()

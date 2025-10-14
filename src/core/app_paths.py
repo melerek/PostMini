@@ -104,14 +104,19 @@ class AppPaths:
         Returns:
             Path to the resources directory
         """
-        install_dir = AppPaths.get_install_dir()
-        
         if getattr(sys, 'frozen', False):
-            # Running as compiled executable - resources in same dir
-            return install_dir
+            # Running as compiled executable
+            # PyInstaller stores data files in _internal subdirectory
+            install_dir = Path(sys.executable).parent
+            internal_dir = install_dir / "_internal"
+            if internal_dir.exists():
+                return internal_dir
+            else:
+                # Fallback to install directory
+                return install_dir
         else:
             # Running as script - resources in project root
-            return install_dir
+            return Path(__file__).parent.parent.parent
     
     def __str__(self) -> str:
         """String representation of app paths."""
