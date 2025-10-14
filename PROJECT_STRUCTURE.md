@@ -11,8 +11,11 @@ The API Client application follows a clean, modular architecture with clear sepa
 PostmanAlternative/
 ├── main.py                    # Application entry point
 ├── requirements.txt           # Python dependencies
+├── requirements-dev.txt       # Development dependencies
 ├── README.md                  # Main documentation
-├── styles.qss                 # Qt stylesheet for UI
+├── styles.qss                 # Light theme stylesheet
+├── styles_dark.qss            # 🌙 NEW! Dark theme stylesheet
+├── postmini_logo.png          # 🎨 NEW! Application icon
 ├── api_client.db              # SQLite database
 │
 ├── src/                       # Source code
@@ -22,7 +25,8 @@ PostmanAlternative/
 │   │   ├── __init__.py
 │   │   ├── database.py        # DatabaseManager - SQLite operations
 │   │   ├── api_client.py      # ApiClient - HTTP request execution
-│   │   └── design_system.py   # Design tokens (colors, spacing, typography)
+│   │   ├── design_system.py   # Design tokens (colors, spacing, typography)
+│   │   └── app_paths.py       # 💾 NEW! Application data path management (%APPDATA%)
 │   │
 │   ├── ui/                    # User Interface
 │   │   ├── __init__.py
@@ -35,8 +39,9 @@ PostmanAlternative/
 │   │   │   ├── oauth_dialog.py            # OAuth 2.0 configuration
 │   │   │   ├── code_snippet_dialog.py     # Code generation viewer
 │   │   │   ├── collection_test_runner.py  # Collection test runner
-│   │   │   ├── git_sync_dialog.py         # 🌟 NEW! Git sync settings
-│   │   │   └── conflict_resolution_dialog.py  # 🌟 NEW! Merge conflict helper
+│   │   │   ├── git_sync_dialog.py         # 🌟 Git sync settings
+│   │   │   ├── conflict_resolution_dialog.py  # 🌟 Merge conflict helper
+│   │   │   └── curl_import_dialog.py      # 🆕 v1.1 cURL import dialog
 │   │   │
 │   │   └── widgets/           # Custom widgets
 │   │       ├── __init__.py
@@ -50,9 +55,10 @@ PostmanAlternative/
 │       ├── collection_io.py            # Import/Export collections
 │       ├── variable_substitution.py    # Environment variable engine
 │       ├── test_engine.py              # API testing assertions
-│       ├── git_sync_manager.py         # 🌟 NEW! Git collaboration manager
-│       ├── secrets_manager.py          # 🌟 NEW! Secrets separation
-│       └── postman_converter.py        # Postman format conversion
+│       ├── git_sync_manager.py         # 🌟 Git collaboration manager
+│       ├── secrets_manager.py          # 🌟 Secrets separation
+│       ├── postman_converter.py        # Postman format conversion
+│       └── curl_converter.py           # 🆕 v1.1 cURL command parsing
 │
 ├── tests/                     # Test suite
 │   ├── __init__.py
@@ -66,38 +72,57 @@ PostmanAlternative/
 │   ├── test_postman_compatibility.py  # Postman import/export tests
 │   ├── test_real_code_generation.py   # Real-world code gen tests
 │   ├── test_real_export_import.py     # Real-world import/export tests
-│   ├── test_git_sync.py               # 🌟 NEW! Git sync unit tests (40 tests)
-│   ├── test_git_sync_integration.py   # 🌟 NEW! Git sync integration tests (12 tests)
+│   ├── test_git_sync.py               # 🌟 Git sync unit tests (40 tests)
+│   ├── test_git_sync_integration.py   # 🌟 Git sync integration tests (12 tests)
+│   ├── test_curl_converter.py         # 🆕 v1.1 cURL converter tests (40+ tests)
+│   ├── test_dark_mode.py              # 🌙 v1.1 Dark mode tests (20+ tests)
 │   └── demo_environments.py           # Demo data generator
 │
-└── docs/                      # Documentation
-    ├── index.html                           # Main documentation portal (HTML)
-    ├── BUGFIXES.md
-    ├── CODE_GENERATION_GUIDE.md
-    ├── CODE_GENERATION_SUMMARY.md
-    ├── CODE_IMPROVEMENTS.md
-    ├── DESIGN_AUDIT_PROFESSIONAL.md
-    ├── DESIGN_SYSTEM_IMPLEMENTATION.md
-    ├── DIALOG_FIXES.md
-    ├── ENVIRONMENT_VARIABLES_GUIDE.md
-    ├── ENVIRONMENT_VARIABLES_SUMMARY.md
-    ├── EXPORT_IMPORT_GUIDE.md
-    ├── EXPORT_IMPORT_SUMMARY.md
-    ├── GIT_SYNC_GUIDE.md                    # 🌟 NEW! Git collaboration user guide
-    ├── GIT_SYNC_SUMMARY.md                  # 🌟 NEW! Git sync technical summary
-    ├── OAUTH_GUIDE.md
-    ├── OAUTH_QUICKSTART.md
-    ├── OAUTH_SUMMARY.md
-    ├── POSTMAN_COMPATIBILITY_GUIDE.md
-    ├── POSTMAN_COMPATIBILITY_SUMMARY.md
-    ├── REORGANIZATION_SUMMARY.md
-    ├── REQUEST_HISTORY_GUIDE.md
-    ├── REQUEST_HISTORY_SUMMARY.md
-    ├── SAFETY_AUDIT_REPORT.md
-    ├── UX_IMPROVEMENT_PLAN.md
-    ├── UX_IMPROVEMENTS_IMPLEMENTED.md
-    ├── VISIBILITY_FIXES.md
-    └── WIDGET_VISIBILITY_AUDIT.md
+├── docs/                      # Documentation
+│   ├── index.html                           # Main documentation portal (HTML)
+│   ├── BUGFIXES.md
+│   ├── CODE_GENERATION_GUIDE.md
+│   ├── CODE_GENERATION_SUMMARY.md
+│   ├── CODE_IMPROVEMENTS.md
+│   ├── CURL_IMPORT_EXPORT_GUIDE.md          # 🆕 v1.1 cURL feature guide
+│   ├── CURL_FEATURE_SUMMARY.md              # 🆕 v1.1 cURL technical summary
+│   ├── DARK_MODE_GUIDE.md                   # 🌙 v1.1 Dark mode user guide
+│   ├── DARK_MODE_SUMMARY.md                 # 🌙 v1.1 Dark mode technical summary
+│   ├── DESIGN_AUDIT_PROFESSIONAL.md
+│   ├── DESIGN_SYSTEM_IMPLEMENTATION.md
+│   ├── DIALOG_FIXES.md
+│   ├── ENVIRONMENT_VARIABLES_GUIDE.md
+│   ├── ENVIRONMENT_VARIABLES_SUMMARY.md
+│   ├── EXPORT_IMPORT_GUIDE.md
+│   ├── EXPORT_IMPORT_SUMMARY.md
+│   ├── GIT_SYNC_GUIDE.md                    # 🌟 Git collaboration user guide
+│   ├── GIT_SYNC_SUMMARY.md                  # 🌟 Git sync technical summary
+│   ├── INSTALLER_GUIDE.md                   # 💾 Windows installer user guide
+│   ├── INSTALLER_IMPLEMENTATION_SUMMARY.md  # 💾 Installer technical summary
+│   ├── OAUTH_GUIDE.md
+│   ├── OAUTH_QUICKSTART.md
+│   ├── OAUTH_SUMMARY.md
+│   ├── POSTMAN_COMPATIBILITY_GUIDE.md
+│   ├── POSTMAN_COMPATIBILITY_SUMMARY.md
+│   ├── POSTMINI_VS_POSTMAN_COMPARISON.md    # 📊 Feature comparison table
+│   ├── REORGANIZATION_SUMMARY.md
+│   ├── REQUEST_HISTORY_GUIDE.md
+│   ├── REQUEST_HISTORY_SUMMARY.md
+│   ├── SAFETY_AUDIT_REPORT.md
+│   ├── UX_IMPROVEMENT_PLAN.md
+│   ├── UX_IMPROVEMENTS_IMPLEMENTED.md
+│   ├── VISIBILITY_FIXES.md
+│   └── WIDGET_VISIBILITY_AUDIT.md
+│
+├── build_installer.spec      # 💾 PyInstaller build configuration
+├── installer.iss              # 💾 Inno Setup installer script
+├── BUILD_INSTRUCTIONS.md      # 💾 How to build the installer
+├── QUICK_BUILD_GUIDE.md       # 💾 Quick installer build guide
+├── LICENSE.txt                # 💾 MIT License
+├── COMPARISON_QUICK.md        # 📊 Quick comparison vs Postman
+├── DARK_MODE_CHANGELOG.md     # 🌙 v1.1 Dark mode release notes
+├── DARK_MODE_IMPROVEMENTS.md  # 🌙 v1.1 Dark mode polish
+└── DARK_MODE_FINAL_FIXES.md   # 🌙 v1.1.2 Final dark mode fixes
 ```
 
 ---
