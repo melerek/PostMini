@@ -14,6 +14,24 @@ A simple and powerful desktop API client built with PyQt6. PostMini allows you t
 
 ---
 
+## 🆚 PostMini vs Postman
+
+PostMini is a **free, open-source, privacy-focused** alternative to Postman:
+
+| | PostMini | Postman Enterprise |
+|---|:---:|:---:|
+| **Price** | **FREE** | $49+/user/month |
+| **Team Collaboration** | **Unlimited (Git)** | Unlimited (Cloud) |
+| **Data Storage** | **100% Local** | Cloud |
+| **Open Source** | **✅ MIT License** | ❌ Closed |
+| **Git Integration** | **Native** | Limited |
+
+💰 **Save $17,640** over 3 years for a 10-person team!
+
+📊 **[See Full Comparison](docs/POSTMINI_VS_POSTMAN_COMPARISON.md)** | **[Quick Comparison](COMPARISON_QUICK.md)**
+
+---
+
 ## Features
 
 - **Collections Management**: Organize your API requests into collections
