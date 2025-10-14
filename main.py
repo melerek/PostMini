@@ -13,6 +13,7 @@ import sys
 import os
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 
 from src.ui.main_window import MainWindow
 from src.core.app_paths import get_app_paths
@@ -62,11 +63,11 @@ def get_saved_theme() -> str:
             import json
             with open(settings_file, 'r', encoding='utf-8') as f:
                 settings = json.load(f)
-                return settings.get('theme', 'light')
+                return settings.get('theme', 'dark')
     except Exception:
         pass
     
-    return 'light'  # Default to light theme
+    return 'dark'  # Default to dark theme
 
 
 def save_theme_preference(theme: str):
@@ -116,6 +117,14 @@ def main():
     app.setApplicationName("PostMini")
     app.setOrganizationName("PostMini")
     app.setApplicationVersion("1.0.0")
+    
+    # Set application icon
+    icon_path = app_paths.get_resources_dir() / "postmini_logo.png"
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
+        print(f"[OK] Application icon loaded from: {icon_path}")
+    else:
+        print(f"[Warning] Application icon not found at: {icon_path}")
     
     # Load saved theme preference
     current_theme = get_saved_theme()

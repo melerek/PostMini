@@ -9,13 +9,31 @@ and use variable substitution in requests.
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
     QLabel, QLineEdit, QTableWidget, QTableWidgetItem, QMessageBox,
-    QHeaderView, QWidget, QSplitter
+    QHeaderView, QWidget, QSplitter, QStyledItemDelegate
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from typing import Dict, Optional
 
 from src.core.database import DatabaseManager
+
+
+class NoPaddingDelegate(QStyledItemDelegate):
+    """Custom delegate to remove padding from table cell editors."""
+    
+    def createEditor(self, parent, option, index):
+        """Create editor with no padding."""
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QLineEdit):
+            # Remove all padding and margins from the editor
+            editor.setStyleSheet("""
+                QLineEdit {
+                    padding: 0px;
+                    margin: 0px;
+                    border: none;
+                }
+            """)
+        return editor
 
 
 class EnvironmentDialog(QDialog):
@@ -130,6 +148,10 @@ class EnvironmentDialog(QDialog):
         self.variables_table.setHorizontalHeaderLabels(['Variable', 'Value'])
         self.variables_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.variables_table.setRowCount(10)  # Start with 10 empty rows
+        
+        # Apply custom delegate to remove padding from cell editors
+        self.variables_table.setItemDelegate(NoPaddingDelegate())
+        
         layout.addWidget(self.variables_table)
         
         # Add row button

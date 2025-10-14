@@ -219,11 +219,15 @@ QComboBox:focus {
 
 QComboBox::drop-down {
     border: none;
-    width: 0px; /* Hide the drop-down button area completely */
+    width: 20px;
     subcontrol-position: right center;
 }
 
-/* Arrow shown by Qt automatically, no custom styling needed */
+QComboBox::down-arrow {
+    /* Use default Qt arrow - it works reliably */
+    width: 10px;
+    height: 10px;
+}
 
 QComboBox QAbstractItemView {
     border: 1px solid #E0E0E0;
@@ -290,7 +294,10 @@ QTreeWidget::item:selected:active {
     color: #0D47A1;
 }
 
-/* Use default Qt branch indicators (platform native) */
+/* Use default Qt branch indicators - they work reliably across platforms */
+QTreeWidget::branch {
+    background-color: transparent;
+}
 
 QHeaderView::section {
     background-color: #EEEEEE;
@@ -437,6 +444,15 @@ QTabBar::tab:!selected {
 
 QLabel {
     color: #212121;
+}
+
+/* Request Title Label */
+QLabel#requestTitleLabel {
+    color: #212121;
+}
+
+QLabel#requestTitleLabel[saved="false"] {
+    color: #616161;
 }
 
 QLabel[class="title"] {

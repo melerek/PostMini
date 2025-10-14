@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QTreeWidget, QTreeWidgetItem, QComboBox, QLineEdit,
     QTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QLabel,
     QMessageBox, QInputDialog, QHeaderView, QToolBar, QFileDialog, QApplication,
-    QSizePolicy, QDialog
+    QSizePolicy, QDialog, QStyledItemDelegate
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence, QShortcut, QBrush, QColor
@@ -75,6 +75,24 @@ class RequestThread(QThread):
             self.finished.emit(response)
         except Exception as e:
             self.error.emit(str(e))
+
+
+class NoPaddingDelegate(QStyledItemDelegate):
+    """Custom delegate to remove padding from table cell editors."""
+    
+    def createEditor(self, parent, option, index):
+        """Create editor with no padding."""
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QLineEdit):
+            # Remove all padding and margins from the editor
+            editor.setStyleSheet("""
+                QLineEdit {
+                    padding: 0px;
+                    margin: 0px;
+                    border: none;
+                }
+            """)
+        return editor
 
 
 class MainWindow(QMainWindow):
@@ -205,6 +223,7 @@ class MainWindow(QMainWindow):
         # Add spacer to push theme toggle to the right
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        spacer.setStyleSheet("background: transparent;")
         toolbar.addWidget(spacer)
         
         # Theme toggle button
@@ -346,8 +365,8 @@ class MainWindow(QMainWindow):
         
         # Dynamic request title header
         self.request_title_label = QLabel("New Request (not saved)")
+        self.request_title_label.setObjectName("requestTitleLabel")
         self.request_title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        self.request_title_label.setStyleSheet("color: #616161;")
         layout.addWidget(self.request_title_label)
         
         # Method and URL row
@@ -514,6 +533,10 @@ class MainWindow(QMainWindow):
         table.setHorizontalHeaderLabels(['Key', 'Value'])
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         table.setRowCount(3)  # Start with 3 empty rows (reduced for better space)
+        
+        # Apply custom delegate to remove padding from cell editors
+        table.setItemDelegate(NoPaddingDelegate())
+        
         # Remove max height constraint so table anchors to parent panel properly
         return table
     
@@ -619,6 +642,12 @@ class MainWindow(QMainWindow):
             collection_item = QTreeWidgetItem([collection_name])
             collection_item.setData(0, Qt.ItemDataRole.UserRole, 
                                    {'type': 'collection', 'id': collection['id'], 'name': collection['name']})
+            
+            # Make collection names bold
+            font = collection_item.font(0)
+            font.setBold(True)
+            collection_item.setFont(0, font)
+            
             self.collections_tree.addTopLevelItem(collection_item)
             
             # Add request items
@@ -916,11 +945,15 @@ class MainWindow(QMainWindow):
             if self.has_unsaved_changes:
                 title += " *"
             self.request_title_label.setText(title)
-            self.request_title_label.setStyleSheet("color: #212121;")
+            self.request_title_label.setProperty("saved", "true")
         else:
             # New unsaved request
             self.request_title_label.setText("New Request (not saved)")
-            self.request_title_label.setStyleSheet("color: #616161;")
+            self.request_title_label.setProperty("saved", "false")
+        
+        # Force style refresh
+        self.request_title_label.style().unpolish(self.request_title_label)
+        self.request_title_label.style().polish(self.request_title_label)
     
     def _check_unsaved_changes(self) -> bool:
         """Check if there are unsaved changes. Returns True if user wants to continue."""

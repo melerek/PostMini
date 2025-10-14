@@ -16,7 +16,9 @@ project_root = Path(SPECPATH)
 # Additional data files to include
 # Format: (source_file, destination_folder_in_exe)
 datas = [
-    ('styles.qss', '.'),  # Include the stylesheet in root directory
+    ('styles.qss', '.'),              # Light theme stylesheet
+    ('styles_dark.qss', '.'),         # Dark theme stylesheet
+    ('postmini_logo.png', '.'),       # Application icon
 ]
 
 # Hidden imports (modules that PyInstaller might miss)
@@ -69,7 +71,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Add icon file path here if you have one: 'resources/icon.ico'
+    icon='postmini_logo.png',  # Application icon
 )
 
 coll = COLLECT(
