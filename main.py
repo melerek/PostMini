@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
 from src.ui.main_window import MainWindow
+from src.core.app_paths import get_app_paths
 
 
 def load_stylesheet(filename: str = "styles.qss") -> str:
@@ -28,7 +29,16 @@ def load_stylesheet(filename: str = "styles.qss") -> str:
         Stylesheet content as string
     """
     try:
-        # Get the directory where the script is located
+        from src.core.app_paths import AppPaths
+        # Try to load from resources directory (installation folder)
+        resources_dir = AppPaths.get_resources_dir()
+        stylesheet_path = resources_dir / filename
+        
+        if stylesheet_path.exists():
+            with open(stylesheet_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        
+        # Fallback: try current directory (for development)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         stylesheet_path = os.path.join(script_dir, filename)
         
@@ -46,6 +56,11 @@ def main():
     """
     Main entry point for the API Client application.
     """
+    # Initialize application paths (creates directories in %APPDATA%)
+    app_paths = get_app_paths()
+    print(f"[OK] Application data directory: {app_paths.app_data_dir}")
+    print(f"[OK] Database location: {app_paths.database_path}")
+    
     # Enable High DPI scaling for better display on high-resolution screens
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
@@ -55,8 +70,8 @@ def main():
     app = QApplication(sys.argv)
     
     # Set application metadata
-    app.setApplicationName("API Client")
-    app.setOrganizationName("API Client")
+    app.setApplicationName("PostMini")
+    app.setOrganizationName("PostMini")
     app.setApplicationVersion("1.0.0")
     
     # Load and apply the professional stylesheet
@@ -65,8 +80,8 @@ def main():
         app.setStyleSheet(stylesheet)
         print("[OK] Professional design system loaded successfully")
     
-    # Create and show the main window
-    main_window = MainWindow()
+    # Create and show the main window with the database path
+    main_window = MainWindow(db_path=str(app_paths.database_path))
     main_window.show()
     
     # Start the event loop

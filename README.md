@@ -70,12 +70,28 @@ PostMini/
 
 ## Installation
 
-### Prerequisites
+### For End Users (Windows Installer) 🆕
+
+**The easiest way to get PostMini:**
+
+1. Download `PostMini_Setup_v1.0.0.exe` from [Releases](https://github.com/yourusername/postmini/releases)
+2. Run the installer and follow the wizard
+3. Launch PostMini from Start Menu or Desktop shortcut
+
+✅ **No Python installation required!**  
+✅ **All dependencies bundled**  
+✅ **Data safely stored in %APPDATA%\PostMini\**
+
+See [INSTALLER_GUIDE.md](docs/INSTALLER_GUIDE.md) for complete installation documentation.
+
+### For Developers (From Source)
+
+#### Prerequisites
 
 - Python 3.8 or higher
 - pip (Python package installer)
 
-### Setup
+#### Setup
 
 1. Clone or download this repository:
    ```bash
@@ -97,6 +113,12 @@ PostMini/
    ```bash
    pip install -r requirements.txt
    ```
+
+4. **(Optional) To build installer:**
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+   See [QUICK_BUILD_GUIDE.md](QUICK_BUILD_GUIDE.md) for building instructions.
 
 ## Usage
 

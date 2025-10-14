@@ -40,3 +40,11 @@ api_client.db
 .DS_Store
 Thumbs.db
 
+# Build & Installer
+*.spec.bak
+Output/
+build/
+dist/
+*.exe
+!dist/installer/*.exe
+

@@ -80,11 +80,11 @@ class MainWindow(QMainWindow):
     Main application window with collections tree, request editor, and response viewer.
     """
     
-    def __init__(self):
+    def __init__(self, db_path: str = "api_client.db"):
         super().__init__()
         
         # Initialize database and API client
-        self.db = DatabaseManager()
+        self.db = DatabaseManager(db_path=db_path)
         self.api_client = ApiClient()
         
         # Initialize environment manager
