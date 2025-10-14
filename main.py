@@ -116,7 +116,7 @@ def main():
     # Set application metadata
     app.setApplicationName("PostMini")
     app.setOrganizationName("PostMini")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("1.1.2")
     
     # Set application icon (try ICO first for better Windows support, fallback to PNG)
     icon_path_ico = app_paths.get_resources_dir() / "postmini_logo.ico"

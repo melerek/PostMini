@@ -41,8 +41,9 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 - **Collections Management**: Organize your API requests into collections
 - **Environment Variables**: Use `{{variables}}` for reusable configurations across environments
 - **Git-Based Collaboration**: 🌟 Version control collections with Git, enabling seamless team collaboration
-- **Dark Mode**: 🆕 v1.1 - Beautiful dark theme with one-click toggle!
-- **cURL Import/Export**: 🆕 v1.1 - Paste cURL commands to create requests instantly!
+- **Dark Mode**: 🆕 v1.1.2 - Beautiful dark theme with one-click toggle and persistence!
+- **Application Icon**: 🆕 v1.1.2 - Professional branding in window and taskbar
+- **cURL Import/Export**: 🆕 v1.1.2 - Paste cURL commands to create requests instantly!
 - **Export/Import Collections**: Share collections with your team via JSON files
 - **Request History**: Track, review, and replay all API requests
 - **Code Generation**: Generate code in 7 languages (curl, Python, JS, Node, React, C#)

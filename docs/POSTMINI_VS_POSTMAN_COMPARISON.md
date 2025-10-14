@@ -191,12 +191,12 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 
 | Feature | PostMini | Postman Free | Postman Enterprise |
 |---------|----------|--------------|-------------------|
-| **Windows** | ✅ Native installer | ✅ Desktop app | ✅ Desktop app |
+| **Windows** | ✅ Native installer (v1.1.2) | ✅ Desktop app | ✅ Desktop app |
 | **macOS** | ⚠️ Python required | ✅ Native app | ✅ Native app |
 | **Linux** | ⚠️ Python required | ✅ Desktop app | ✅ Desktop app |
 | **Web App** | ❌ | ✅ | ✅ |
 | **Mobile App** | ❌ | ❌ | ❌ |
-| **Offline Installer** | ✅ **30 MB** | ✅ ~200 MB | ✅ ~200 MB |
+| **Offline Installer** | ✅ **30 MB** (with icon) | ✅ ~200 MB | ✅ ~200 MB |
 | **System Requirements** | ✅ Low (4GB RAM) | ⚠️ Medium (8GB RAM) | ⚠️ Medium (8GB RAM) |
 | **Portable Version** | ⚠️ Possible | ❌ | ❌ |
 
@@ -211,7 +211,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Learning Curve** | ✅ **Easy** | ⚠️ Moderate | ⚠️ Moderate-Hard |
 | **UI/UX** | ✅ Clean, minimal | ✅ Feature-rich | ✅ Feature-rich |
 | **Keyboard Shortcuts** | ✅ Essential | ✅ Comprehensive | ✅ Comprehensive |
-| **Dark Mode** | ✅ **v1.1** One-click toggle | ✅ | ✅ |
+| **Dark Mode** | ✅ **v1.1.2** One-click toggle + persistence | ✅ | ✅ |
 | **Themes** | ✅ Light + Dark | ✅ Multiple themes | ✅ Multiple themes |
 | **Documentation** | ✅ **HTML + Markdown** | ✅ Online | ✅ Online + in-app |
 | **Community Support** | ⚠️ GitHub issues | ✅ Large community | ✅ Dedicated support |
@@ -348,6 +348,7 @@ These features are **only in PostMini**, not in Postman:
 7. ✨ **Conflict Resolution Helper** - Visual merge tool for collections
 8. ✨ **React Code Generation** - Generate React API hooks
 9. ✨ **Lightweight Installer** - 30MB vs 200MB
+10. ✨ **One-Click Dark Mode** - Instant theme switching with persistence
 
 ---
 
@@ -368,15 +369,17 @@ These features are **only in Postman**, not in PostMini:
 
 ## 📈 Feature Roadmap
 
-### PostMini Recent Additions (v1.1.0):
+### PostMini Recent Additions (v1.1.2):
 
+- ✅ **Dark Mode** - One-click theme toggle with persistence
+- ✅ **Application Icon** - Professional branding in taskbar and window
 - ✅ **cURL Import** - Paste cURL commands, instant requests
-- ✅ **Windows Installer** - 30MB standalone installer
+- ✅ **Windows Installer** - 30MB standalone installer with proper icon
 - ✅ **%APPDATA% Storage** - Safe, permission-free data storage
+- ✅ **UI Improvements** - Refined dark mode styling, better cell editors
 
 ### PostMini Planned Features:
 
-- 🔜 Dark mode
 - 🔜 OpenAPI/Swagger import
 - 🔜 GraphQL support
 - 🔜 Pre-request scripts
@@ -405,7 +408,7 @@ Both tools are excellent for API testing, but they serve different audiences:
 ---
 
 **Updated:** October 2025  
-**PostMini Version:** 1.0.0  
+**PostMini Version:** 1.1.2  
 **Postman Version:** Latest (as of October 2025)
 
 *This comparison is maintained independently and aims to be fair and accurate. If you notice any errors, please submit an issue or pull request.*

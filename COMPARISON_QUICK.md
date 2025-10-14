@@ -24,7 +24,8 @@
 - ✅ **Secrets management** - auto git-ignored
 - ✅ **Fully offline** - no internet needed
 - ✅ **Open source** - MIT license
-- ✅ **Lightweight** - 30MB installer
+- ✅ **Lightweight** - 30MB installer with icon
+- ✅ **Dark mode** - One-click toggle (v1.1.2)
 
 ### Postman Wins 🥈
 - ✅ More code generation languages (20+ vs 7)
@@ -83,5 +84,16 @@ Export → Import works both ways
 
 ---
 
+## 🎉 What's New in v1.1.2
+
+- ✅ **Dark Mode** - Professional dark theme with one-click toggle
+- ✅ **Application Icon** - Branded icon in taskbar and window
+- ✅ **cURL Import/Export** - Paste cURL commands directly
+- ✅ **Improved UI** - Refined styling and better cell editors
+
+---
+
 **See full comparison:** [POSTMINI_VS_POSTMAN_COMPARISON.md](docs/POSTMINI_VS_POSTMAN_COMPARISON.md)
+
+**PostMini Version:** 1.1.2 | **Updated:** October 2025
 
