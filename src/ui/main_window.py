@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QTreeWidget, QTreeWidgetItem, QComboBox, QLineEdit,
     QTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QLabel,
     QMessageBox, QInputDialog, QHeaderView, QToolBar, QFileDialog, QApplication,
-    QSizePolicy, QDialog, QStyledItemDelegate
+    QSizePolicy, QDialog, QStyledItemDelegate, QMenu
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence, QShortcut, QBrush, QColor
@@ -31,6 +31,7 @@ from src.ui.widgets.test_tab_widget import TestTabWidget
 from src.ui.widgets.test_results_viewer import TestResultsViewer
 from src.ui.widgets.toast_notification import ToastManager
 from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
+from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
 from src.features.test_engine import TestEngine, TestAssertion
 from src.ui.dialogs.collection_test_runner import CollectionTestRunnerDialog
 from src.ui.dialogs.git_sync_dialog import GitSyncDialog
@@ -164,20 +165,26 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
         
-        # Create main splitter (left pane | right pane)
+        # Create main splitter (left pane | center pane | right pane)
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         
         # ==================== LEFT PANE: Collections ====================
         left_pane = self._create_collections_pane()
         main_splitter.addWidget(left_pane)
         
-        # ==================== RIGHT PANE: Request Editor & Response ====================
+        # ==================== CENTER PANE: Request Editor & Response ====================
         self.workspace_pane = self._create_workspace_pane()
         self.workspace_pane.setVisible(False)  # Hidden by default until a request is selected
         main_splitter.addWidget(self.workspace_pane)
         
-        # Set splitter sizes (30% left, 70% right)
-        main_splitter.setSizes([400, 1000])
+        # ==================== RIGHT PANE: Recent Requests ====================
+        self.recent_requests_widget = RecentRequestsWidget(self.db)
+        self.recent_requests_widget.request_selected.connect(self._load_request)
+        self.recent_requests_widget.setVisible(False)  # Hidden by default
+        main_splitter.addWidget(self.recent_requests_widget)
+        
+        # Set splitter sizes (25% left, 60% center, 15% right when visible)
+        main_splitter.setSizes([350, 1050, 250])
         
         main_layout.addWidget(main_splitter)
         
@@ -224,6 +231,15 @@ class MainWindow(QMainWindow):
         self.git_sync_status_label = QLabel("Git: Not Enabled")
         self.git_sync_status_label.setStyleSheet("color: #999; font-size: 11px; padding: 0 10px;")
         toolbar.addWidget(self.git_sync_status_label)
+        
+        toolbar.addSeparator()
+        
+        # Recent Requests toggle button
+        self.recent_requests_btn = QPushButton("🕐 Recent")
+        self.recent_requests_btn.setToolTip("Toggle recent requests panel")
+        self.recent_requests_btn.setCheckable(True)
+        self.recent_requests_btn.clicked.connect(self._toggle_recent_requests)
+        toolbar.addWidget(self.recent_requests_btn)
         
         toolbar.addSeparator()
         
@@ -327,6 +343,8 @@ class MainWindow(QMainWindow):
         self.collections_tree = QTreeWidget()
         self.collections_tree.setHeaderHidden(True)  # Hide "Name" header
         self.collections_tree.itemClicked.connect(self._on_tree_item_clicked)
+        self.collections_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.collections_tree.customContextMenuRequested.connect(self._show_tree_context_menu)
         layout.addWidget(self.collections_tree)
         
         # Buttons row 1
@@ -604,6 +622,8 @@ class MainWindow(QMainWindow):
         self.response_body = QTextEdit()
         self.response_body.setReadOnly(True)
         self.response_body.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)  # No wrap by default
+        self.response_body.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.response_body.customContextMenuRequested.connect(self._show_response_context_menu)
         body_layout.addWidget(self.response_body)
         
         # Initialize response data storage
@@ -803,6 +823,74 @@ class MainWindow(QMainWindow):
             self.workspace_pane.setVisible(True)  # Show workspace when request clicked
             self._load_request(data['id'])
     
+    def _show_tree_context_menu(self, position):
+        """Show context menu for collections tree."""
+        item = self.collections_tree.itemAt(position)
+        if not item:
+            return
+        
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data or not isinstance(data, dict):
+            return
+        
+        menu = QMenu(self)
+        
+        if data.get('type') == 'collection':
+            # Collection context menu
+            export_action = QAction("📤 Export Collection", self)
+            export_action.triggered.connect(lambda: self._export_collection_from_menu(data['id']))
+            menu.addAction(export_action)
+            
+            run_tests_action = QAction("▶️ Run All Tests", self)
+            run_tests_action.triggered.connect(lambda: self._run_collection_tests_from_menu(data['id']))
+            menu.addAction(run_tests_action)
+            
+            menu.addSeparator()
+            
+            rename_action = QAction("✏️ Rename", self)
+            rename_action.triggered.connect(lambda: self._rename_collection(data['id']))
+            menu.addAction(rename_action)
+            
+            duplicate_action = QAction("📑 Duplicate", self)
+            duplicate_action.triggered.connect(lambda: self._duplicate_collection(data['id']))
+            menu.addAction(duplicate_action)
+            
+            menu.addSeparator()
+            
+            delete_action = QAction("🗑️ Delete", self)
+            delete_action.triggered.connect(lambda: self._delete_collection_from_menu(data['id']))
+            menu.addAction(delete_action)
+            
+        elif data.get('type') == 'request':
+            # Request context menu
+            open_action = QAction("📂 Open", self)
+            open_action.triggered.connect(lambda: self._load_request(data['id']))
+            menu.addAction(open_action)
+            
+            menu.addSeparator()
+            
+            copy_curl_action = QAction("📋 Copy as cURL", self)
+            copy_curl_action.triggered.connect(lambda: self._copy_request_as_curl(data['id']))
+            menu.addAction(copy_curl_action)
+            
+            menu.addSeparator()
+            
+            rename_action = QAction("✏️ Rename", self)
+            rename_action.triggered.connect(lambda: self._rename_request(data['id']))
+            menu.addAction(rename_action)
+            
+            duplicate_action = QAction("📑 Duplicate", self)
+            duplicate_action.triggered.connect(lambda: self._duplicate_request(data['id']))
+            menu.addAction(duplicate_action)
+            
+            menu.addSeparator()
+            
+            delete_action = QAction("🗑️ Delete", self)
+            delete_action.triggered.connect(lambda: self._delete_request_from_menu(data['id']))
+            menu.addAction(delete_action)
+        
+        menu.exec(self.collections_tree.viewport().mapToGlobal(position))
+    
     def _add_collection(self):
         """Add a new collection via dialog."""
         name, ok = QInputDialog.getText(self, "New Collection", "Collection name:")
@@ -955,6 +1043,9 @@ class MainWindow(QMainWindow):
             
             # Update tab counts
             self._update_tab_counts()
+            
+            # Track in recent requests
+            self.recent_requests_widget.add_request(request_id)
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load request: {str(e)}")
@@ -1524,6 +1615,12 @@ class MainWindow(QMainWindow):
         """Ensure response panel is expanded (called when sending request)."""
         if self.response_panel_collapsed:
             self._toggle_response_panel()
+    
+    def _toggle_recent_requests(self):
+        """Toggle the recent requests panel visibility."""
+        is_visible = self.recent_requests_widget.isVisible()
+        self.recent_requests_widget.setVisible(not is_visible)
+        self.recent_requests_btn.setChecked(not is_visible)
     
     def _reset_copy_button(self):
         """Reset the copy button to its original state."""
@@ -2485,6 +2582,302 @@ class MainWindow(QMainWindow):
                 "Theme Error",
                 f"Failed to load {new_theme} theme stylesheet."
             )
+    
+    # ==================== Context Menu Helpers ====================
+    
+    def _export_collection_from_menu(self, collection_id: int):
+        """Export collection from context menu."""
+        self.current_collection_id = collection_id
+        self._export_collection()
+    
+    def _run_collection_tests_from_menu(self, collection_id: int):
+        """Run tests for collection from context menu."""
+        self.current_collection_id = collection_id
+        self._run_collection_tests()
+    
+    def _rename_collection(self, collection_id: int):
+        """Rename a collection."""
+        collection = self.db.get_collection(collection_id)
+        if not collection:
+            return
+        
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Collection",
+            "New name:",
+            text=collection['name']
+        )
+        
+        if ok and new_name and new_name != collection['name']:
+            try:
+                # Update collection name
+                cursor = self.db.connection.cursor()
+                cursor.execute(
+                    "UPDATE collections SET name = ? WHERE id = ?",
+                    (new_name, collection_id)
+                )
+                self.db.connection.commit()
+                self._load_collections()
+                self.toast.success(f"Collection renamed to '{new_name}'")
+            except Exception as e:
+                self.toast.error(f"Failed to rename: {str(e)[:30]}...")
+    
+    def _duplicate_collection(self, collection_id: int):
+        """Duplicate a collection."""
+        collection = self.db.get_collection(collection_id)
+        if not collection:
+            return
+        
+        try:
+            # Create new collection
+            new_name = f"{collection['name']} (Copy)"
+            new_collection_id = self.db.create_collection(new_name)
+            
+            # Copy all requests
+            requests = self.db.get_requests_by_collection(collection_id)
+            for request in requests:
+                self.db.create_request(
+                    name=request['name'],
+                    method=request['method'],
+                    url=request['url'],
+                    collection_id=new_collection_id,
+                    params=json.loads(request.get('params', '{}')) if isinstance(request.get('params'), str) else request.get('params', {}),
+                    headers=json.loads(request.get('headers', '{}')) if isinstance(request.get('headers'), str) else request.get('headers', {}),
+                    body=request.get('body', ''),
+                    auth_type=request.get('auth_type', 'No Auth'),
+                    auth_token=request.get('auth_token', '')
+                )
+            
+            self._auto_sync_to_filesystem()
+            self._load_collections()
+            self.toast.success(f"Collection '{collection['name']}' duplicated")
+        except Exception as e:
+            self.toast.error(f"Failed to duplicate: {str(e)[:30]}...")
+    
+    def _delete_collection_from_menu(self, collection_id: int):
+        """Delete collection from context menu."""
+        collection = self.db.get_collection(collection_id)
+        if not collection:
+            return
+        
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Are you sure you want to delete collection '{collection['name']}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                self.db.delete_collection(collection_id)
+                if self.current_collection_id == collection_id:
+                    self.current_collection_id = None
+                    self.current_request_id = None
+                    self._clear_request_editor()
+                    self.workspace_pane.setVisible(False)
+                self._auto_sync_to_filesystem()
+                self._load_collections()
+                self.toast.success(f"Collection '{collection['name']}' deleted")
+            except Exception as e:
+                self.toast.error(f"Failed to delete: {str(e)[:30]}...")
+    
+    def _copy_request_as_curl(self, request_id: int):
+        """Copy request as cURL command."""
+        request = self.db.get_request(request_id)
+        if not request:
+            return
+        
+        try:
+            # Build cURL command
+            method = request['method']
+            url = request['url']
+            headers = json.loads(request.get('headers', '{}')) if isinstance(request.get('headers'), str) else request.get('headers', {})
+            body = request.get('body', '')
+            
+            curl_parts = ['curl', '-X', method]
+            
+            # Add headers
+            for key, value in headers.items():
+                if key and value:
+                    curl_parts.extend(['-H', f"'{key}: {value}'"])
+            
+            # Add body
+            if body:
+                curl_parts.extend(['-d', f"'{body}'"])
+            
+            # Add URL
+            curl_parts.append(f"'{url}'")
+            
+            curl_command = ' '.join(curl_parts)
+            
+            # Copy to clipboard
+            clipboard = QApplication.clipboard()
+            clipboard.setText(curl_command)
+            self.toast.success("cURL command copied to clipboard")
+        except Exception as e:
+            self.toast.error(f"Failed to copy: {str(e)[:30]}...")
+    
+    def _rename_request(self, request_id: int):
+        """Rename a request."""
+        request = self.db.get_request(request_id)
+        if not request:
+            return
+        
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Request",
+            "New name:",
+            text=request['name']
+        )
+        
+        if ok and new_name and new_name != request['name']:
+            try:
+                cursor = self.db.connection.cursor()
+                cursor.execute(
+                    "UPDATE requests SET name = ? WHERE id = ?",
+                    (new_name, request_id)
+                )
+                self.db.connection.commit()
+                self._auto_sync_to_filesystem()
+                self._load_collections()
+                if self.current_request_id == request_id:
+                    self.request_title_label.setText(new_name)
+                self.toast.success(f"Request renamed to '{new_name}'")
+            except Exception as e:
+                self.toast.error(f"Failed to rename: {str(e)[:30]}...")
+    
+    def _duplicate_request(self, request_id: int):
+        """Duplicate a request."""
+        request = self.db.get_request(request_id)
+        if not request:
+            return
+        
+        try:
+            new_name = f"{request['name']} (Copy)"
+            self.db.create_request(
+                name=new_name,
+                method=request['method'],
+                url=request['url'],
+                collection_id=request['collection_id'],
+                params=json.loads(request.get('params', '{}')) if isinstance(request.get('params'), str) else request.get('params', {}),
+                headers=json.loads(request.get('headers', '{}')) if isinstance(request.get('headers'), str) else request.get('headers', {}),
+                body=request.get('body', ''),
+                auth_type=request.get('auth_type', 'No Auth'),
+                auth_token=request.get('auth_token', '')
+            )
+            self._auto_sync_to_filesystem()
+            self._load_collections()
+            self.toast.success(f"Request '{request['name']}' duplicated")
+        except Exception as e:
+            self.toast.error(f"Failed to duplicate: {str(e)[:30]}...")
+    
+    def _delete_request_from_menu(self, request_id: int):
+        """Delete request from context menu."""
+        request = self.db.get_request(request_id)
+        if not request:
+            return
+        
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Are you sure you want to delete request '{request['name']}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                self.db.delete_request(request_id)
+                if self.current_request_id == request_id:
+                    self.current_request_id = None
+                    self._clear_request_editor()
+                    self.workspace_pane.setVisible(False)
+                self._auto_sync_to_filesystem()
+                self._load_collections()
+                self.toast.success(f"Request '{request['name']}' deleted")
+            except Exception as e:
+                self.toast.error(f"Failed to delete: {str(e)[:30]}...")
+    
+    def _show_response_context_menu(self, position):
+        """Show context menu for response viewer."""
+        menu = QMenu(self)
+        
+        # Copy action
+        copy_action = QAction("📋 Copy", self)
+        copy_action.triggered.connect(self.response_body.copy)
+        copy_action.setEnabled(self.response_body.textCursor().hasSelection())
+        menu.addAction(copy_action)
+        
+        # Select all action
+        select_all_action = QAction("🔘 Select All", self)
+        select_all_action.triggered.connect(self.response_body.selectAll)
+        select_all_action.setEnabled(len(self.response_body.toPlainText()) > 0)
+        menu.addAction(select_all_action)
+        
+        menu.addSeparator()
+        
+        # Copy entire response
+        copy_all_action = QAction("📄 Copy Entire Response", self)
+        copy_all_action.triggered.connect(self._copy_entire_response)
+        copy_all_action.setEnabled(len(self.response_body.toPlainText()) > 0)
+        menu.addAction(copy_all_action)
+        
+        # Save to file
+        save_action = QAction("💾 Save to File...", self)
+        save_action.triggered.connect(self._save_response_to_file)
+        save_action.setEnabled(len(self.response_body.toPlainText()) > 0)
+        menu.addAction(save_action)
+        
+        menu.exec(self.response_body.viewport().mapToGlobal(position))
+    
+    def _copy_entire_response(self):
+        """Copy entire response to clipboard."""
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.response_body.toPlainText())
+        self.toast.success("Response copied to clipboard")
+    
+    def _save_response_to_file(self):
+        """Save response to file."""
+        # Check if there's any response text to save
+        response_text = self.response_body.toPlainText()
+        if not response_text:
+            self.toast.warning("No response to save")
+            return
+        
+        # Suggest file extension based on content type
+        default_ext = "txt"
+        if self.current_response and hasattr(self.current_response, 'content_type'):
+            content_type = self.current_response.content_type.lower()
+            if 'json' in content_type:
+                default_ext = "json"
+            elif 'xml' in content_type or 'html' in content_type:
+                default_ext = "xml"
+            elif 'text' in content_type:
+                default_ext = "txt"
+        
+        # Generate default filename: response_{request_name}_{timestamp}
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        
+        # Get request name and sanitize it for filesystem
+        request_name = "request"
+        if hasattr(self, 'current_request_name') and self.current_request_name:
+            # Remove invalid filename characters
+            import re
+            request_name = re.sub(r'[<>:"/\\|?*]', '_', self.current_request_name)
+            request_name = request_name.strip()
+        
+        default_filename = f"response_{request_name}_{timestamp}.{default_ext}"
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Response",
+            default_filename,
+            f"{default_ext.upper()} Files (*.{default_ext});;All Files (*.*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(response_text)
+                self.toast.success(f"Response saved to file")
+            except Exception as e:
+                self.toast.error(f"Failed to save: {str(e)[:30]}...")
     
     def closeEvent(self, event):
         """Handle application close event."""

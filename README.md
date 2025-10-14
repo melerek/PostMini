@@ -38,6 +38,16 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 
 ## Features
 
+### 🆕 Latest UX Improvements (Phase 3)
+- **Context Menus**: Right-click collections, requests, and responses for quick actions
+  - Export, rename, duplicate, delete collections
+  - Copy requests as cURL commands
+  - Save responses to files
+- **Recent Requests Panel**: Quick access to recently viewed requests with pinning support
+- **Enhanced Visual Feedback**: Toast notifications, loading states, syntax highlighting
+- **Polished UI**: Focus states, hover effects, improved spacing and readability
+
+### Core Features
 - **Collections Management**: Organize your API requests into collections
 - **Environment Variables**: Use `{{variables}}` for reusable configurations across environments
 - **Git-Based Collaboration**: 🌟 Version control collections with Git, enabling seamless team collaboration
@@ -56,11 +66,12 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
   - Request body (JSON, text, etc.)
   - Bearer Token authentication
 - **Response Viewer**:
-  - Pretty-printed JSON responses
+  - Pretty-printed JSON with syntax highlighting
+  - Pretty/Raw toggle and word wrap
   - Response headers display
   - Status code, response time, and size information
 - **Persistent Storage**: SQLite database for saving collections and requests
-- **Modern UI**: Clean, intuitive three-pane interface with toolbar
+- **Modern UI**: Clean, intuitive interface with responsive layouts
 - **Asynchronous Requests**: Non-blocking HTTP requests using threading
 
 ## Technology Stack
