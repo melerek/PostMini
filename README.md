@@ -1,12 +1,12 @@
 # PostMini - Desktop API Client
 
-**Version 1.1.2** | Professional API Testing Tool | MIT License
+**Version 1.2.0** | Professional API Testing Tool | MIT License
 
 A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for collections, environment variables, OAuth 2.0, API testing, code generation, dark mode, cURL import/export, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.1.2-brightgreen)
+![Version](https://img.shields.io/badge/version-1.2.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Tests](https://img.shields.io/badge/tests-200%2B%20passing-success)
 
