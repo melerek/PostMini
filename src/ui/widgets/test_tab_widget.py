@@ -33,11 +33,10 @@ class TestTabWidget(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setStyleSheet("QScrollArea { background-color: white; border: none; }")
+        scroll.setStyleSheet("QScrollArea { border: none; }")
         
         # Content widget
         content = QWidget()
-        content.setStyleSheet("QWidget#testTabContent { background-color: white; }")
         content.setObjectName("testTabContent")
         layout = QVBoxLayout(content)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -104,7 +103,7 @@ class TestTabWidget(QWidget):
         # Separator
         separator = QLabel()
         separator.setFixedHeight(1)
-        separator.setStyleSheet("background-color: #E0E0E0;")
+        separator.setStyleSheet("background-color: #3e3e42;")
         layout.addWidget(separator)
         
         # Assertions table header

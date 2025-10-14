@@ -29,6 +29,8 @@ from src.ui.dialogs.oauth_dialog import OAuthConfigDialog
 from src.features.oauth_manager import OAuthManager
 from src.ui.widgets.test_tab_widget import TestTabWidget
 from src.ui.widgets.test_results_viewer import TestResultsViewer
+from src.ui.widgets.toast_notification import ToastManager
+from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
 from src.features.test_engine import TestEngine, TestAssertion
 from src.ui.dialogs.collection_test_runner import CollectionTestRunnerDialog
 from src.ui.dialogs.git_sync_dialog import GitSyncDialog
@@ -135,11 +137,18 @@ class MainWindow(QMainWindow):
         # Track active threads
         self.request_thread = None
         
+        # UI state tracking
+        self.response_panel_collapsed = False
+        
         # Setup UI
         self.setWindowTitle("PostMini - Desktop API Client")
         self.setGeometry(100, 100, 1400, 900)
         
         self._init_ui()
+        
+        # Initialize toast notification system (after UI is created)
+        self.toast = ToastManager(self.centralWidget())
+        
         self._setup_shortcuts()
         self._load_collections()
         self._load_environments()
@@ -171,6 +180,9 @@ class MainWindow(QMainWindow):
         main_splitter.setSizes([400, 1000])
         
         main_layout.addWidget(main_splitter)
+        
+        # Create status bar
+        self._create_status_bar()
     
     def _create_toolbar(self):
         """Create the application toolbar with environment controls."""
@@ -238,6 +250,38 @@ class MainWindow(QMainWindow):
         help_hint.setStyleSheet("color: #2196F3; font-size: 12px; padding-right: 10px;")
         help_hint.setToolTip("Show keyboard shortcuts help")
         toolbar.addWidget(help_hint)
+    
+    def _create_status_bar(self):
+        """Create the bottom status bar with save status and Git sync info."""
+        status_bar = self.statusBar()
+        
+        # Save status widget
+        self.save_status_label = QLabel("Ready")
+        self.save_status_label.setStyleSheet("padding: 0 10px;")
+        status_bar.addWidget(self.save_status_label)
+        
+        # Add stretch to push items to the right
+        status_bar.addPermanentWidget(QLabel())  # Spacer
+        
+        # Git sync status (permanent widget on right)
+        self.status_git_sync_label = QLabel("")
+        self.status_git_sync_label.setStyleSheet("padding: 0 10px;")
+        status_bar.addPermanentWidget(self.status_git_sync_label)
+    
+    def _update_save_status(self, message: str, duration: int = 3000):
+        """Update the status bar with a save status message."""
+        self.save_status_label.setText(message)
+        if duration > 0:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(duration, lambda: self.save_status_label.setText("Ready"))
+    
+    def _update_status_bar(self):
+        """Update status bar with current state."""
+        # Update Git sync status
+        if self.git_workspace:
+            self.status_git_sync_label.setText(f"📁 Git: {self.git_workspace['name']}")
+        else:
+            self.status_git_sync_label.setText("")
     
     def _setup_shortcuts(self):
         """Setup keyboard shortcuts for common actions."""
@@ -339,22 +383,22 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(pane)
         
         # Create vertical splitter (request editor | response viewer)
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        self.main_splitter = QSplitter(Qt.Orientation.Vertical)
         
         # Top section: Request Editor
         request_editor = self._create_request_editor()
-        splitter.addWidget(request_editor)
+        self.main_splitter.addWidget(request_editor)
         
         # Bottom section: Response Viewer
         response_viewer = self._create_response_viewer()
-        splitter.addWidget(response_viewer)
+        self.main_splitter.addWidget(response_viewer)
         
         # Set splitter sizes (45% request editor, 55% response viewer)
-        splitter.setStretchFactor(0, 45)  # Request editor
-        splitter.setStretchFactor(1, 55)  # Response viewer - 20% more space
-        splitter.setSizes([400, 500])
+        self.main_splitter.setStretchFactor(0, 45)  # Request editor
+        self.main_splitter.setStretchFactor(1, 55)  # Response viewer - 20% more space
+        self.main_splitter.setSizes([400, 500])
         
-        layout.addWidget(splitter)
+        layout.addWidget(self.main_splitter)
         
         return pane
     
@@ -362,24 +406,36 @@ class MainWindow(QMainWindow):
         """Create the request editor section."""
         editor = QWidget()
         layout = QVBoxLayout(editor)
+        layout.setSpacing(8)
         
-        # Dynamic request title header
+        # Dynamic request title header (fixed height, no stretch)
         self.request_title_label = QLabel("New Request (not saved)")
         self.request_title_label.setObjectName("requestTitleLabel")
         self.request_title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        layout.addWidget(self.request_title_label)
+        self.request_title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.request_title_label.setMaximumHeight(30)  # Fixed height
+        self.request_title_label.setMinimumHeight(30)
+        layout.addWidget(self.request_title_label, 0)  # Stretch factor 0 = fixed
         
-        # Method and URL row
-        url_layout = QHBoxLayout()
+        # Method and URL row (fixed height, no stretch)
+        # Wrap in a container widget to enforce fixed height
+        url_container = QWidget()
+        url_container.setMaximumHeight(40)  # Fixed height for URL row
+        url_container.setMinimumHeight(40)
+        url_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        url_layout = QHBoxLayout(url_container)
+        url_layout.setContentsMargins(0, 0, 0, 0)
         
         self.method_combo = QComboBox()
         self.method_combo.addItems(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'])
         self.method_combo.setMaximumWidth(100)
+        self.method_combo.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         url_layout.addWidget(self.method_combo)
         
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("Enter request URL")
         self.url_input.returnPressed.connect(self._send_request)  # Enter key sends request
+        self.url_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         url_layout.addWidget(self.url_input)
         
         self.send_btn = QPushButton("Send")
@@ -388,29 +444,33 @@ class MainWindow(QMainWindow):
         self.send_btn.setMaximumWidth(80)
         self.send_btn.clicked.connect(self._send_request)
         self.send_btn.setToolTip("Send request (Ctrl+Enter)")
+        self.send_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         url_layout.addWidget(self.send_btn)
         
         self.save_btn = QPushButton("Save")
         self.save_btn.setMaximumWidth(80)
         self.save_btn.clicked.connect(self._save_request)
         self.save_btn.setToolTip("Save request (Ctrl+S)")
+        self.save_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         url_layout.addWidget(self.save_btn)
         
         self.code_btn = QPushButton("💻 Code")
         self.code_btn.setMaximumWidth(80)
         self.code_btn.clicked.connect(self._generate_code)
         self.code_btn.setToolTip("Generate code snippet (Ctrl+Shift+C)")
+        self.code_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         url_layout.addWidget(self.code_btn)
         
-        layout.addLayout(url_layout)
+        layout.addWidget(url_container, 0)  # Stretch factor 0 = fixed
         
         # Connect inputs to track changes
         self.method_combo.currentIndexChanged.connect(self._mark_as_changed)
         self.url_input.textChanged.connect(self._mark_as_changed)
         
-        # Tabs for Params, Headers, Authorization, Body
+        # Tabs for Params, Headers, Authorization, Body (this should expand)
         self.request_tabs = QTabWidget()
-        self.request_tabs.setMaximumHeight(350)  # Reduced height for more response space
+        # Remove maximum height constraint - let it expand to fill available space
+        self.request_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Params tab
         self.params_table = self._create_key_value_table()
@@ -440,7 +500,10 @@ class MainWindow(QMainWindow):
         self.test_tab.assertions_changed.connect(self._on_tests_changed)
         self.request_tabs.addTab(self.test_tab, "Tests")
         
-        layout.addWidget(self.request_tabs)
+        # Initialize tab counts
+        self._update_tab_counts()
+        
+        layout.addWidget(self.request_tabs, 1)  # Stretch factor 1 = expands to fill
         
         return editor
     
@@ -449,10 +512,26 @@ class MainWindow(QMainWindow):
         viewer = QWidget()
         layout = QVBoxLayout(viewer)
         
-        # Title
+        # Title row with collapse button
+        title_layout = QHBoxLayout()
         title = QLabel("Response")
         title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        layout.addWidget(title)
+        title_layout.addWidget(title)
+        
+        title_layout.addStretch()
+        
+        self.response_collapse_btn = QPushButton("▼ Collapse")
+        self.response_collapse_btn.setMaximumWidth(100)
+        self.response_collapse_btn.clicked.connect(self._toggle_response_panel)
+        self.response_collapse_btn.setToolTip("Collapse/Expand response panel")
+        title_layout.addWidget(self.response_collapse_btn)
+        
+        layout.addLayout(title_layout)
+        
+        # Create collapsible content container
+        self.response_content_widget = QWidget()
+        response_content_layout = QVBoxLayout(self.response_content_widget)
+        response_content_layout.setContentsMargins(0, 0, 0, 0)
         
         # Status info row
         status_layout = QHBoxLayout()
@@ -476,7 +555,7 @@ class MainWindow(QMainWindow):
         self.copy_response_btn.setMaximumWidth(150)
         status_layout.addWidget(self.copy_response_btn)
         
-        layout.addLayout(status_layout)
+        response_content_layout.addLayout(status_layout)
         
         # Tabs for Body and Headers
         self.response_tabs = QTabWidget()
@@ -486,23 +565,52 @@ class MainWindow(QMainWindow):
         body_layout = QVBoxLayout(body_widget)
         body_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Search bar for response
-        search_layout = QHBoxLayout()
-        search_label = QLabel("🔍 Search:")
-        search_layout.addWidget(search_label)
+        # Toolbar row with search and formatting controls
+        toolbar_layout = QHBoxLayout()
+        
+        # Search section
+        search_label = QLabel("🔍")
+        toolbar_layout.addWidget(search_label)
         
         self.response_search = QLineEdit()
         self.response_search.setPlaceholderText("Search in response...")
         self.response_search.textChanged.connect(self._search_response)
         self.response_search.setClearButtonEnabled(True)
-        search_layout.addWidget(self.response_search)
+        self.response_search.setMaximumWidth(250)
+        toolbar_layout.addWidget(self.response_search)
         
-        body_layout.addLayout(search_layout)
+        toolbar_layout.addStretch()
+        
+        # Formatting controls
+        self.pretty_raw_btn = QPushButton("📄 Pretty")
+        self.pretty_raw_btn.setCheckable(True)
+        self.pretty_raw_btn.setChecked(True)  # Pretty mode by default
+        self.pretty_raw_btn.setMaximumWidth(100)
+        self.pretty_raw_btn.setToolTip("Toggle between Pretty (formatted) and Raw view")
+        self.pretty_raw_btn.clicked.connect(self._toggle_pretty_raw)
+        toolbar_layout.addWidget(self.pretty_raw_btn)
+        
+        self.word_wrap_btn = QPushButton("↔️ Wrap")
+        self.word_wrap_btn.setCheckable(True)
+        self.word_wrap_btn.setChecked(False)  # No wrap by default
+        self.word_wrap_btn.setMaximumWidth(100)
+        self.word_wrap_btn.setToolTip("Toggle word wrap")
+        self.word_wrap_btn.clicked.connect(self._toggle_word_wrap)
+        toolbar_layout.addWidget(self.word_wrap_btn)
+        
+        body_layout.addLayout(toolbar_layout)
         
         # Response body text area
         self.response_body = QTextEdit()
         self.response_body.setReadOnly(True)
+        self.response_body.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)  # No wrap by default
         body_layout.addWidget(self.response_body)
+        
+        # Initialize response data storage
+        self.current_response = None  # Store the ApiResponse object
+        self.current_response_raw = ""  # Raw response text
+        self.current_response_pretty = ""  # Pretty-formatted text
+        self.is_pretty_mode = True  # Track current view mode
         
         # Add padding to body widget
         body_layout.setContentsMargins(10, 10, 10, 10)
@@ -518,11 +626,13 @@ class MainWindow(QMainWindow):
         )
         self.response_tabs.addTab(self.response_headers_table, "Headers")
         
-        layout.addWidget(self.response_tabs)
+        response_content_layout.addWidget(self.response_tabs)
         
         # Test results viewer
         self.test_results_viewer = TestResultsViewer()
-        layout.addWidget(self.test_results_viewer)
+        response_content_layout.addWidget(self.test_results_viewer)
+        
+        layout.addWidget(self.response_content_widget)
         
         return viewer
     
@@ -564,6 +674,7 @@ class MainWindow(QMainWindow):
         token_layout.addWidget(QLabel("Token:"))
         self.auth_token_input = QLineEdit()
         self.auth_token_input.setPlaceholderText("Enter bearer token or use {{variable}}")
+        self.auth_token_input.textChanged.connect(self._update_tab_counts)
         token_layout.addWidget(self.auth_token_input)
         bearer_layout.addLayout(token_layout)
         
@@ -615,6 +726,7 @@ class MainWindow(QMainWindow):
         """Handle authorization type change."""
         self.bearer_token_widget.setVisible(auth_type == 'Bearer Token')
         self.oauth_widget.setVisible(auth_type == 'OAuth 2.0')
+        self._update_tab_counts()
     
     # ==================== Collections Tree Management ====================
     
@@ -699,7 +811,10 @@ class MainWindow(QMainWindow):
                 self.db.create_collection(name)
                 self._auto_sync_to_filesystem()
                 self._load_collections()
+                # Show success toast
+                self.toast.success(f"Collection '{name}' created")
             except Exception as e:
+                self.toast.error(f"Failed to create collection: {str(e)[:30]}...")
                 QMessageBox.critical(self, "Error", f"Failed to create collection: {str(e)}")
     
     def _add_request(self):
@@ -761,24 +876,28 @@ class MainWindow(QMainWindow):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
+                item_name = current_item.text(0)
                 if data['type'] == 'collection':
                     self.db.delete_collection(data['id'])
                     self.current_collection_id = None
                     self.current_request_id = None
                     self._clear_request_editor()
                     self.workspace_pane.setVisible(False)
+                    self.toast.success(f"Collection '{item_name}' deleted")
                 elif data['type'] == 'request':
                     self.db.delete_request(data['id'])
                     if self.current_request_id == data['id']:
                         self.current_request_id = None
                         self._clear_request_editor()
                         self.workspace_pane.setVisible(False)
+                    self.toast.success(f"Request '{item_name}' deleted")
                 
                 # Auto-sync to filesystem if Git sync is enabled
                 self._auto_sync_to_filesystem()
                 
                 self._load_collections()
             except Exception as e:
+                self.toast.error(f"Failed to delete: {str(e)[:30]}...")
                 QMessageBox.critical(self, "Error", f"Failed to delete: {str(e)}")
     
     # ==================== Request Editor Management ====================
@@ -915,7 +1034,7 @@ class MainWindow(QMainWindow):
             self._update_request_title()
     
     def _update_tab_counts(self):
-        """Update tab labels to show item counts in square brackets."""
+        """Update tab labels to show item counts and status indicators."""
         # Count params
         params_count = 0
         for row in range(self.params_table.rowCount()):
@@ -930,12 +1049,26 @@ class MainWindow(QMainWindow):
             if key_item and key_item.text().strip():
                 headers_count += 1
         
-        # Update tab labels
-        params_label = f"Params [{params_count}]" if params_count > 0 else "Params"
-        headers_label = f"Headers [{headers_count}]" if headers_count > 0 else "Headers"
+        # Check if authorization is configured
+        auth_type = self.auth_type_combo.currentText()
+        auth_configured = auth_type != 'None' and (
+            (auth_type == 'Bearer Token' and self.auth_token_input.text().strip()) or
+            (auth_type == 'OAuth 2.0' and hasattr(self, 'current_oauth_token') and self.current_oauth_token is not None)
+        )
+        
+        # Count tests
+        tests_count = len(self.test_tab.get_assertions())
+        
+        # Update tab labels with counts and indicators
+        params_label = f"Params ({params_count})" if params_count > 0 else "Params"
+        headers_label = f"Headers ({headers_count})" if headers_count > 0 else "Headers"
+        auth_label = "Authorization ✓" if auth_configured else "Authorization"
+        tests_label = f"Tests ({tests_count})" if tests_count > 0 else "Tests"
         
         self.request_tabs.setTabText(0, params_label)
         self.request_tabs.setTabText(1, headers_label)
+        self.request_tabs.setTabText(2, auth_label)
+        self.request_tabs.setTabText(4, tests_label)
     
     def _update_request_title(self):
         """Update the request title label to show current state."""
@@ -1004,11 +1137,19 @@ class MainWindow(QMainWindow):
             self.has_unsaved_changes = False
             self._update_request_title()
             
+            # Update status bar
+            self._update_save_status("✓ Request saved successfully")
+            
+            # Show success toast
+            self.toast.success("Request saved successfully")
+            
             # Auto-sync to filesystem if Git sync is enabled
             self._auto_sync_to_filesystem()
             
             self._load_collections()
         except Exception as e:
+            self._update_save_status("✗ Failed to save request", duration=5000)
+            self.toast.error(f"Failed to save: {str(e)[:40]}...")
             QMessageBox.critical(self, "Error", f"Failed to save request: {str(e)}")
     
     # ==================== Request Execution ====================
@@ -1017,19 +1158,31 @@ class MainWindow(QMainWindow):
         """Execute the HTTP request and display the response."""
         url = self.url_input.text().strip()
         if not url:
-            QMessageBox.warning(self, "Warning", "Please enter a URL!")
+            self.toast.warning("Please enter a URL!")
             return
         
-        # Show loading state with visual feedback
+        # Show loading state with enhanced visual feedback
         self.send_btn.setEnabled(False)
         self.send_btn.setText("⏳ Sending...")
-        # Override with loading state color
+        # Override with loading state color - use animated orange
         self.send_btn.setStyleSheet("""
             QPushButton#sendButton {
                 background-color: #FF9800;
                 color: white;
+                border: 2px solid #FFB74D;
+            }
+            QPushButton#sendButton:disabled {
+                background-color: #FF9800;
+                color: white;
+                border: 2px solid #FFB74D;
             }
         """)
+        
+        # Show loading toast
+        self.toast.info(f"Sending {self.method_combo.currentText()} request...")
+        
+        # Auto-expand response panel when sending
+        self._expand_response_panel()
         
         # Clear previous response
         self._clear_response_viewer()
@@ -1105,10 +1258,34 @@ class MainWindow(QMainWindow):
     
     def _on_request_finished(self, response: ApiResponse):
         """Handle successful request completion."""
-        # Re-enable send button and clear inline styles (use global stylesheet)
+        # Re-enable send button with success indicator
         self.send_btn.setEnabled(True)
         self.send_btn.setText("✓ Send")
-        self.send_btn.setStyleSheet("")  # Reset to use global stylesheet
+        # Briefly show success state with green color
+        self.send_btn.setStyleSheet("""
+            QPushButton#sendButton {
+                background-color: #4CAF50;
+                color: white;
+                border: 2px solid #66BB6A;
+            }
+        """)
+        
+        # Reset button style after 1.5 seconds
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(1500, lambda: self._reset_send_button())
+        
+        # Show success toast with status code
+        status_code = response.status_code
+        time_ms = int(response.elapsed_time * 1000)
+        
+        if 200 <= status_code < 300:
+            self.toast.success(f"{status_code} OK • {time_ms}ms")
+        elif 300 <= status_code < 400:
+            self.toast.info(f"{status_code} Redirect • {time_ms}ms")
+        elif 400 <= status_code < 500:
+            self.toast.warning(f"{status_code} Client Error • {time_ms}ms")
+        else:
+            self.toast.error(f"{status_code} Server Error • {time_ms}ms")
         
         # Display response
         self._display_response(response)
@@ -1119,18 +1296,35 @@ class MainWindow(QMainWindow):
         # Save to history
         self._save_to_history(response=response)
     
-    def _on_request_error(self, error_message: str):
-        """Handle request error."""
-        # Re-enable send button and clear inline styles (use global stylesheet)
-        self.send_btn.setEnabled(True)
+    def _reset_send_button(self):
+        """Reset the send button to its default state."""
         self.send_btn.setText("Send")
         self.send_btn.setStyleSheet("")  # Reset to use global stylesheet
+    
+    def _on_request_error(self, error_message: str):
+        """Handle request error."""
+        # Re-enable send button with error indicator
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("✗ Send")
+        # Briefly show error state with red color
+        self.send_btn.setStyleSheet("""
+            QPushButton#sendButton {
+                background-color: #F44336;
+                color: white;
+                border: 2px solid #EF5350;
+            }
+        """)
         
-        # Show error message
-        QMessageBox.critical(self, "Request Failed", error_message)
+        # Reset button style after 2 seconds
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(2000, lambda: self._reset_send_button())
+        
+        # Show error toast with helpful message
+        self.toast.error(f"Request failed: {error_message[:50]}...")
         
         # Display error in response viewer
         self.status_label.setText(f"Status: Error")
+        self.status_label.setStyleSheet("color: #F44336; font-weight: bold;")
         self.response_body.setPlainText(f"Error: {error_message}")
         
         # Save to history (with error)
@@ -1138,6 +1332,10 @@ class MainWindow(QMainWindow):
     
     def _display_response(self, response: ApiResponse):
         """Display the HTTP response in the response viewer."""
+        # Store response for later use (Raw/Pretty toggle)
+        self.current_response = response
+        self.current_response_raw = response.text
+        
         # Determine status color and icon based on status code
         status_code = response.status_code
         if 200 <= status_code < 300:
@@ -1168,18 +1366,42 @@ class MainWindow(QMainWindow):
         self.time_label.setText(f"Time: {response.elapsed_time:.2f}s")
         self.time_label.setStyleSheet("font-weight: bold;")
         
-        self.size_label.setText(f"Size: {response.size} bytes")
-        self.size_label.setStyleSheet("font-weight: bold;")
+        # Display size with warning for large responses
+        size_text = self._format_size(response.size)
+        if response.size > 1_000_000:  # > 1MB
+            self.size_label.setText(f"Size: {size_text} ⚠️")
+            self.size_label.setStyleSheet("color: #FF9800; font-weight: bold;")
+            self.toast.warning(f"Large response: {size_text}")
+        else:
+            self.size_label.setText(f"Size: {size_text}")
+            self.size_label.setStyleSheet("font-weight: bold;")
         
-        # Display response body
+        # Determine content type
+        content_type = response.headers.get('content-type', response.headers.get('Content-Type', ''))
+        
+        # Display response body with formatting
+        is_json = False
         try:
             # Try to parse and pretty-print JSON
             json_data = json.loads(response.text)
-            pretty_json = json.dumps(json_data, indent=2)
-            self.response_body.setPlainText(pretty_json)
+            self.current_response_pretty = json.dumps(json_data, indent=2)
+            is_json = True
         except (json.JSONDecodeError, ValueError):
-            # Display as plain text if not JSON
-            self.response_body.setPlainText(response.text)
+            # Not JSON, use raw text
+            self.current_response_pretty = response.text
+        
+        # Display based on current mode (Pretty/Raw)
+        if self.is_pretty_mode:
+            self.response_body.setPlainText(self.current_response_pretty)
+        else:
+            self.response_body.setPlainText(self.current_response_raw)
+        
+        # Apply syntax highlighting based on content type
+        dark_mode = (self.current_theme == 'dark')
+        if is_json:
+            apply_syntax_highlighting(self.response_body, 'application/json', dark_mode)
+        elif any(x in content_type.lower() for x in ['xml', 'html']):
+            apply_syntax_highlighting(self.response_body, content_type, dark_mode)
         
         # Display response headers
         self.response_headers_table.setRowCount(len(response.headers))
@@ -1195,6 +1417,59 @@ class MainWindow(QMainWindow):
         self.response_body.clear()
         self.response_headers_table.clearContents()
         self.response_headers_table.setRowCount(0)
+        self.current_response = None
+        self.current_response_raw = ""
+        self.current_response_pretty = ""
+    
+    def _format_size(self, size_bytes: int) -> str:
+        """Format byte size to human-readable format."""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.2f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.2f} TB"
+    
+    def _toggle_pretty_raw(self):
+        """Toggle between Pretty (formatted) and Raw view."""
+        if not self.current_response:
+            return
+        
+        self.is_pretty_mode = self.pretty_raw_btn.isChecked()
+        
+        # Update button text
+        if self.is_pretty_mode:
+            self.pretty_raw_btn.setText("📄 Pretty")
+            self.response_body.setPlainText(self.current_response_pretty)
+        else:
+            self.pretty_raw_btn.setText("📝 Raw")
+            self.response_body.setPlainText(self.current_response_raw)
+        
+        # Reapply syntax highlighting
+        dark_mode = (self.current_theme == 'dark')
+        content_type = self.current_response.headers.get('content-type', 
+                                                         self.current_response.headers.get('Content-Type', ''))
+        
+        # Detect JSON
+        is_json = False
+        try:
+            json.loads(self.current_response.text)
+            is_json = True
+        except:
+            pass
+        
+        if is_json:
+            apply_syntax_highlighting(self.response_body, 'application/json', dark_mode)
+        elif any(x in content_type.lower() for x in ['xml', 'html']):
+            apply_syntax_highlighting(self.response_body, content_type, dark_mode)
+    
+    def _toggle_word_wrap(self):
+        """Toggle word wrap in response viewer."""
+        if self.word_wrap_btn.isChecked():
+            self.response_body.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+            self.word_wrap_btn.setText("↔️ Wrap ✓")
+        else:
+            self.response_body.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+            self.word_wrap_btn.setText("↔️ Wrap")
     
     def _copy_response(self):
         """Copy the response body to clipboard."""
@@ -1217,6 +1492,38 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(2000, lambda: self._reset_copy_button())
         else:
             QMessageBox.warning(self, "Warning", "No response to copy!")
+    
+    def _toggle_response_panel(self):
+        """Toggle the response panel collapsed/expanded state."""
+        self.response_panel_collapsed = not self.response_panel_collapsed
+        
+        if self.response_panel_collapsed:
+            # Store current sizes before collapsing
+            self.splitter_sizes_before_collapse = self.main_splitter.sizes()
+            
+            # Hide content and adjust splitter to minimal response panel size
+            self.response_content_widget.hide()
+            self.response_collapse_btn.setText("▶ Expand")
+            
+            # Get total height and set response panel to minimal height (60px for header)
+            total_height = sum(self.main_splitter.sizes())
+            self.main_splitter.setSizes([total_height - 60, 60])
+        else:
+            self.response_content_widget.show()
+            self.response_collapse_btn.setText("▼ Collapse")
+            
+            # Restore previous sizes or use default proportions
+            if hasattr(self, 'splitter_sizes_before_collapse'):
+                self.main_splitter.setSizes(self.splitter_sizes_before_collapse)
+            else:
+                # Default: 45-55 split
+                total_height = sum(self.main_splitter.sizes())
+                self.main_splitter.setSizes([int(total_height * 0.45), int(total_height * 0.55)])
+    
+    def _expand_response_panel(self):
+        """Ensure response panel is expanded (called when sending request)."""
+        if self.response_panel_collapsed:
+            self._toggle_response_panel()
     
     def _reset_copy_button(self):
         """Reset the copy button to its original state."""
@@ -1376,14 +1683,17 @@ class MainWindow(QMainWindow):
             
             if success:
                 format_name = "Postman Collection v2.1" if export_format == 'postman' else "Internal Format"
+                self.toast.success(f"Collection '{collection['name']}' exported successfully")
                 QMessageBox.information(
                     self, "Success",
                     f"Collection '{collection['name']}' exported successfully!\n\nFormat: {format_name}\nFile: {file_path}"
                 )
             else:
+                self.toast.error("Failed to export collection")
                 QMessageBox.critical(self, "Error", "Failed to export collection!")
                 
         except Exception as e:
+            self.toast.error(f"Export failed: {str(e)[:30]}...")
             QMessageBox.critical(self, "Error", f"Export failed: {str(e)}")
     
     def _import_collection(self):
@@ -1434,11 +1744,14 @@ class MainWindow(QMainWindow):
                 if collection_id:
                     self._select_collection_by_id(collection_id)
                 
+                self.toast.success("Collection imported successfully")
                 QMessageBox.information(self, "Success", message)
             else:
+                self.toast.warning("Import was not completed")
                 QMessageBox.warning(self, "Import Failed", message)
                 
         except Exception as e:
+            self.toast.error(f"Import failed: {str(e)[:30]}...")
             QMessageBox.critical(self, "Error", f"Import failed: {str(e)}")
     
     def _import_curl(self):
