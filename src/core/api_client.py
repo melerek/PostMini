@@ -60,14 +60,16 @@ class ApiClient:
     authentication, headers, and body content.
     """
     
-    def __init__(self, timeout: int = 30):
+    def __init__(self, timeout: int = 30, verify_ssl: bool = True):
         """
         Initialize the API client.
         
         Args:
             timeout: Default timeout for requests in seconds
+            verify_ssl: Whether to verify SSL certificates (default: True)
         """
         self.timeout = timeout
+        self.verify_ssl = verify_ssl
         self.session = requests.Session()
     
     def execute_request(self, 
@@ -128,6 +130,11 @@ class ApiClient:
         
         # Execute the request
         try:
+            # Suppress InsecureRequestWarning if SSL verification is disabled
+            if not self.verify_ssl:
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
             response = self.session.request(
                 method=method.upper(),
                 url=url,
@@ -136,6 +143,7 @@ class ApiClient:
                 data=data,
                 json=json_data,
                 timeout=self.timeout,
+                verify=self.verify_ssl,
                 allow_redirects=True
             )
             

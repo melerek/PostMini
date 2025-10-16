@@ -54,8 +54,6 @@ class CurlImportDialog(QDialog):
             QTextEdit {
                 font-family: 'Courier New', monospace;
                 font-size: 12px;
-                background-color: #f5f5f5;
-                border: 1px solid #ccc;
                 border-radius: 4px;
                 padding: 8px;
             }
@@ -70,8 +68,6 @@ class CurlImportDialog(QDialog):
         self.preview_text.setWordWrap(True)
         self.preview_text.setStyleSheet("""
             QLabel {
-                background-color: #f9f9f9;
-                border: 1px solid #ddd;
                 border-radius: 4px;
                 padding: 10px;
                 min-height: 80px;

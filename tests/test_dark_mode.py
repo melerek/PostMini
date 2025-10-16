@@ -148,24 +148,28 @@ class TestNoPaddingDelegate:
     def test_delegate_creates_editor(self, qapp):
         """Test that delegate creates QLineEdit editor."""
         from src.ui.main_window import NoPaddingDelegate
+        from PyQt6.QtWidgets import QStyleOptionViewItem
         
         delegate = NoPaddingDelegate()
         table = QTableWidget(5, 2)
+        option = QStyleOptionViewItem()
         
         # Create editor
-        editor = delegate.createEditor(table, None, table.model().index(0, 0))
+        editor = delegate.createEditor(table, option, table.model().index(0, 0))
         
         assert isinstance(editor, QLineEdit), "Editor should be QLineEdit"
     
     def test_delegate_removes_padding(self, qapp):
         """Test that delegate removes padding from editor."""
         from src.ui.main_window import NoPaddingDelegate
+        from PyQt6.QtWidgets import QStyleOptionViewItem
         
         delegate = NoPaddingDelegate()
         table = QTableWidget(5, 2)
+        option = QStyleOptionViewItem()
         
         # Create editor
-        editor = delegate.createEditor(table, None, table.model().index(0, 0))
+        editor = delegate.createEditor(table, option, table.model().index(0, 0))
         
         # Check that styleSheet contains padding:0px
         style = editor.styleSheet()

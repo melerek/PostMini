@@ -26,6 +26,10 @@
 - ✅ **Open source** - MIT license
 - ✅ **Lightweight** - 30MB installer with icon
 - ✅ **Dark mode** - One-click toggle (v1.1.2)
+- ✅ **Smart error messages** - Intelligent suggestions (v1.3.0)
+- ✅ **Request documentation** - Built-in description field (v1.3.0)
+- ✅ **Per-request timeout** - 1-300s configuration (v1.3.0)
+- ✅ **Per-request SSL toggle** - For local dev (v1.3.0)
 
 ### Postman Wins 🥈
 - ✅ More code generation languages (20+ vs 7)
@@ -84,16 +88,24 @@ Export → Import works both ways
 
 ---
 
-## 🎉 What's New in v1.1.2
+## 🎉 What's New in v1.3.0
 
-- ✅ **Dark Mode** - Professional dark theme with one-click toggle
-- ✅ **Application Icon** - Branded icon in taskbar and window
-- ✅ **cURL Import/Export** - Paste cURL commands directly
-- ✅ **Improved UI** - Refined styling and better cell editors
+- ✅ **📝 Request Description Field** - Document your APIs with collapsible notes
+- ✅ **💡 Enhanced Error Messages** - Intelligent suggestions for faster debugging
+  - Connection, timeout, DNS, SSL errors
+  - HTTP status codes (400, 401, 403, 404, 429, 500+)
+  - JSON errors and network issues
+- ✅ **⏱️ Timeout Configuration** - Per-request timeout (1-300s)
+- ✅ **🔐 SSL Certificate Toggle** - Per-request SSL verification for local dev
+- ✅ **🎯 Improved UX** - Reorganized sidebar, cleaner layout, better visual hierarchy
+
+### Previous Releases:
+- **v1.1.2**: Dark Mode, Application Icon, cURL Import/Export
+- **v1.2.0**: Context menus, Recent Requests panel, Visual feedback enhancements
 
 ---
 
 **See full comparison:** [POSTMINI_VS_POSTMAN_COMPARISON.md](docs/POSTMINI_VS_POSTMAN_COMPARISON.md)
 
-**PostMini Version:** 1.1.2 | **Updated:** October 2025
+**PostMini Version:** 1.3.0 | **Updated:** October 16, 2025
 

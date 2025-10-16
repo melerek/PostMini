@@ -347,51 +347,25 @@ class MainWindow(QMainWindow):
         self.collections_tree.customContextMenuRequested.connect(self._show_tree_context_menu)
         layout.addWidget(self.collections_tree)
         
-        # Buttons row 1
-        button_layout_1 = QHBoxLayout()
+        # Bottom button row - Add/Import only
+        button_layout = QHBoxLayout()
         
         add_collection_btn = QPushButton("Add Collection")
+        add_collection_btn.setToolTip("Add a new collection")
         add_collection_btn.clicked.connect(self._add_collection)
-        button_layout_1.addWidget(add_collection_btn)
+        button_layout.addWidget(add_collection_btn)
         
-        add_request_btn = QPushButton("Add Request")
-        add_request_btn.clicked.connect(self._add_request)
-        button_layout_1.addWidget(add_request_btn)
-        
-        delete_btn = QPushButton("Delete")
-        delete_btn.clicked.connect(self._delete_selected)
-        button_layout_1.addWidget(delete_btn)
-        
-        layout.addLayout(button_layout_1)
-        
-        # Buttons row 2 - Import/Export
-        button_layout_2 = QHBoxLayout()
-        
-        export_btn = QPushButton("Export Collection")
-        export_btn.clicked.connect(self._export_collection)
-        button_layout_2.addWidget(export_btn)
-        
-        import_btn = QPushButton("Import Collection")
+        import_btn = QPushButton("📥 Import Collection")
+        import_btn.setToolTip("Import a collection from JSON file")
         import_btn.clicked.connect(self._import_collection)
-        button_layout_2.addWidget(import_btn)
+        button_layout.addWidget(import_btn)
         
-        # cURL Import button
         curl_import_btn = QPushButton("📋 Import cURL")
         curl_import_btn.setToolTip("Import a cURL command as a new request")
         curl_import_btn.clicked.connect(self._import_curl)
-        button_layout_2.addWidget(curl_import_btn)
+        button_layout.addWidget(curl_import_btn)
         
-        layout.addLayout(button_layout_2)
-        
-        # Third button row for tests
-        button_layout_3 = QHBoxLayout()
-        
-        run_tests_btn = QPushButton("▶️ Run Tests")
-        run_tests_btn.clicked.connect(self._run_collection_tests)
-        run_tests_btn.setToolTip("Run all tests in selected collection")
-        button_layout_3.addWidget(run_tests_btn)
-        
-        layout.addLayout(button_layout_3)
+        layout.addLayout(button_layout)
         
         return pane
     
@@ -411,10 +385,11 @@ class MainWindow(QMainWindow):
         response_viewer = self._create_response_viewer()
         self.main_splitter.addWidget(response_viewer)
         
-        # Set splitter sizes (45% request editor, 55% response viewer)
-        self.main_splitter.setStretchFactor(0, 45)  # Request editor
-        self.main_splitter.setStretchFactor(1, 55)  # Response viewer - 20% more space
-        self.main_splitter.setSizes([400, 500])
+        # Set splitter sizes (70% request editor, 30% response viewer initially)
+        # Response panel will auto-expand when a response is received
+        self.main_splitter.setStretchFactor(0, 70)  # Request editor - more space initially
+        self.main_splitter.setStretchFactor(1, 30)  # Response viewer - smaller initially
+        self.main_splitter.setSizes([600, 300])  # Default sizes favor editing
         
         layout.addWidget(self.main_splitter)
         
@@ -426,13 +401,14 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(editor)
         layout.setSpacing(8)
         
-        # Dynamic request title header (fixed height, no stretch)
+        # Dynamic request title header (fixed height, no stretch) - ENHANCED
         self.request_title_label = QLabel("New Request (not saved)")
         self.request_title_label.setObjectName("requestTitleLabel")
-        self.request_title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        self.request_title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))  # Increased from 12 to 16
         self.request_title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.request_title_label.setMaximumHeight(30)  # Fixed height
-        self.request_title_label.setMinimumHeight(30)
+        self.request_title_label.setMaximumHeight(40)  # Increased from 30 to 40
+        self.request_title_label.setMinimumHeight(40)  # Increased from 30 to 40
+        self.request_title_label.setStyleSheet("padding: 5px 10px;")  # Add padding for better appearance
         layout.addWidget(self.request_title_label, 0)  # Stretch factor 0 = fixed
         
         # Method and URL row (fixed height, no stretch)
@@ -481,9 +457,14 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(url_container, 0)  # Stretch factor 0 = fixed
         
-        # Connect inputs to track changes
+        # Connect inputs to track changes and update title
         self.method_combo.currentIndexChanged.connect(self._mark_as_changed)
+        self.method_combo.currentIndexChanged.connect(self._update_request_title)  # Update title when method changes
         self.url_input.textChanged.connect(self._mark_as_changed)
+        
+        # Description section (collapsible)
+        self.description_widget = self._create_description_section()
+        layout.addWidget(self.description_widget)
         
         # Tabs for Params, Headers, Authorization, Body (this should expand)
         self.request_tabs = QTabWidget()
@@ -670,6 +651,60 @@ class MainWindow(QMainWindow):
         # Remove max height constraint so table anchors to parent panel properly
         return table
     
+    def _create_description_section(self) -> QWidget:
+        """Create a collapsible description/notes section."""
+        container = QWidget()
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        
+        # Header with collapse/expand button
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.description_toggle_btn = QPushButton("▶ Description")
+        self.description_toggle_btn.setFlat(True)
+        self.description_toggle_btn.setStyleSheet("""
+            QPushButton {
+                text-align: left;
+                padding: 4px 8px;
+                border: none;
+                background: transparent;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(100, 100, 100, 0.2);
+            }
+        """)
+        self.description_toggle_btn.clicked.connect(self._toggle_description)
+        header_layout.addWidget(self.description_toggle_btn)
+        header_layout.addStretch()
+        
+        layout.addLayout(header_layout)
+        
+        # Description text area (initially collapsed)
+        self.description_input = QTextEdit()
+        self.description_input.setPlaceholderText("Add notes or description for this request...")
+        self.description_input.setMaximumHeight(100)
+        self.description_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.description_input.textChanged.connect(self._mark_as_changed)
+        self.description_input.setVisible(False)  # Start collapsed
+        layout.addWidget(self.description_input)
+        
+        return container
+    
+    def _toggle_description(self):
+        """Toggle the visibility of the description section."""
+        is_visible = self.description_input.isVisible()
+        self.description_input.setVisible(not is_visible)
+        
+        # Update button text
+        if is_visible:
+            self.description_toggle_btn.setText("▶ Description")
+        else:
+            self.description_toggle_btn.setText("▼ Description")
+    
     def _create_auth_widget(self) -> QWidget:
         """Create the authorization configuration widget."""
         widget = QWidget()
@@ -734,6 +769,42 @@ class MainWindow(QMainWindow):
         self.oauth_widget.setVisible(False)
         layout.addWidget(self.oauth_widget)
         
+        # Separator
+        separator = QWidget()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet("background-color: #444;")
+        layout.addWidget(separator)
+        
+        # Request Settings section
+        settings_label = QLabel("<b>Request Settings:</b>")
+        layout.addWidget(settings_label)
+        
+        # Timeout setting
+        timeout_layout = QHBoxLayout()
+        timeout_layout.addWidget(QLabel("Timeout:"))
+        self.timeout_input = QLineEdit()
+        self.timeout_input.setPlaceholderText("30")
+        self.timeout_input.setMaximumWidth(80)
+        self.timeout_input.setText("30")
+        self.timeout_input.setToolTip("Request timeout in seconds (default: 30)")
+        timeout_layout.addWidget(self.timeout_input)
+        timeout_layout.addWidget(QLabel("seconds"))
+        timeout_layout.addStretch()
+        layout.addLayout(timeout_layout)
+        
+        # SSL verification toggle
+        from PyQt6.QtWidgets import QCheckBox
+        ssl_layout = QHBoxLayout()
+        self.verify_ssl_checkbox = QCheckBox("Verify SSL certificates")
+        self.verify_ssl_checkbox.setChecked(True)
+        self.verify_ssl_checkbox.setToolTip(
+            "Uncheck to disable SSL certificate verification\n"
+            "(useful for local development with self-signed certificates)"
+        )
+        ssl_layout.addWidget(self.verify_ssl_checkbox)
+        ssl_layout.addStretch()
+        layout.addLayout(ssl_layout)
+        
         layout.addStretch()
         
         # OAuth state
@@ -769,25 +840,36 @@ class MainWindow(QMainWindow):
             requests = self.db.get_requests_by_collection(collection['id'])
             request_count = len(requests)
             
-            # Create collection item with request count
-            collection_name = f"{collection['name']} [{request_count}]"
+            # Create collection item with folder icon
+            collection_name = f"📁 {collection['name']} [{request_count}]"
             collection_item = QTreeWidgetItem([collection_name])
             collection_item.setData(0, Qt.ItemDataRole.UserRole, 
                                    {'type': 'collection', 'id': collection['id'], 'name': collection['name']})
             
-            # Make collection names bold
+            # Make collection names bold and set folder color
             font = collection_item.font(0)
             font.setBold(True)
             collection_item.setFont(0, font)
+            collection_item.setForeground(0, QBrush(QColor('#CCCCCC')))  # Light gray for collections
             
             self.collections_tree.addTopLevelItem(collection_item)
             
-            # Add request items
+            # Add request items with method badges (no emoji)
             for request in requests:
-                request_item = QTreeWidgetItem([f"{request['method']} - {request['name']}"])
+                method = request['method']
+                method_badge = self._get_method_icon(method)
+                method_color = self._get_method_color(method)
+                
+                # Create item with badge and name - cleaner text format
+                request_text = f"{method_badge} {request['name']}"
+                request_item = QTreeWidgetItem([request_text])
                 request_item.setData(0, Qt.ItemDataRole.UserRole,
                                     {'type': 'request', 'id': request['id'],
                                      'collection_id': collection['id']})
+                
+                # Set text color based on method
+                request_item.setForeground(0, QBrush(QColor(method_color)))
+                
                 collection_item.addChild(request_item)
             
             # Restore expanded state
@@ -837,6 +919,12 @@ class MainWindow(QMainWindow):
         
         if data.get('type') == 'collection':
             # Collection context menu
+            add_request_action = QAction("➕ Add Request", self)
+            add_request_action.triggered.connect(lambda: self._add_request_to_collection(data['id']))
+            menu.addAction(add_request_action)
+            
+            menu.addSeparator()
+            
             export_action = QAction("📤 Export Collection", self)
             export_action.triggered.connect(lambda: self._export_collection_from_menu(data['id']))
             menu.addAction(export_action)
@@ -941,6 +1029,41 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to create request: {str(e)}")
     
+    def _add_request_to_collection(self, collection_id: int):
+        """Add a new request to a specific collection (from context menu)."""
+        # Check for unsaved changes before creating new request
+        if not self._check_unsaved_changes():
+            return
+        
+        # Get collection name to show in prompt
+        collection = self.db.get_collection(collection_id)
+        collection_name = collection.get('name', 'Unknown') if collection else 'Unknown'
+        
+        name, ok = QInputDialog.getText(
+            self, 
+            "New Request", 
+            f"Request name (will be added to '{collection_name}'):"
+        )
+        if ok and name:
+            try:
+                request_id = self.db.create_request(
+                    collection_id=collection_id,
+                    name=name,
+                    method='GET',
+                    url='https://api.example.com'
+                )
+                self._load_collections()
+                self.toast.success(f"Request '{name}' created")
+                
+                # Load the newly created request and show workspace
+                self.current_request_id = request_id
+                self.current_collection_id = collection_id
+                self.workspace_pane.setVisible(True)
+                self._load_request(request_id)
+            except Exception as e:
+                self.toast.error(f"Failed to create request: {str(e)[:50]}...")
+                QMessageBox.critical(self, "Error", f"Failed to create request: {str(e)}")
+    
     def _delete_selected(self):
         """Delete the currently selected collection or request."""
         current_item = self.collections_tree.currentItem()
@@ -1028,6 +1151,17 @@ class MainWindow(QMainWindow):
             auth_token = request.get('auth_token', '') or ''
             self.auth_token_input.setText(auth_token)
             
+            # Load description
+            description = request.get('description', '') or ''
+            self.description_input.setPlainText(description)
+            # Auto-expand description if it has content
+            if description.strip():
+                self.description_input.setVisible(True)
+                self.description_toggle_btn.setText("▼ Description")
+            else:
+                self.description_input.setVisible(False)
+                self.description_toggle_btn.setText("▶ Description")
+            
             # Load test assertions
             self._load_test_assertions(request_id)
             
@@ -1063,6 +1197,11 @@ class MainWindow(QMainWindow):
         self.body_input.clear()
         self.auth_type_combo.setCurrentText('None')
         self.auth_token_input.clear()
+        self.description_input.clear()
+        self.description_input.setVisible(False)
+        self.description_toggle_btn.setText("▶ Description")
+        self.timeout_input.setText("30")
+        self.verify_ssl_checkbox.setChecked(True)
         self._clear_response_viewer()
         
         # Reset tracking variables
@@ -1091,6 +1230,24 @@ class MainWindow(QMainWindow):
         # Update tab counts after loading
         self._update_tab_counts()
     
+    def _get_method_icon(self, method: str) -> str:
+        """Get text badge for HTTP method (no emoji - better rendering)."""
+        # Use method name directly - we'll color it with CSS
+        return f"[{method}]"
+    
+    def _get_method_color(self, method: str) -> str:
+        """Get color hex code for HTTP method."""
+        method_colors = {
+            'GET': '#4EC9B0',      # Teal/cyan for read
+            'POST': '#FF9800',     # Orange for create
+            'PUT': '#2196F3',      # Blue for update
+            'PATCH': '#FFC107',    # Yellow for partial update
+            'DELETE': '#F44336',   # Red for delete
+            'HEAD': '#9E9E9E',     # Gray for metadata
+            'OPTIONS': '#9C27B0'   # Purple for options
+        }
+        return method_colors.get(method, '#FFFFFF')  # White as default
+    
     def _get_table_as_dict(self, table: QTableWidget) -> Dict:
         """Extract key-value pairs from a table as a dictionary."""
         result = {}
@@ -1115,7 +1272,8 @@ class MainWindow(QMainWindow):
             'headers': self._get_table_as_dict(self.headers_table),
             'body': self.body_input.toPlainText(),
             'auth_type': self.auth_type_combo.currentText(),
-            'auth_token': self.auth_token_input.text()
+            'auth_token': self.auth_token_input.text(),
+            'description': self.description_input.toPlainText()
         }
     
     def _mark_as_changed(self):
@@ -1162,12 +1320,13 @@ class MainWindow(QMainWindow):
         self.request_tabs.setTabText(4, tests_label)
     
     def _update_request_title(self):
-        """Update the request title label to show current state."""
+        """Update the request title label to show current state with breadcrumb."""
         if self.current_request_id and self.current_request_name:
-            # Saved request
-            title = f"{self.current_request_name} ({self.current_collection_name})"
+            # Saved request - show breadcrumb with method badge
+            method = self.method_combo.currentText()
+            title = f"{self.current_collection_name} › {method} {self.current_request_name}"
             if self.has_unsaved_changes:
-                title += " *"
+                title += " •"  # Use bullet instead of asterisk for cleaner look
             self.request_title_label.setText(title)
             self.request_title_label.setProperty("saved", "true")
         else:
@@ -1217,7 +1376,8 @@ class MainWindow(QMainWindow):
                 headers=self._get_table_as_dict(self.headers_table),
                 body=self.body_input.toPlainText(),
                 auth_type=self.auth_type_combo.currentText(),
-                auth_token=self.auth_token_input.text()
+                auth_token=self.auth_token_input.text(),
+                description=self.description_input.toPlainText()
             )
             
             # Save test assertions
@@ -1335,6 +1495,25 @@ class MainWindow(QMainWindow):
             if auth_type == 'Bearer Token':
                 auth_token = substituted['auth_token']
         
+        # Get and validate timeout setting
+        try:
+            timeout_text = self.timeout_input.text().strip()
+            timeout = int(timeout_text) if timeout_text else 30
+            # Validate timeout range (1-300 seconds)
+            if timeout < 1:
+                timeout = 1
+            elif timeout > 300:
+                timeout = 300
+            self.api_client.timeout = timeout
+        except ValueError:
+            self.toast.warning("Invalid timeout value, using default (30s)")
+            self.api_client.timeout = 30
+        
+        # Set SSL verification option
+        self.api_client.verify_ssl = self.verify_ssl_checkbox.isChecked()
+        if not self.api_client.verify_ssl:
+            self.toast.warning("SSL verification disabled - not recommended for production!")
+        
         # Clean up existing thread if still running
         if self.request_thread and self.request_thread.isRunning():
             self.request_thread.wait()
@@ -1393,7 +1572,7 @@ class MainWindow(QMainWindow):
         self.send_btn.setStyleSheet("")  # Reset to use global stylesheet
     
     def _on_request_error(self, error_message: str):
-        """Handle request error."""
+        """Handle request error with helpful suggestions."""
         # Re-enable send button with error indicator
         self.send_btn.setEnabled(True)
         self.send_btn.setText("✗ Send")
@@ -1410,16 +1589,171 @@ class MainWindow(QMainWindow):
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self._reset_send_button())
         
-        # Show error toast with helpful message
-        self.toast.error(f"Request failed: {error_message[:50]}...")
+        # Get helpful error message with suggestions
+        enhanced_error = self._enhance_error_message(error_message)
         
-        # Display error in response viewer
+        # Show error toast with helpful message
+        self.toast.error(f"Request failed: {enhanced_error['short'][:50]}...")
+        
+        # Display error in response viewer with full details and suggestions
         self.status_label.setText(f"Status: Error")
         self.status_label.setStyleSheet("color: #F44336; font-weight: bold;")
-        self.response_body.setPlainText(f"Error: {error_message}")
+        self.response_body.setPlainText(enhanced_error['full'])
         
         # Save to history (with error)
         self._save_to_history(error_message=error_message)
+    
+    def _enhance_error_message(self, error_message: str) -> Dict[str, str]:
+        """
+        Enhance error messages with helpful suggestions.
+        
+        Args:
+            error_message: Original error message
+            
+        Returns:
+            Dictionary with 'short' and 'full' error messages
+        """
+        error_lower = error_message.lower()
+        suggestions = []
+        short_msg = error_message
+        
+        # Connection errors
+        if 'connection' in error_lower or 'failed to connect' in error_lower:
+            short_msg = "Connection failed"
+            suggestions.extend([
+                "• Check if the URL is correct",
+                "• Ensure you have internet connection",
+                "• Verify the server is running and accessible",
+                "• Check if you need to use a VPN or proxy",
+                "• Try accessing the URL in a web browser"
+            ])
+        
+        # Timeout errors
+        elif 'timeout' in error_lower or 'timed out' in error_lower:
+            short_msg = "Request timed out"
+            current_timeout = self.api_client.timeout
+            suggestions.extend([
+                "• The server may be slow or overloaded",
+                f"• Increase the timeout setting in Authorization tab (currently {current_timeout}s)",
+                "• Check your internet connection speed",
+                "• Try again later"
+            ])
+        
+        # DNS resolution errors
+        elif 'name or service not known' in error_lower or 'getaddrinfo failed' in error_lower or 'nodename nor servname provided' in error_lower:
+            short_msg = "Cannot resolve hostname"
+            suggestions.extend([
+                "• Check if the URL is spelled correctly",
+                "• Ensure the domain name exists",
+                "• Try using an IP address instead of hostname",
+                "• Check your DNS settings"
+            ])
+        
+        # SSL/TLS errors
+        elif 'ssl' in error_lower or 'certificate' in error_lower or 'https' in error_lower:
+            short_msg = "SSL/Certificate error"
+            suggestions.extend([
+                "• The server's SSL certificate may be invalid or expired",
+                "• Try using 'http://' instead of 'https://' for local development",
+                "• For local dev, you may need to disable SSL verification",
+                "• Contact the API provider about certificate issues"
+            ])
+        
+        # 4xx errors (client errors)
+        elif '400' in error_lower or 'bad request' in error_lower:
+            short_msg = "Bad Request (400)"
+            suggestions.extend([
+                "• Check if the request body is valid JSON",
+                "• Verify all required parameters are included",
+                "• Review the API documentation for correct format"
+            ])
+        elif '401' in error_lower or 'unauthorized' in error_lower:
+            short_msg = "Unauthorized (401)"
+            suggestions.extend([
+                "• Check if you need to add authentication",
+                "• Verify your API key or token is correct",
+                "• Ensure the Authorization header is set properly",
+                "• Your token may have expired - try refreshing"
+            ])
+        elif '403' in error_lower or 'forbidden' in error_lower:
+            short_msg = "Forbidden (403)"
+            suggestions.extend([
+                "• You don't have permission to access this resource",
+                "• Check if your API key has the required scopes",
+                "• Verify you're using the correct authentication method",
+                "• Contact the API provider about access"
+            ])
+        elif '404' in error_lower or 'not found' in error_lower:
+            short_msg = "Not Found (404)"
+            suggestions.extend([
+                "• Check if the endpoint URL is correct",
+                "• Verify the resource exists",
+                "• Review the API documentation for correct paths",
+                "• Check if the API version in the URL is correct"
+            ])
+        elif '429' in error_lower or 'rate limit' in error_lower:
+            short_msg = "Rate Limited (429)"
+            suggestions.extend([
+                "• You're making too many requests",
+                "• Wait a moment and try again",
+                "• Check the API's rate limit documentation",
+                "• Consider implementing request throttling"
+            ])
+        
+        # 5xx errors (server errors)
+        elif '500' in error_lower or 'internal server error' in error_lower:
+            short_msg = "Internal Server Error (500)"
+            suggestions.extend([
+                "• The server encountered an error",
+                "• Try again in a few moments",
+                "• Check if the request data is correct",
+                "• Contact the API provider if issue persists"
+            ])
+        elif '502' in error_lower or 'bad gateway' in error_lower:
+            short_msg = "Bad Gateway (502)"
+            suggestions.extend([
+                "• The gateway/proxy server received an invalid response",
+                "• The server may be temporarily down",
+                "• Try again in a few moments"
+            ])
+        elif '503' in error_lower or 'service unavailable' in error_lower:
+            short_msg = "Service Unavailable (503)"
+            suggestions.extend([
+                "• The server is temporarily unavailable",
+                "• Server may be under maintenance",
+                "• Try again later"
+            ])
+        
+        # JSON errors
+        elif 'json' in error_lower and ('decode' in error_lower or 'parse' in error_lower):
+            short_msg = "Invalid JSON"
+            suggestions.extend([
+                "• Check if your request body is valid JSON",
+                "• Use a JSON validator to verify format",
+                "• Ensure Content-Type header is set to 'application/json'",
+                "• Check for trailing commas or syntax errors"
+            ])
+        
+        # Network errors
+        elif 'network' in error_lower or 'unreachable' in error_lower:
+            short_msg = "Network error"
+            suggestions.extend([
+                "• Check your internet connection",
+                "• Verify network firewalls aren't blocking the request",
+                "• Try accessing other websites to confirm connectivity"
+            ])
+        
+        # Build full error message
+        full_msg = f"❌ Error: {error_message}\n\n"
+        if suggestions:
+            full_msg += "💡 Suggestions:\n" + "\n".join(suggestions)
+        else:
+            full_msg += "💡 Suggestions:\n• Check the error details above\n• Review your request configuration\n• Try the request again"
+        
+        return {
+            'short': short_msg,
+            'full': full_msg
+        }
     
     def _display_response(self, response: ApiResponse):
         """Display the HTTP response in the response viewer."""

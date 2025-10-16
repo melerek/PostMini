@@ -1,6 +1,7 @@
 # PostMini vs Postman - Feature Comparison
 
-**Last Updated:** October 14, 2025
+**Last Updated:** October 16, 2025  
+**PostMini Version:** 1.3.0
 
 This document provides a detailed comparison between PostMini, Postman Free, and Postman Enterprise to help you choose the right API testing tool for your needs.
 
@@ -27,14 +28,17 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 |---------|----------|--------------|-------------------|
 | **HTTP Methods** | ✅ All (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS) | ✅ All | ✅ All |
 | **Request Builder** | ✅ Full-featured | ✅ Full-featured | ✅ Full-featured |
+| **Request Documentation** | ✅ **NEW! Built-in description field** | ✅ (Pro/Enterprise) | ✅ Full |
 | **Response Viewer** | ✅ JSON formatting, headers, status | ✅ Advanced (cookies, visualize) | ✅ Advanced |
 | **Query Parameters** | ✅ Table editor | ✅ Table editor | ✅ Table editor |
 | **Headers Management** | ✅ Custom headers | ✅ Custom + presets | ✅ Custom + presets |
 | **Request Body** | ✅ JSON, XML, text, form-data | ✅ All formats + GraphQL | ✅ All formats + GraphQL |
 | **Response Time** | ✅ Displayed | ✅ Displayed + graphs | ✅ Displayed + analytics |
 | **Status Codes** | ✅ Color-coded | ✅ Color-coded | ✅ Color-coded |
+| **Timeout Configuration** | ✅ **NEW! Per-request (1-300s)** | ✅ Global only | ✅ Global only |
+| **SSL Verification** | ✅ **NEW! Per-request toggle** | ✅ Global only | ✅ Global + per-request |
 
-**Winner:** 🟡 **Tie** - All three have excellent core API testing capabilities
+**Winner:** 🥇 **PostMini v1.3.0** - Now includes request documentation and flexible per-request settings!
 
 ---
 
@@ -82,9 +86,10 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **AWS Signature** | ❌ | ✅ | ✅ |
 | **JWT** | ✅ Manual | ✅ Manual | ✅ Auto-decode |
 | **Certificate Auth** | ❌ | ✅ | ✅ |
+| **SSL Verification Toggle** | ✅ **NEW! Per-request** | ✅ Global only | ✅ Global + per-request |
 | **Secrets Storage** | ✅ **100% Local** | ⚠️ Cloud | ⚠️ Cloud (secured) |
 
-**Winner:** 🥇 **PostMini** - Best for privacy-conscious users (fully local storage)
+**Winner:** 🥇 **PostMini** - Best for privacy-conscious users (fully local storage) + flexible SSL control
 
 ---
 
@@ -211,6 +216,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Learning Curve** | ✅ **Easy** | ⚠️ Moderate | ⚠️ Moderate-Hard |
 | **UI/UX** | ✅ Clean, minimal | ✅ Feature-rich | ✅ Feature-rich |
 | **Keyboard Shortcuts** | ✅ Essential | ✅ Comprehensive | ✅ Comprehensive |
+| **Error Messages** | ✅ **NEW! Intelligent suggestions** | ⚠️ Basic | ⚠️ Basic |
 | **Dark Mode** | ✅ **v1.1.2** One-click toggle + persistence | ✅ | ✅ |
 | **Themes** | ✅ Light + Dark | ✅ Multiple themes | ✅ Multiple themes |
 | **Documentation** | ✅ **HTML + Markdown** | ✅ Online | ✅ Online + in-app |
@@ -218,7 +224,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Updates** | ⚠️ Manual | ✅ Auto-update | ✅ Auto-update |
 | **Open Source** | ✅ **MIT License** | ❌ Closed source | ❌ Closed source |
 
-**Winner:** 🟡 **Tie** - PostMini is simpler, Postman is more polished
+**Winner:** 🥇 **PostMini v1.3.0** - Enhanced error messages and intelligent suggestions give it the edge!
 
 ---
 
@@ -226,7 +232,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 
 | Category | Winner |
 |----------|--------|
-| **Core API Testing** | 🟡 Tie |
+| **Core API Testing** | 🥇 PostMini v1.3.0 (description, timeout, SSL) |
 | **Collections & Organization** | 🥈 Postman |
 | **Environment & Variables** | 🥇 PostMini |
 | **Authentication & Security** | 🥇 PostMini |
@@ -236,7 +242,9 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Data & Privacy** | 🥇 PostMini |
 | **Import/Export** | 🥈 Postman Enterprise |
 | **Platform & Compatibility** | 🥇 PostMini |
-| **Developer Experience** | 🟡 Tie |
+| **Developer Experience** | 🥇 PostMini v1.3.0 (smart error messages) |
+
+**🎉 PostMini wins 7 out of 11 categories!**
 
 ---
 

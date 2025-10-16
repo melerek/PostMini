@@ -52,10 +52,11 @@ QPushButton {
     background-color: #FFFFFF;
     border: 1px solid #BDBDBD;
     border-radius: 4px;
-    padding: 5px 12px;
+    padding: 6px 12px;
     color: #212121;
     font-weight: 500;
-    min-height: 28px;
+    font-size: 13px;
+    min-height: 24px;
     max-height: 32px;
 }
 
@@ -82,6 +83,9 @@ QPushButton[class="primary"] {
     border: none;
     color: white;
     font-weight: bold;
+    font-size: 13px;
+    padding: 6px 16px;
+    min-height: 24px;
 }
 
 QPushButton#sendButton:hover,
@@ -270,10 +274,10 @@ QTreeWidget {
 }
 
 QTreeWidget::item {
-    padding: 6px 6px 6px 2px;
+    padding: 6px 10px;
     border-radius: 3px;
-    margin: 1px 0;
-    min-height: 26px;
+    margin: 1px 2px;
+    min-height: 20px;
     background-color: white; /* White items on gray background */
     color: #212121;
 }

@@ -1,14 +1,14 @@
 # PostMini - Desktop API Client
 
-**Version 1.2.0** | Professional API Testing Tool | MIT License
+**Version 1.3.0** | Professional API Testing Tool | MIT License
 
 A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for collections, environment variables, OAuth 2.0, API testing, code generation, dark mode, cURL import/export, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.2.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.3.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Tests](https://img.shields.io/badge/tests-200%2B%20passing-success)
+![Tests](https://img.shields.io/badge/tests-250%2B%20passing-success)
 
 ---
 
@@ -38,7 +38,17 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 
 ## Features
 
-### 🆕 Latest UX Improvements (Phase 3)
+### ✨ What's New in V1.3.0
+- **📝 Request Description Field**: Document your requests with collapsible description/notes section
+- **💡 Enhanced Error Messages**: Intelligent error detection with actionable suggestions for:
+  - Connection errors, timeouts, DNS issues, SSL problems
+  - HTTP status codes (400, 401, 403, 404, 429, 500+)
+  - JSON errors and network issues
+- **⏱️ Timeout Configuration**: Customize request timeout (1-300 seconds) per request
+- **🔐 SSL Certificate Handling**: Toggle SSL verification for local development with self-signed certificates
+- **🎯 Improved UX**: Reorganized sidebar buttons, cleaner layout, better visual hierarchy
+
+### 🆕 UX Improvements (Phase 3)
 - **Context Menus**: Right-click collections, requests, and responses for quick actions
   - Export, rename, duplicate, delete collections
   - Copy requests as cURL commands
@@ -65,6 +75,9 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
   - Custom headers
   - Request body (JSON, text, etc.)
   - Bearer Token authentication
+  - **NEW:** Request descriptions/notes
+  - **NEW:** Configurable timeout settings
+  - **NEW:** SSL certificate verification toggle
 - **Response Viewer**:
   - Pretty-printed JSON with syntax highlighting
   - Pretty/Raw toggle and word wrap
@@ -198,9 +211,10 @@ This will create sample environments (Development, Staging, Production) and requ
 4. **Configure the Request**:
    - Select the HTTP method from the dropdown (GET, POST, etc.)
    - Enter the URL (use variables like `{{baseUrl}}/users`)
+   - **Description**: ✨ Add notes or documentation (click ▶ to expand)
    - **Params Tab**: Add query parameters as key-value pairs
    - **Headers Tab**: Add custom headers (e.g., `Authorization: Bearer {{apiToken}}`)
-   - **Authorization Tab**: Select auth type and enter token (can use `{{token}}`)
+   - **Authorization Tab**: Select auth type, configure timeout (default 30s), toggle SSL verification
    - **Body Tab**: Enter request body (can use variables in JSON)
 
 5. **Send the Request**:
@@ -245,6 +259,7 @@ CREATE TABLE requests (
     body TEXT,
     auth_type TEXT DEFAULT 'None',
     auth_token TEXT,
+    description TEXT,  -- NEW in v1.3.0
     FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
 )
 ```
@@ -531,15 +546,17 @@ Demo script that creates sample data to showcase environment variables feature.
 
 ## Error Handling
 
-The application includes comprehensive error handling for:
-- Network connection errors
-- Request timeouts
-- Invalid URLs
-- JSON parsing errors
-- Database constraints (e.g., duplicate collection names)
-- Invalid JSON in request body
+The application includes comprehensive error handling with **intelligent suggestions** for:
+- **Network connection errors** - Check URL, internet connection, server status
+- **Request timeouts** - Increase timeout, check server performance
+- **DNS resolution errors** - Verify hostname spelling, check DNS settings
+- **SSL certificate errors** - Disable verification for local dev, check certificate validity
+- **HTTP status codes** - Specific suggestions for 400, 401, 403, 404, 429, 500+ errors
+- **JSON parsing errors** - Validate JSON format, check Content-Type header
+- **Database constraints** - Duplicate collection names, invalid data
+- **Invalid request configuration** - Missing required fields, invalid parameters
 
-All errors are displayed to the user via message boxes or in the response viewer.
+All errors are displayed with actionable suggestions in the response viewer, making debugging faster and easier.
 
 ## Development
 
@@ -571,6 +588,8 @@ The modular architecture makes it easy to extend:
 - Check your internet connection
 - Some APIs may require specific headers or authentication
 - Try with a simple API first (e.g., https://jsonplaceholder.typicode.com)
+- **NEW:** For local development with self-signed certificates, disable SSL verification in the Authorization tab
+- **NEW:** Adjust timeout settings if requests are timing out (Authorization tab → Request Settings)
 
 ## Contributing
 

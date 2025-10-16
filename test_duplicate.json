@@ -1,0 +1,19 @@
+{
+  "export_version": "1.0",
+  "export_date": "2025-10-16T23:30:08.197797",
+  "collection": {
+    "name": "Duplicate Test",
+    "requests": [
+      {
+        "name": "Request 1",
+        "method": "GET",
+        "url": "https://example.com",
+        "params": null,
+        "headers": null,
+        "body": null,
+        "auth_type": "None",
+        "auth_token": null
+      }
+    ]
+  }
+}

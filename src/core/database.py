@@ -142,6 +142,14 @@ class DatabaseManager:
             )
         """)
         
+        # Add description column to requests table if it doesn't exist (migration)
+        try:
+            cursor.execute("ALTER TABLE requests ADD COLUMN description TEXT")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
         # Create test results table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS test_results (
@@ -253,7 +261,7 @@ class DatabaseManager:
     def create_request(self, collection_id: int, name: str, method: str, url: str,
                       params: Optional[Dict] = None, headers: Optional[Dict] = None,
                       body: Optional[str] = None, auth_type: str = 'None',
-                      auth_token: Optional[str] = None) -> int:
+                      auth_token: Optional[str] = None, description: Optional[str] = None) -> int:
         """
         Create a new request in a collection.
         
@@ -267,6 +275,7 @@ class DatabaseManager:
             body: Request body (usually JSON string)
             auth_type: Type of authentication ('None', 'Bearer Token')
             auth_token: Authentication token
+            description: Optional description/notes for the request
             
         Returns:
             ID of the newly created request
@@ -279,10 +288,10 @@ class DatabaseManager:
         
         cursor.execute("""
             INSERT INTO requests 
-            (collection_id, name, method, url, params, headers, body, auth_type, auth_token)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (collection_id, name, method, url, params_json, headers_json, 
-              body, auth_type, auth_token))
+              body, auth_type, auth_token, description))
         
         self.connection.commit()
         return cursor.lastrowid
@@ -346,7 +355,7 @@ class DatabaseManager:
     def update_request(self, request_id: int, name: str, method: str, url: str,
                       params: Optional[Dict] = None, headers: Optional[Dict] = None,
                       body: Optional[str] = None, auth_type: str = 'None',
-                      auth_token: Optional[str] = None):
+                      auth_token: Optional[str] = None, description: Optional[str] = None):
         """
         Update an existing request.
         
@@ -360,6 +369,7 @@ class DatabaseManager:
             body: Request body
             auth_type: Type of authentication
             auth_token: Authentication token
+            description: Optional description/notes for the request
         """
         cursor = self.connection.cursor()
         
@@ -370,10 +380,10 @@ class DatabaseManager:
         cursor.execute("""
             UPDATE requests 
             SET name = ?, method = ?, url = ?, params = ?, headers = ?, 
-                body = ?, auth_type = ?, auth_token = ?
+                body = ?, auth_type = ?, auth_token = ?, description = ?
             WHERE id = ?
         """, (name, method, url, params_json, headers_json, body, 
-              auth_type, auth_token, request_id))
+              auth_type, auth_token, description, request_id))
         
         self.connection.commit()
     
