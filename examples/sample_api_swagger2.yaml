@@ -1,0 +1,60 @@
+swagger: "2.0"
+info:
+  title: "Simple Store API"
+  version: "2.0.0"
+  description: "A simple store API using Swagger 2.0"
+host: "api.example.com"
+basePath: "/v2"
+schemes:
+  - https
+paths:
+  /products:
+    get:
+      summary: "List all products"
+      parameters:
+        - name: category
+          in: query
+          type: string
+          description: "Filter by category"
+      responses:
+        200:
+          description: "Success"
+    post:
+      summary: "Create a product"
+      parameters:
+        - name: body
+          in: body
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              price:
+                type: number
+              category:
+                type: string
+      responses:
+        201:
+          description: "Created"
+  /products/{id}:
+    get:
+      summary: "Get product by ID"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      responses:
+        200:
+          description: "Success"
+    delete:
+      summary: "Delete product"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      responses:
+        204:
+          description: "Deleted"
+

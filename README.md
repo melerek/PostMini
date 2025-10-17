@@ -1,14 +1,14 @@
 # PostMini - Desktop API Client
 
-**Version 1.3.0** | Professional API Testing Tool | MIT License
+**Version 1.4.0** | Professional API Testing Tool | MIT License
 
-A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for collections, environment variables, OAuth 2.0, API testing, code generation, dark mode, cURL import/export, and persistent storage.
+A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for collections, environment variables, OAuth 2.0, API testing, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.3.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.4.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Tests](https://img.shields.io/badge/tests-250%2B%20passing-success)
+![Tests](https://img.shields.io/badge/tests-347%2B%20passing-success)
 
 ---
 
@@ -38,7 +38,22 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 
 ## Features
 
-### ✨ What's New in V1.3.0
+### ✨ What's New in V1.4.0
+- **💫 Dynamic Variables**: Auto-generate test data with 38+ variables:
+  - `$guid`, `$timestamp`, `$randomEmail`, `$randomInt`
+  - `$randomFirstName`, `$randomLastName`, `$randomPhone`
+  - `$randomIP`, `$randomColor`, `$randomPrice`, and 28 more!
+  - Works in URLs, headers, body, and parameters
+- **📄 OpenAPI/Swagger Import**: Import API specs and auto-generate collections:
+  - Supports OpenAPI 3.0, 3.1, and Swagger 2.0
+  - Imports JSON and YAML formats
+  - Auto-generates request examples from schemas
+  - Extracts authentication, parameters, and descriptions
+  - Saves hours of manual work!
+
+### Previous Updates
+
+#### V1.3.0 (October 2025)
 - **📝 Request Description Field**: Document your requests with collapsible description/notes section
 - **💡 Enhanced Error Messages**: Intelligent error detection with actionable suggestions for:
   - Connection errors, timeouts, DNS issues, SSL problems
@@ -59,6 +74,8 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 
 ### Core Features
 - **Collections Management**: Organize your API requests into collections
+- **Dynamic Variables**: 🆕 v1.4.0 - 38+ auto-generated variables (`$guid`, `$timestamp`, `$randomEmail`, etc.)
+- **OpenAPI/Swagger Import**: 🆕 v1.4.0 - Import specs and auto-generate collections (OpenAPI 3.x, Swagger 2.0)
 - **Environment Variables**: Use `{{variables}}` for reusable configurations across environments
 - **Git-Based Collaboration**: 🌟 Version control collections with Git, enabling seamless team collaboration
 - **Dark Mode**: 🆕 v1.1.2 - Beautiful dark theme with one-click toggle and persistence!
@@ -75,9 +92,9 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
   - Custom headers
   - Request body (JSON, text, etc.)
   - Bearer Token authentication
-  - **NEW:** Request descriptions/notes
-  - **NEW:** Configurable timeout settings
-  - **NEW:** SSL certificate verification toggle
+  - Request descriptions/notes (v1.3.0)
+  - Configurable timeout settings (v1.3.0)
+  - SSL certificate verification toggle (v1.3.0)
 - **Response Viewer**:
   - Pretty-printed JSON with syntax highlighting
   - Pretty/Raw toggle and word wrap
@@ -233,6 +250,59 @@ This will create sample environments (Development, Staging, Production) and requ
    - Select a collection or request in the tree
    - Click "Delete" to remove it
    - Deleting a collection will also delete all its requests
+
+### Using Dynamic Variables (v1.4.0)
+
+Dynamic variables auto-generate test data on every request. Use them anywhere: URLs, headers, params, or body.
+
+**Popular Variables:**
+```
+$guid                   → a3f2e8d1-4b5c-6789-0123-456789abcdef
+$timestamp              → 1729123456
+$randomEmail            → user12345@example.com
+$randomInt              → 742
+$randomFirstName        → Sarah
+$randomLastName         → Johnson
+$randomPhone            → +1-555-123-4567
+$randomIP               → 192.168.1.42
+$randomColor            → blue
+$randomPrice            → 149.99
+```
+
+**Example Usage:**
+```json
+POST {{baseUrl}}/users
+{
+  "id": "$guid",
+  "email": "$randomEmail",
+  "firstName": "$randomFirstName",
+  "lastName": "$randomLastName",
+  "timestamp": "$timestamp"
+}
+```
+
+**All 38+ Variables:** `$guid`, `$randomUUID`, `$timestamp`, `$isoTimestamp`, `$randomInt`, `$randomString`, `$randomAlphaNumeric`, `$randomEmail`, `$randomUserName`, `$randomFirstName`, `$randomLastName`, `$randomFullName`, `$randomNamePrefix`, `$randomNameSuffix`, `$randomPhoneNumber`, `$randomPhoneNumberExt`, `$randomCity`, `$randomCountry`, `$randomCountryCode`, `$randomStreetName`, `$randomStreetAddress`, `$randomIP`, `$randomIPV6`, `$randomMACAddress`, `$randomPassword`, `$randomUrl`, `$randomDomainName`, `$randomColor`, `$randomHexColor`, `$randomPrice`, `$randomCreditCardNumber`, `$randomCompanyName`, `$randomCompanySuffix`, `$randomJobTitle`, `$randomBoolean`
+
+### Importing OpenAPI/Swagger Specs (v1.4.0)
+
+Quickly import entire APIs from OpenAPI or Swagger specifications:
+
+1. Click "📄 Import OpenAPI" button in the collections pane
+2. Select your `.json`, `.yaml`, or `.yml` spec file
+3. Review the import summary (endpoints, methods, base URL)
+4. Click "OK" to import
+5. Enter a collection name
+6. Done! All endpoints are now ready to use
+
+**Supports:**
+- OpenAPI 3.0 & 3.1
+- Swagger 2.0
+- JSON and YAML formats
+- Auto-generates example request bodies
+- Extracts parameters, headers, and authentication
+- Preserves descriptions and documentation
+
+**Example:** Import the Petstore API in seconds and get 20+ pre-configured requests!
 
 ## Database Schema
 

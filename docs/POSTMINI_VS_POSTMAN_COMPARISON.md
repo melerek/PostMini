@@ -1,7 +1,7 @@
 # PostMini vs Postman - Feature Comparison
 
-**Last Updated:** October 16, 2025  
-**PostMini Version:** 1.3.0
+**Last Updated:** October 17, 2025  
+**PostMini Version:** 1.4.0
 
 This document provides a detailed comparison between PostMini, Postman Free, and Postman Enterprise to help you choose the right API testing tool for your needs.
 
@@ -66,11 +66,11 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Environment Variables** | ✅ Unlimited environments | ✅ Unlimited | ✅ Unlimited |
 | **Variable Syntax** | ✅ `{{variable}}` | ✅ `{{variable}}` | ✅ `{{variable}}` |
 | **Global Variables** | ✅ Supported | ✅ Supported | ✅ Supported |
-| **Dynamic Variables** | ❌ Manual only | ✅ Auto ($guid, $timestamp) | ✅ Auto + custom |
+| **Dynamic Variables** | ✅ **NEW! 38+ variables** | ✅ 40+ variables | ✅ 40+ variables |
 | **Variable Scopes** | ✅ Environment-level | ✅ Global, Collection, Environment | ✅ All scopes |
 | **Secrets Management** | ✅ **Git-ignored secrets** | ❌ Cloud-stored | ✅ Vault integration |
 
-**Winner:** 🥇 **PostMini** - Best secrets management with Git-ignored local storage
+**Winner:** 🥇 **PostMini** - Best secrets management with Git-ignored local storage + dynamic variables!
 
 ---
 
@@ -177,9 +177,9 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 |---------|----------|--------------|-------------------|
 | **Postman Import** | ✅ v2.1 collections | ✅ Native | ✅ Native |
 | **Postman Export** | ✅ v2.1 format | ✅ Native | ✅ Native |
-| **OpenAPI/Swagger** | ❌ | ✅ Full support | ✅ Full support |
+| **OpenAPI/Swagger Import** | ✅ **NEW! 3.x & 2.0** | ✅ Full support | ✅ Full support |
 | **JSON Export** | ✅ | ✅ | ✅ |
-| **cURL Import** | ✅ **NEW!** | ✅ | ✅ |
+| **cURL Import** | ✅ | ✅ | ✅ |
 | **HAR Import** | ❌ | ✅ | ✅ |
 | **Git Integration** | ✅ **Native** | ❌ | ⚠️ Limited |
 | **GitHub Actions** | ✅ **Via Git** | ⚠️ Via Newman | ✅ Native |
@@ -365,13 +365,13 @@ These features are **only in PostMini**, not in Postman:
 These features are **only in Postman**, not in PostMini:
 
 1. ✨ **Web Application** - Access from browser
-2. ✨ **OpenAPI/Swagger** - Full spec support
-3. ✨ **API Mocking** - Mock servers
-4. ✨ **Scheduled Monitors** - Cloud-based monitoring
-5. ✨ **Published Docs** - Shareable documentation
-6. ✨ **Dynamic Variables** - `$guid`, `$timestamp`, etc.
-7. ✨ **GraphQL Support** - Native GraphQL client
-8. ✨ **Pre-request Scripts** - JavaScript automation
+2. ✨ **API Mocking** - Mock servers
+3. ✨ **Scheduled Monitors** - Cloud-based monitoring
+4. ✨ **Published Docs** - Shareable documentation
+5. ✨ **HAR Import** - HTTP Archive import
+6. ✨ **GraphQL Support** - Native GraphQL client (coming in PostMini v1.5.0)
+7. ✨ **Pre-request Scripts** - JavaScript automation (coming in PostMini v1.6.0)
+8. ✨ **Postbot AI** - AI-powered assistant
 
 ---
 
@@ -386,12 +386,17 @@ These features are **only in Postman**, not in PostMini:
 - ✅ **%APPDATA% Storage** - Safe, permission-free data storage
 - ✅ **UI Improvements** - Refined dark mode styling, better cell editors
 
-### PostMini Planned Features:
+### PostMini v1.4.0 Recent Additions:
 
-- 🔜 OpenAPI/Swagger import
-- 🔜 GraphQL support
-- 🔜 Pre-request scripts
+- ✅ **Dynamic Variables** - 38+ auto-generated test data variables
+- ✅ **OpenAPI/Swagger Import** - Import API specs (OpenAPI 3.x, Swagger 2.0)
+
+### PostMini Planned Features (v1.5.0+):
+
+- 🔜 GraphQL support (v1.5.0)
+- 🔜 Pre-request scripts (v1.6.0)
 - 🔜 API mocking
+- 🔜 Collection folders/nesting
 - 🔜 More code generation languages
 
 ### Postman Recent Additions:
@@ -416,7 +421,7 @@ Both tools are excellent for API testing, but they serve different audiences:
 ---
 
 **Updated:** October 2025  
-**PostMini Version:** 1.1.2  
+**PostMini Version:** 1.4.0  
 **Postman Version:** Latest (as of October 2025)
 
 *This comparison is maintained independently and aims to be fair and accurate. If you notice any errors, please submit an issue or pull request.*

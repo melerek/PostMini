@@ -122,6 +122,12 @@ class MainWindow(QMainWindow):
         self.secrets_manager = None
         self.git_workspace = None
         
+        # Git sync status refresh timer
+        from PyQt6.QtCore import QTimer
+        self.git_sync_timer = QTimer()
+        self.git_sync_timer.timeout.connect(self._update_git_sync_status)
+        self.git_sync_timer.setInterval(30000)  # Refresh every 30 seconds
+        
         # Theme management
         self.current_theme = 'light'  # Will be set by main.py
         
@@ -347,7 +353,7 @@ class MainWindow(QMainWindow):
         self.collections_tree.customContextMenuRequested.connect(self._show_tree_context_menu)
         layout.addWidget(self.collections_tree)
         
-        # Bottom button row - Add/Import only
+        # Bottom button row - Compact layout with dropdown
         button_layout = QHBoxLayout()
         
         add_collection_btn = QPushButton("Add Collection")
@@ -355,15 +361,32 @@ class MainWindow(QMainWindow):
         add_collection_btn.clicked.connect(self._add_collection)
         button_layout.addWidget(add_collection_btn)
         
-        import_btn = QPushButton("📥 Import Collection")
-        import_btn.setToolTip("Import a collection from JSON file")
-        import_btn.clicked.connect(self._import_collection)
-        button_layout.addWidget(import_btn)
+        # Import button with dropdown menu
+        import_menu_btn = QPushButton("📥 Import")
+        import_menu_btn.setToolTip("Import collections, cURL commands, or OpenAPI specs")
         
-        curl_import_btn = QPushButton("📋 Import cURL")
-        curl_import_btn.setToolTip("Import a cURL command as a new request")
-        curl_import_btn.clicked.connect(self._import_curl)
-        button_layout.addWidget(curl_import_btn)
+        # Create dropdown menu
+        import_menu = QMenu(import_menu_btn)
+        
+        # Add menu actions
+        import_collection_action = QAction("📄 Import Collection (JSON)", self)
+        import_collection_action.setToolTip("Import a collection from JSON file")
+        import_collection_action.triggered.connect(self._import_collection)
+        import_menu.addAction(import_collection_action)
+        
+        import_curl_action = QAction("🔗 Import cURL Command", self)
+        import_curl_action.setToolTip("Import a cURL command as a new request")
+        import_curl_action.triggered.connect(self._import_curl)
+        import_menu.addAction(import_curl_action)
+        
+        import_openapi_action = QAction("📋 Import OpenAPI/Swagger", self)
+        import_openapi_action.setToolTip("Import OpenAPI/Swagger specification")
+        import_openapi_action.triggered.connect(self._import_openapi)
+        import_menu.addAction(import_openapi_action)
+        
+        # Attach menu to button
+        import_menu_btn.setMenu(import_menu)
+        button_layout.addWidget(import_menu_btn)
         
         layout.addLayout(button_layout)
         
@@ -979,10 +1002,87 @@ class MainWindow(QMainWindow):
         
         menu.exec(self.collections_tree.viewport().mapToGlobal(position))
     
+    def _get_unique_collection_name(self, base_name: str) -> str:
+        """Generate a unique collection name by appending a number if needed."""
+        existing_collections = self.db.get_all_collections()
+        existing_names = {col['name'] for col in existing_collections}
+        
+        # If base name is unique, return it
+        if base_name not in existing_names:
+            return base_name
+        
+        # Otherwise, find the next available number
+        counter = 2
+        while f"{base_name} ({counter})" in existing_names:
+            counter += 1
+        
+        return f"{base_name} ({counter})"
+    
+    def _get_unique_request_name(self, collection_id: int, base_name: str, method: str) -> str:
+        """Generate a unique request name within a collection by appending a number if needed.
+        
+        Considers both name AND method when checking for duplicates, so 'Users' for GET and POST
+        are considered different requests.
+        """
+        existing_requests = self.db.get_requests_by_collection(collection_id)
+        # Create set of (name, method) tuples for same-method requests
+        existing_names = {req['name'] for req in existing_requests if req['method'] == method}
+        
+        # If base name is unique for this method, return it
+        if base_name not in existing_names:
+            return base_name
+        
+        # Otherwise, find the next available number
+        counter = 2
+        while f"{base_name} ({counter})" in existing_names:
+            counter += 1
+        
+        return f"{base_name} ({counter})"
+    
+    def _check_duplicate_request_name(self, collection_id: int, name: str, method: str) -> tuple[bool, str]:
+        """Check if a request name already exists and suggest a unique alternative.
+        
+        Returns:
+            (is_duplicate, suggested_name)
+        """
+        existing_requests = self.db.get_requests_by_collection(collection_id)
+        existing_names = {req['name'] for req in existing_requests if req['method'] == method}
+        
+        is_duplicate = name in existing_names
+        suggested_name = self._get_unique_request_name(collection_id, name, method) if is_duplicate else name
+        
+        return is_duplicate, suggested_name
+    
     def _add_collection(self):
         """Add a new collection via dialog."""
         name, ok = QInputDialog.getText(self, "New Collection", "Collection name:")
-        if ok and name:
+        if ok and name.strip():
+            name = name.strip()
+            
+            # Check if name already exists
+            existing_collections = self.db.get_all_collections()
+            existing_names = {col['name'] for col in existing_collections}
+            
+            if name in existing_names:
+                # Suggest a unique name
+                suggested_name = self._get_unique_collection_name(name)
+                
+                # Ask user if they want to use the suggested name
+                reply = QMessageBox.question(
+                    self,
+                    "Collection Already Exists",
+                    f"A collection named '{name}' already exists.\n\n"
+                    f"Would you like to create it as '{suggested_name}' instead?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    name = suggested_name
+                else:
+                    # Let user enter a different name
+                    return self._add_collection()
+            
             try:
                 self.db.create_collection(name)
                 self._auto_sync_to_filesystem()
@@ -1012,12 +1112,37 @@ class MainWindow(QMainWindow):
             "New Request", 
             f"Request name (will be added to '{collection_name}'):"
         )
-        if ok and name:
+        if ok and name.strip():
+            name = name.strip()
+            method = 'GET'  # Default method for new requests
+            
+            # Check for duplicate name
+            is_duplicate, suggested_name = self._check_duplicate_request_name(
+                self.current_collection_id, name, method
+            )
+            
+            if is_duplicate:
+                reply = QMessageBox.question(
+                    self,
+                    "Request Already Exists",
+                    f"A [GET] request named '{name}' already exists in this collection.\n\n"
+                    f"Would you like to create it as '{suggested_name}' instead?\n\n"
+                    f"Note: Having multiple requests with the same name can be confusing.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    name = suggested_name
+                else:
+                    # Let user try again
+                    return self._add_request()
+            
             try:
                 request_id = self.db.create_request(
                     collection_id=self.current_collection_id,
                     name=name,
-                    method='GET',
+                    method=method,
                     url='https://api.example.com'
                 )
                 self._load_collections()
@@ -1044,12 +1169,37 @@ class MainWindow(QMainWindow):
             "New Request", 
             f"Request name (will be added to '{collection_name}'):"
         )
-        if ok and name:
+        if ok and name.strip():
+            name = name.strip()
+            method = 'GET'  # Default method for new requests
+            
+            # Check for duplicate name
+            is_duplicate, suggested_name = self._check_duplicate_request_name(
+                collection_id, name, method
+            )
+            
+            if is_duplicate:
+                reply = QMessageBox.question(
+                    self,
+                    "Request Already Exists",
+                    f"A [GET] request named '{name}' already exists in this collection.\n\n"
+                    f"Would you like to create it as '{suggested_name}' instead?\n\n"
+                    f"Note: Having multiple requests with the same name can be confusing.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    name = suggested_name
+                else:
+                    # Let user try again
+                    return self._add_request_to_collection(collection_id)
+            
             try:
                 request_id = self.db.create_request(
                     collection_id=collection_id,
                     name=name,
-                    method='GET',
+                    method=method,
                     url='https://api.example.com'
                 )
                 self._load_collections()
@@ -1465,8 +1615,10 @@ class MainWindow(QMainWindow):
             auth_type = 'None'
             auth_token = ""
         
-        # Apply environment variable substitution if environment is active
+        # Apply variable substitution (both environment and dynamic variables)
+        # Dynamic variables ($variable) work even without an active environment
         if self.env_manager.has_active_environment():
+            # Substitute both {{env}} and $dynamic variables
             substituted, unresolved = self.env_manager.substitute_in_request(
                 url, params, headers, body, auth_token
             )
@@ -1494,6 +1646,38 @@ class MainWindow(QMainWindow):
             # Don't overwrite OAuth token with substituted auth_token
             if auth_type == 'Bearer Token':
                 auth_token = substituted['auth_token']
+        else:
+            # No active environment, but still substitute dynamic variables
+            from src.features.variable_substitution import VariableSubstitution
+            
+            # Substitute URL
+            url, _ = VariableSubstitution.substitute(url, {})
+            
+            # Substitute params
+            if params:
+                substituted_params = {}
+                for key, value in params.items():
+                    new_key, _ = VariableSubstitution.substitute(str(key), {})
+                    new_value, _ = VariableSubstitution.substitute(str(value), {})
+                    substituted_params[new_key] = new_value
+                params = substituted_params
+            
+            # Substitute headers
+            if headers:
+                substituted_headers = {}
+                for key, value in headers.items():
+                    new_key, _ = VariableSubstitution.substitute(str(key), {})
+                    new_value, _ = VariableSubstitution.substitute(str(value), {})
+                    substituted_headers[new_key] = new_value
+                headers = substituted_headers
+            
+            # Substitute body
+            if body:
+                body, _ = VariableSubstitution.substitute(body, {})
+            
+            # Substitute auth token
+            if auth_token:
+                auth_token, _ = VariableSubstitution.substitute(auth_token, {})
         
         # Get and validate timeout setting
         try:
@@ -2258,6 +2442,166 @@ class MainWindow(QMainWindow):
                     f"Failed to create request from cURL:\n{str(e)}"
                 )
     
+    def _import_openapi(self):
+        """Import an OpenAPI/Swagger specification."""
+        from PyQt6.QtWidgets import QFileDialog, QInputDialog
+        from src.features.openapi_importer import import_openapi_spec
+        
+        # Select OpenAPI spec file
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import OpenAPI/Swagger Spec",
+            "",
+            "OpenAPI Files (*.json *.yaml *.yml);;JSON Files (*.json);;YAML Files (*.yaml *.yml);;All Files (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            # Import the spec
+            collection, summary = import_openapi_spec(file_path)
+            
+            # Show import summary dialog
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("OpenAPI Import Summary")
+            dialog.setMinimumWidth(500)
+            
+            layout = QVBoxLayout(dialog)
+            
+            info_text = f"""
+<h3>{summary['title']}</h3>
+<p><b>Version:</b> {summary['version']}</p>
+<p><b>OpenAPI Version:</b> {summary['openapi_version']}</p>
+<p><b>Base URL:</b> {summary['base_url']}</p>
+<p><b>Endpoints:</b> {summary['endpoint_count']} ({', '.join(summary['methods'])})</p>
+<p><b>Description:</b> {summary['description'] or 'N/A'}</p>
+<hr>
+<p>Import as a new collection?</p>
+            """
+            
+            info_label = QLabel(info_text)
+            info_label.setWordWrap(True)
+            info_label.setTextFormat(Qt.TextFormat.RichText)
+            layout.addWidget(info_label)
+            
+            buttons = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+            )
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            layout.addWidget(buttons)
+            
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            
+            # Ask for collection name (auto-suggest unique name if needed)
+            suggested_name = self._get_unique_collection_name(collection['name'])
+            collection_name, ok = QInputDialog.getText(
+                self,
+                "Collection Name",
+                "Enter a name for the imported collection:",
+                text=suggested_name
+            )
+            
+            if not ok or not collection_name.strip():
+                return
+            
+            collection_name = collection_name.strip()
+            
+            # Check if the name already exists (in case user changed it)
+            existing_collections = self.db.get_all_collections()
+            existing_names = {col['name'] for col in existing_collections}
+            
+            if collection_name in existing_names:
+                # Suggest an alternative
+                unique_name = self._get_unique_collection_name(collection_name)
+                reply = QMessageBox.question(
+                    self,
+                    "Collection Already Exists",
+                    f"A collection named '{collection_name}' already exists.\n\n"
+                    f"Would you like to import as '{unique_name}' instead?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    collection_name = unique_name
+                else:
+                    return  # Cancel the import
+            
+            # Create the collection
+            collection_id = self.db.create_collection(collection_name)
+            
+            # Create all requests
+            created_count = 0
+            for request in collection['requests']:
+                try:
+                    request_id = self.db.create_request(
+                        collection_id=collection_id,
+                        name=request['name'],
+                        url=request['url'],
+                        method=request['method'],
+                        description=request.get('description', '')
+                    )
+                    
+                    # Update request with all details at once
+                    self.db.update_request(
+                        request_id=request_id,
+                        name=request['name'],
+                        method=request['method'],
+                        url=request['url'],
+                        params=request.get('params'),
+                        headers=request.get('headers'),
+                        body=request.get('body'),
+                        auth_type=request.get('auth_type', 'None'),
+                        auth_token=request.get('auth_token'),
+                        description=request.get('description', '')
+                    )
+                    
+                    created_count += 1
+                    
+                except Exception as e:
+                    print(f"Error creating request {request['name']}: {e}")
+                    continue
+            
+            # Reload collections
+            self._load_collections()
+            
+            # Select the new collection
+            self._select_collection_by_id(collection_id)
+            
+            # Auto-sync if enabled
+            self._auto_sync_to_filesystem()
+            
+            # Show success message
+            QMessageBox.information(
+                self,
+                "Import Successful",
+                f"✓ Successfully imported {created_count} requests from {summary['title']}"
+            )
+            
+        except FileNotFoundError:
+            QMessageBox.critical(
+                self,
+                "File Not Found",
+                "The selected OpenAPI spec file was not found."
+            )
+        except ValueError as e:
+            QMessageBox.critical(
+                self,
+                "Invalid Spec",
+                f"The OpenAPI spec is invalid:\n{str(e)}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Import Error",
+                f"Failed to import OpenAPI spec:\n{str(e)}"
+            )
+    
     def _select_collection_by_id(self, collection_id: int):
         """Select a collection in the tree by its ID."""
         root = self.collections_tree.invisibleRootItem()
@@ -2763,6 +3107,10 @@ class MainWindow(QMainWindow):
         self.git_sync_manager = GitSyncManager(self.db, config)
         self.secrets_manager = SecretsManager(str(config.secrets_path))
         self.git_workspace = self.db.get_git_workspace_by_path(project_path)
+        
+        # Start periodic status refresh
+        if not self.git_sync_timer.isActive():
+            self.git_sync_timer.start()
     
     def _open_git_sync_dialog(self):
         """Open the Git sync configuration dialog."""
@@ -2774,6 +3122,10 @@ class MainWindow(QMainWindow):
         dialog.sync_performed.connect(self._on_sync_performed)
         
         dialog.exec()
+        
+        # Refresh status after dialog closes to ensure it's up-to-date
+        if self.git_sync_manager:
+            self._update_git_sync_status()
     
     def _on_git_sync_enabled(self, project_path: str):
         """Handle Git sync being enabled."""
@@ -2789,6 +3141,11 @@ class MainWindow(QMainWindow):
         self.git_sync_manager = None
         self.secrets_manager = None
         self.git_workspace = None
+        
+        # Stop periodic status refresh
+        if self.git_sync_timer.isActive():
+            self.git_sync_timer.stop()
+        
         self._update_git_sync_status()
     
     def _on_sync_performed(self, message: str):
@@ -2810,7 +3167,7 @@ class MainWindow(QMainWindow):
         # Get sync status
         status = self.git_sync_manager.get_sync_status()
         
-        # Update label and button style
+        # Update label and button style (dark-mode friendly)
         if status.status == SyncStatus.STATUS_SYNCED:
             self.git_sync_status_label.setText("Files: ✅ Synced")
             self.git_sync_status_label.setStyleSheet("color: #4CAF50; font-size: 11px; padding: 0 10px;")
@@ -2820,17 +3177,20 @@ class MainWindow(QMainWindow):
             self.git_sync_status_label.setText("Files: 📥 Import Available")
             self.git_sync_status_label.setStyleSheet("color: #2196F3; font-size: 11px; padding: 0 10px;")
             self.git_sync_status_label.setToolTip("Files in .postmini/ have changes - click to import")
-            self.git_sync_btn.setStyleSheet("background-color: #E3F2FD;")
+            # Dark mode friendly - use border instead of light background
+            self.git_sync_btn.setStyleSheet("border: 2px solid #2196F3; font-weight: bold;")
         elif status.status == SyncStatus.STATUS_NEEDS_PUSH:
             self.git_sync_status_label.setText("Files: 📤 Export Needed")
             self.git_sync_status_label.setStyleSheet("color: #FF9800; font-size: 11px; padding: 0 10px;")
             self.git_sync_status_label.setToolTip("Database has unsaved changes - click to export")
-            self.git_sync_btn.setStyleSheet("background-color: #FFF3E0;")
+            # Dark mode friendly - use border instead of light background
+            self.git_sync_btn.setStyleSheet("border: 2px solid #FF9800; font-weight: bold;")
         elif status.status == SyncStatus.STATUS_CONFLICT:
             self.git_sync_status_label.setText("Files: ⚠️ Conflict")
             self.git_sync_status_label.setStyleSheet("color: #F44336; font-size: 11px; padding: 0 10px;")
             self.git_sync_status_label.setToolTip("Both database and files have changes")
-            self.git_sync_btn.setStyleSheet("background-color: #FFEBEE;")
+            # Dark mode friendly - use border instead of light background
+            self.git_sync_btn.setStyleSheet("border: 2px solid #F44336; font-weight: bold;")
         else:
             self.git_sync_status_label.setText("Files: Enabled")
             self.git_sync_status_label.setStyleSheet("color: #666; font-size: 11px; padding: 0 10px;")
@@ -3061,7 +3421,37 @@ class MainWindow(QMainWindow):
             text=request['name']
         )
         
-        if ok and new_name and new_name != request['name']:
+        if ok and new_name.strip() and new_name.strip() != request['name']:
+            new_name = new_name.strip()
+            
+            # Check for duplicate name (excluding the current request)
+            collection_id = request['collection_id']
+            method = request['method']
+            existing_requests = self.db.get_requests_by_collection(collection_id)
+            existing_names = {
+                req['name'] for req in existing_requests 
+                if req['method'] == method and req['id'] != request_id
+            }
+            
+            if new_name in existing_names:
+                # Suggest a unique name
+                suggested_name = self._get_unique_request_name(collection_id, new_name, method)
+                reply = QMessageBox.question(
+                    self,
+                    "Request Already Exists",
+                    f"A [{method}] request named '{new_name}' already exists in this collection.\n\n"
+                    f"Would you like to rename it as '{suggested_name}' instead?\n\n"
+                    f"Note: Having multiple requests with the same name can be confusing.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    new_name = suggested_name
+                else:
+                    # Let user try again
+                    return self._rename_request(request_id)
+            
             try:
                 cursor = self.db.connection.cursor()
                 cursor.execute(
@@ -3084,7 +3474,14 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            new_name = f"{request['name']} (Copy)"
+            # Generate a unique name for the duplicate
+            base_name = f"{request['name']} (Copy)"
+            new_name = self._get_unique_request_name(
+                request['collection_id'], 
+                base_name, 
+                request['method']
+            )
+            
             self.db.create_request(
                 name=new_name,
                 method=request['method'],
@@ -3098,7 +3495,7 @@ class MainWindow(QMainWindow):
             )
             self._auto_sync_to_filesystem()
             self._load_collections()
-            self.toast.success(f"Request '{request['name']}' duplicated")
+            self.toast.success(f"Request duplicated as '{new_name}'")
         except Exception as e:
             self.toast.error(f"Failed to duplicate: {str(e)[:30]}...")
     

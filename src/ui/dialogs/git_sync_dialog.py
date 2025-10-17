@@ -129,11 +129,11 @@ class GitSyncDialog(QDialog):
         
         layout.addLayout(action_layout)
         
-        # Important info box
+        # Important info box (dark-mode friendly)
         important_info = QLabel(
             "<b>📘 How File Sync Works:</b><br><br>"
             "<b>1. PostMini → Files:</b> When you save, PostMini exports to <code>.postmini/</code> folder<br>"
-            "<b>2. Files → Git:</b> <span style='color: #F44336;'><b>YOU manually run Git commands</b></span> to commit/push<br>"
+            "<b>2. Files → Git:</b> <span style='color: #FF5252;'><b>YOU manually run Git commands</b></span> to commit/push<br>"
             "<b>3. Git → Files:</b> Teammates run <code>git pull</code> to get your files<br>"
             "<b>4. Files → PostMini:</b> They click 'Import' to load into PostMini<br><br>"
             "<b>⚠️ PostMini does NOT run Git commands automatically!</b><br>"
@@ -141,11 +141,9 @@ class GitSyncDialog(QDialog):
         )
         important_info.setWordWrap(True)
         important_info.setStyleSheet("""
-            background-color: #E3F2FD; 
             padding: 15px; 
             border: 2px solid #2196F3; 
             border-radius: 5px;
-            color: #0D47A1;
         """)
         layout.addWidget(important_info)
         
@@ -214,7 +212,7 @@ class GitSyncDialog(QDialog):
         
         layout.addLayout(action_layout)
         
-        # Git instructions
+        # Git instructions (dark-mode friendly)
         git_info = QLabel(
             "<b>⚠️ Important:</b> PostMini syncs to <b>.postmini/</b> folder.<br>"
             "<b>You must use Git commands to commit changes:</b><br>"
@@ -224,11 +222,9 @@ class GitSyncDialog(QDialog):
         )
         git_info.setWordWrap(True)
         git_info.setStyleSheet("""
-            background-color: #FFF3E0; 
             padding: 12px; 
-            border: 1px solid #FF9800; 
+            border: 2px solid #FF9800; 
             border-radius: 5px;
-            color: #E65100;
         """)
         layout.addWidget(git_info)
         

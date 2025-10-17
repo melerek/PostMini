@@ -4,43 +4,65 @@ Variable Substitution Utility
 This module provides utilities for substituting environment variables in strings.
 Variables are defined using {{variableName}} syntax and can be used in URLs,
 headers, parameters, body, and authentication tokens.
+
+Dynamic variables with $variable syntax are also supported for auto-generated values.
 """
 
 import re
 from typing import Dict, Tuple, List
+from .dynamic_variables import resolve_dynamic_variable
 
 
 class VariableSubstitution:
     """
-    Handles variable substitution with support for {{variable}} syntax.
+    Handles variable substitution with support for:
+    - {{variable}} - Environment variables
+    - $variable - Dynamic variables (auto-generated)
     """
     
     # Regex pattern to match {{variableName}}
     VARIABLE_PATTERN = re.compile(r'\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
     
+    # Regex pattern to match $variableName
+    DYNAMIC_VARIABLE_PATTERN = re.compile(r'\$([a-zA-Z][a-zA-Z0-9]*)')
+    
     @staticmethod
     def substitute(text: str, variables: Dict[str, str]) -> Tuple[str, List[str]]:
         """
-        Replace all {{variable}} occurrences in text with their values.
+        Replace all {{variable}} and $variable occurrences in text with their values.
+        
+        Dynamic variables ($variable) are processed first, then environment variables ({{variable}}).
         
         Args:
             text: The text containing variables to substitute
-            variables: Dictionary of variable names to values
+            variables: Dictionary of variable names to values (for {{var}} syntax)
             
         Returns:
             Tuple of (substituted_text, list_of_unresolved_variables)
             
         Example:
             >>> variables = {'baseUrl': 'https://api.example.com', 'version': 'v1'}
-            >>> substitute('{{baseUrl}}/{{version}}/users', variables)
-            ('https://api.example.com/v1/users', [])
+            >>> substitute('{{baseUrl}}/{{version}}/users/$guid', variables)
+            ('https://api.example.com/v1/users/a3f2e8d1-...', [])
         """
         if not text:
             return text, []
         
         unresolved = []
         
-        def replace_func(match):
+        # First pass: substitute dynamic variables ($variable)
+        def replace_dynamic(match):
+            var_name = f'${match.group(1)}'
+            resolved = resolve_dynamic_variable(var_name)
+            # If not resolved (same as input), it's unresolved
+            if resolved == var_name:
+                unresolved.append(var_name)
+            return resolved
+        
+        result = VariableSubstitution.DYNAMIC_VARIABLE_PATTERN.sub(replace_dynamic, text)
+        
+        # Second pass: substitute environment variables ({{variable}})
+        def replace_env(match):
             var_name = match.group(1)
             if var_name in variables:
                 return str(variables[var_name])
@@ -48,7 +70,7 @@ class VariableSubstitution:
                 unresolved.append(var_name)
                 return match.group(0)  # Keep original {{var}} if not found
         
-        result = VariableSubstitution.VARIABLE_PATTERN.sub(replace_func, text)
+        result = VariableSubstitution.VARIABLE_PATTERN.sub(replace_env, result)
         return result, unresolved
     
     @staticmethod

@@ -9,6 +9,9 @@ PyQt6>=6.4.0
 # Requests - HTTP Client Library
 requests>=2.28.0
 
+# PyYAML - YAML parser for OpenAPI specs
+PyYAML>=6.0
+
 # Note: sqlite3 is part of Python's standard library and doesn't need to be installed separately
 
 # Development Dependencies (Only for building installers)

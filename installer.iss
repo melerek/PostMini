@@ -2,7 +2,7 @@
 ; This script creates a Windows installer for the PostMini application
 
 #define MyAppName "PostMini"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.4.0"
 #define MyAppPublisher "PostMini"
 #define MyAppURL "https://github.com/yourusername/postmini"
 #define MyAppExeName "PostMini.exe"
