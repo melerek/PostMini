@@ -89,7 +89,7 @@ class CollectionTestThread(QThread):
                         body = substituted['body']
                         auth_token = substituted['auth_token']
                     
-                    response = self.api_client.execute(
+                    response = self.api_client.execute_request(
                         method=request['method'],
                         url=url,
                         params=params,

@@ -7,10 +7,10 @@ UI component for managing test assertions in the request editor.
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QComboBox, QLineEdit, QTableWidget, QTableWidgetItem,
-    QHeaderView, QCheckBox, QMessageBox, QGroupBox, QGridLayout, QFormLayout, QScrollArea
+    QHeaderView, QCheckBox, QMessageBox, QGroupBox, QGridLayout, QFormLayout, QScrollArea, QMenu
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QAction
 from typing import List, Dict, Optional
 
 from src.features.test_engine import TestAssertion
@@ -120,14 +120,19 @@ class TestTabWidget(QWidget):
         
         # Assertions table
         self.assertions_table = QTableWidget()
-        self.assertions_table.setColumnCount(6)
+        self.assertions_table.setColumnCount(5)
         self.assertions_table.setHorizontalHeaderLabels([
-            "Enabled", "Type", "Field", "Operator", "Expected", "Actions"
+            "Enabled", "Type", "Field", "Operator", "Expected"
         ])
         self.assertions_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.assertions_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.assertions_table.setAlternatingRowColors(True)
         self.assertions_table.setMinimumHeight(200)  # Ensure table is always visible
+        
+        # Enable context menu for right-click actions
+        self.assertions_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.assertions_table.customContextMenuRequested.connect(self._show_assertion_context_menu)
+        
         layout.addWidget(self.assertions_table, 1)  # Stretch to fill
         
         # Set content in scroll area
@@ -284,24 +289,27 @@ class TestTabWidget(QWidget):
         expected_item = QTableWidgetItem(assertion.get('expected_value', '-'))
         expected_item.setFlags(expected_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.assertions_table.setItem(row, 4, expected_item)
-        
-        # Actions (delete button)
-        actions_widget = QWidget()
-        actions_layout = QHBoxLayout(actions_widget)
-        actions_layout.setContentsMargins(4, 0, 4, 0)
-        
-        delete_btn = QPushButton("🗑️")
-        delete_btn.setMaximumWidth(30)
-        delete_btn.setToolTip("Delete assertion")
-        delete_btn.clicked.connect(lambda: self._delete_assertion(row))
-        actions_layout.addWidget(delete_btn)
-        
-        self.assertions_table.setCellWidget(row, 5, actions_widget)
     
     def _delete_assertion(self, row: int):
         """Delete assertion at row."""
-        self.assertions_table.removeRow(row)
-        self.assertions_changed.emit()
+        if row >= 0 and row < self.assertions_table.rowCount():
+            self.assertions_table.removeRow(row)
+            self.assertions_changed.emit()
+    
+    def _show_assertion_context_menu(self, position):
+        """Show context menu for assertion table."""
+        row = self.assertions_table.rowAt(position.y())
+        if row < 0:
+            return
+        
+        menu = QMenu(self)
+        
+        delete_action = QAction("🗑️ Delete Assertion", self)
+        delete_action.triggered.connect(lambda: self._delete_assertion(row))
+        menu.addAction(delete_action)
+        
+        # Show menu at cursor position
+        menu.exec(self.assertions_table.viewport().mapToGlobal(position))
     
     def _clear_all_assertions(self):
         """Clear all assertions."""
