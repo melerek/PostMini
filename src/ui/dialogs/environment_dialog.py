@@ -55,19 +55,28 @@ class EnvironmentDialog(QDialog):
     def _init_ui(self):
         """Initialize the user interface."""
         layout = QVBoxLayout(self)
+        layout.setSpacing(8)  # Reduced spacing
+        layout.setContentsMargins(12, 12, 12, 12)  # Reduced margins
         
-        # Title
-        title = QLabel("Environment Management")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        layout.addWidget(title)
+        # Compact header with title and description on same line - FIXED HEIGHT
+        from PyQt6.QtWidgets import QSizePolicy
+        header_widget = QWidget()
+        header_widget.setFixedHeight(32)  # Fixed height to prevent expansion
+        header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Description
-        description = QLabel(
-            "Environments allow you to store variables like {{baseUrl}}, {{apiKey}}, etc.\n"
-            "Use {{variableName}} in your requests for automatic substitution."
-        )
-        description.setWordWrap(True)
-        layout.addWidget(description)
+        title = QLabel("Environments")
+        title.setFont(QFont("Arial", 12, QFont.Weight.Bold))  # Smaller font
+        header_layout.addWidget(title)
+        
+        # Compact description with lighter styling
+        description = QLabel("Store variables like {{baseUrl}}, {{apiKey}} for automatic substitution")
+        description.setStyleSheet("color: #757575; font-size: 11px;")
+        header_layout.addWidget(description)
+        header_layout.addStretch()
+        
+        layout.addWidget(header_widget, 0)  # 0 = don't stretch
         
         # Create splitter for environments list and editor
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -81,17 +90,21 @@ class EnvironmentDialog(QDialog):
         splitter.addWidget(right_widget)
         
         splitter.setSizes([250, 550])
-        layout.addWidget(splitter)
+        layout.addWidget(splitter, 1)  # 1 = stretch to fill available space
         
-        # Bottom buttons
-        button_layout = QHBoxLayout()
+        # Bottom buttons - FIXED HEIGHT
+        button_widget = QWidget()
+        button_widget.setFixedHeight(40)  # Fixed height for button area
+        button_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        button_layout = QHBoxLayout(button_widget)
+        button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.addStretch()
         
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         button_layout.addWidget(close_btn)
         
-        layout.addLayout(button_layout)
+        layout.addWidget(button_widget, 0)  # 0 = don't stretch
     
     def _create_environments_list(self) -> QWidget:
         """Create the left panel with environments list."""

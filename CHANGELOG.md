@@ -7,6 +7,122 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0] - 2025-10-21
+
+### ✨ Added
+- **Multi-Request Tab System**: Work on multiple API requests simultaneously
+  - Open unlimited requests in separate tabs
+  - Tab state persistence (request data, response, test results)
+  - Smart duplicate prevention (can't open same request in multiple tabs)
+  - Visual feedback (bold + underline for active, underline for open requests)
+  - Close tabs with X button, middle-click, or Ctrl+W
+  - Auto-open: First request opens automatically when no tabs exist
+  - Tab titles show method and request name (e.g., "GET Users")
+  - Unsaved changes marked with • dot in tab title
+  - Double-click request to open in new tab
+  - Right-click → "Open in New Tab" context menu option
+  - Each tab remembers its complete state independently
+  
+- **Professional UI Polish**: Complete redesign matching Postman's quality
+  - **Send Button Redesign**: Bold gradient, larger size, professional styling
+  - **Method Badges**: Color-coded HTTP methods (GET=blue, POST=green, PUT=orange, DELETE=red, etc.)
+  - **Status Code Badges**: Color-coded by category (2xx=green, 3xx=blue, 4xx=orange, 5xx=red)
+  - **Enhanced Input Fields**: Better borders, padding, focus states
+  - **Tab Styling Hierarchy**: Clear distinction between request tabs and inner tabs
+  
+- **Empty State Illustrations**: Professional guidance when no content
+  - "No Request Selected" state (shown when no tabs open)
+  - "No Response Yet" state (shown before sending request)
+  - "No Collections" state (shown when collections tree empty)
+  - All with helpful hints and professional icons
+  
+- **Enhanced Visual Hierarchy**:
+  - Consistent spacing (4px, 8px, 12px, 16px, 24px grid)
+  - Professional borders and shadows
+  - Smooth 200ms transitions
+  - Better margins and alignment throughout
+  - Responsive sizing and layout
+
+### 🎨 Improved
+- **Collections Tree Behavior**:
+  - Single-click collection: Expands/collapses (no highlighting)
+  - Double-click collection: Also expands/collapses
+  - Single-click request: Does nothing (prevents accidental changes)
+  - Double-click request: Opens in new tab
+  - No selection highlighting (cleaner look)
+  - Active request: Bold + underlined
+  - Open requests: Underlined only
+  - Collections: Bold if contains active request, underlined if contains open requests
+  
+- **Tab State Persistence**:
+  - Response data preserved per tab (status, headers, body, size, time)
+  - Test results preserved per tab (assertions, summary)
+  - State cleared when changing request within same tab
+  - State restored when switching back to tab
+  - Previous tab index tracking for correct state saving
+  
+- **Environment Dialog**:
+  - Fixed header expanding vertically with window resize
+  - Static header and footer heights
+  - Only central splitter area expands
+  - Better proportions and layout
+
+### 🐛 Fixed
+- **Critical Fixes**:
+  - Removed Ctrl+T shortcut that created unsaveable empty tabs
+  - Tab titles now update immediately after save/rename
+  - Response updates correctly when swapping tabs
+  - Test results remembered per tab (no longer lost on tab switch)
+  - Collections tree highlighting refreshes on tab changes
+  - Prevented opening same request in multiple tabs
+  - Fixed collections tree not updating when opening first tab
+  - Fixed rapid double-clicks opening duplicate tabs (added debouncing)
+  - Fixed incorrect previous tab state being saved on tab switch
+  - Removed initial empty tab (app starts with zero tabs)
+  
+- **UI/UX Fixes**:
+  - Fixed tab close icon showing rectangle on hover (now native icon)
+  - Tabs no longer disappear when clicking collections
+  - New requests have empty URL instead of "https://api.example.com"
+  - Fixed QSS parsing errors with rgba() values (replaced with hex)
+  - Fixed inner tabs (Params, Headers) visual confusion with request tabs
+  
+- **Technical Fixes**:
+  - Added signal blocking to prevent race conditions on tab creation
+  - Correct tab index tracking with previous_tab_index attribute
+  - Proper event filter for middle-click tab closing
+  - Test results viewer existence checks before access
+  - Manual _on_tab_changed call when signal doesn't fire for first tab
+
+### 🧪 Testing
+- Added 15 comprehensive tests for Multi-Request Tabs and Professional Polish
+- Test classes: TestMultiRequestTabs, TestTabStatePersistence, TestDoubleClickDebouncing, TestCollectionsTreeHighlighting, TestMiddleClickTabClosing, TestEmptyStates, TestSignalBlocking
+- Total test count: 362 tests (100% pass rate for new features)
+- Coverage: All tab management, state persistence, UI interactions
+
+### 📝 Documentation
+- Created V1.5.0 Release Notes with comprehensive feature documentation
+- Created TEST_COVERAGE_SUMMARY.md with full test breakdown
+- Updated README.md with multi-request tabs usage (pending)
+- Updated CHANGELOG.md with v1.5.0 information (this section)
+
+### 🔧 Technical
+- Created `src/ui/widgets/method_badge.py` (MethodBadge, StatusBadge classes)
+- Created `src/ui/widgets/empty_state.py` (EmptyStateWidget and variants)
+- Enhanced `src/ui/main_window.py` with extensive tab system (~2000 lines modified)
+- Updated `styles.qss` and `styles_dark.qss` for professional polish
+- Modified `src/ui/dialogs/environment_dialog.py` for static header height
+- 100% backward compatible with v1.4.0
+
+### 🎯 Impact
+- **UX Parity**: PostMini now matches Postman's professional UI/UX quality
+- **Productivity**: Multi-request tabs enable comparing/testing multiple endpoints simultaneously
+- **State Preservation**: Never lose response or test results when switching between requests
+- **Professional Feel**: Empty states and polish make app feel mature and enterprise-ready
+- **Smart Management**: Duplicate prevention and debouncing prevent common user errors
+
+---
+
 ## [1.4.0] - 2025-10-17
 
 ### ✨ Added

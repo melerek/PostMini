@@ -32,6 +32,8 @@ from src.ui.widgets.test_results_viewer import TestResultsViewer
 from src.ui.widgets.toast_notification import ToastManager
 from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
 from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
+from src.ui.widgets.method_badge import MethodBadge, StatusBadge
+from src.ui.widgets.empty_state import NoRequestEmptyState, NoResponseEmptyState, NoCollectionsEmptyState
 from src.features.test_engine import TestEngine, TestAssertion
 from src.ui.dialogs.collection_test_runner import CollectionTestRunnerDialog
 from src.ui.dialogs.git_sync_dialog import GitSyncDialog
@@ -160,6 +162,9 @@ class MainWindow(QMainWindow):
         self._load_collections()
         self._load_environments()
         self._init_git_sync()
+        
+        # Initialize method combo styling
+        self._update_method_style('GET')
     
     def _init_ui(self):
         """Initialize the user interface with all components."""
@@ -179,9 +184,61 @@ class MainWindow(QMainWindow):
         main_splitter.addWidget(left_pane)
         
         # ==================== CENTER PANE: Request Editor & Response ====================
+        # Use stacked widget to show empty state or workspace
+        from PyQt6.QtWidgets import QStackedWidget
+        self.center_stack = QStackedWidget()
+        
+        # Empty state for no request selected
+        self.no_request_empty_state = NoRequestEmptyState()
+        self.center_stack.addWidget(self.no_request_empty_state)
+        
+        # Create container for tabs + workspace
+        tabs_container = QWidget()
+        tabs_layout = QVBoxLayout(tabs_container)
+        tabs_layout.setContentsMargins(0, 0, 0, 0)
+        tabs_layout.setSpacing(0)
+        
+        # Tab bar for multiple requests (custom simplified approach)
+        self.request_tabs = QTabWidget()
+        self.request_tabs.setTabsClosable(True)
+        self.request_tabs.setMovable(True)
+        self.request_tabs.setDocumentMode(True)
+        self.request_tabs.tabCloseRequested.connect(self._close_tab)
+        self.request_tabs.currentChanged.connect(self._on_tab_changed)
+        self.request_tabs.setMaximumHeight(42)  # Only show the tab bar
+        self.request_tabs.setObjectName("requestTabs")  # For specific styling
+        
+        # Install event filter on tab bar for middle-click detection
+        self.request_tabs.tabBar().installEventFilter(self)
+        
+        # Hide the tab widget content area (we'll show workspace below)
+        # No inline style - will use stylesheet
+        
+        # Tab state storage: {tab_index: {request_id, ui_state, has_changes}}
+        self.tab_states = {}
+        self.next_untitled_num = 1
+        self.previous_tab_index = None  # Track previous tab for state saving
+        self._last_double_click_time = 0  # Track last double-click to prevent duplicates
+        self._last_double_click_request_id = None
+        
+        # Don't create any initial tab - start with empty state
+        # Tabs will be created when user opens a request
+        
+        # Actual workspace pane (shared, state is captured/restored)
         self.workspace_pane = self._create_workspace_pane()
-        self.workspace_pane.setVisible(False)  # Hidden by default until a request is selected
-        main_splitter.addWidget(self.workspace_pane)
+        
+        # Add tabs and workspace to container
+        tabs_layout.addWidget(self.request_tabs)
+        tabs_layout.addWidget(self.workspace_pane)
+        
+        # Store reference for easy access
+        self.tabs_container = tabs_container
+        self.center_stack.addWidget(tabs_container)
+        
+        # Show empty state by default
+        self.center_stack.setCurrentWidget(self.no_request_empty_state)
+        
+        main_splitter.addWidget(self.center_stack)
         
         # ==================== RIGHT PANE: Recent Requests ====================
         self.recent_requests_widget = RecentRequestsWidget(self.db)
@@ -305,6 +362,334 @@ class MainWindow(QMainWindow):
         else:
             self.status_git_sync_label.setText("")
     
+    # ==================== TAB MANAGEMENT ====================
+    
+    def _find_tab_with_request(self, request_id: int) -> int:
+        """Find if a request is already open in a tab. Returns tab index or -1 if not found."""
+        for tab_idx, state in self.tab_states.items():
+            if state.get('request_id') == request_id:
+                return tab_idx
+        return -1
+    
+    def _capture_current_tab_state(self) -> Dict:
+        """Capture the current UI state for saving to a tab."""
+        # Capture response data if available
+        response_data = None
+        if hasattr(self, 'current_response') and self.current_response:
+            response_data = {
+                'status_code': self.current_response.status_code,
+                'headers': self.current_response.headers,
+                'text': self.current_response.text,
+                'size': self.current_response.size,
+                'elapsed_time': self.current_response.elapsed_time
+            }
+            print(f"[DEBUG] Captured response: status={response_data['status_code']}, size={response_data['size']}")
+        
+        # Capture test results if available
+        test_results_data = None
+        if hasattr(self, 'test_results_viewer') and self.test_results_viewer is not None:
+            # Check if test results are visible (meaning tests have been run)
+            if self.test_results_viewer.isVisible():
+                # We need to store the data that was passed to display_results()
+                # This is stored when tests are run
+                test_results_data = getattr(self, '_current_test_results', None)
+                if test_results_data:
+                    print(f"[DEBUG] Captured test results: {test_results_data.get('summary', {})}")
+        
+        return {
+            'request_id': self.current_request_id,
+            'collection_id': self.current_collection_id,
+            'method': self.method_combo.currentText(),
+            'url': self.url_input.text(),
+            'params': self._get_table_as_dict(self.params_table),
+            'headers': self._get_table_as_dict(self.headers_table),
+            'body': self.body_input.toPlainText(),
+            'auth_type': self.auth_type_combo.currentText(),
+            'auth_token': self.auth_token_input.text(),
+            'description': self.description_input.toPlainText(),
+            'request_name': self.current_request_name or 'Untitled',
+            'has_changes': self.has_unsaved_changes,
+            'response': response_data,  # Add response data
+            'test_results': test_results_data  # Add test results data
+        }
+    
+    def _restore_tab_state(self, state: Dict):
+        """Restore UI state from a tab's saved state."""
+        print(f"[DEBUG] Restoring tab state for request_id={state.get('request_id')}")
+        
+        # Load basic info
+        self.current_request_id = state.get('request_id')
+        self.current_collection_id = state.get('collection_id')
+        self.current_request_name = state.get('request_name', 'Untitled')
+        
+        self.method_combo.setCurrentText(state.get('method', 'GET'))
+        self._update_method_style(state.get('method', 'GET'))
+        self.url_input.setText(state.get('url', ''))
+        
+        # Load params
+        self._load_dict_to_table(state.get('params', {}), self.params_table)
+        
+        # Load headers
+        self._load_dict_to_table(state.get('headers', {}), self.headers_table)
+        
+        # Load body
+        self.body_input.setPlainText(state.get('body', ''))
+        
+        # Load auth
+        self.auth_type_combo.setCurrentText(state.get('auth_type', 'None'))
+        self.auth_token_input.setText(state.get('auth_token', ''))
+        
+        # Load description
+        self.description_input.setPlainText(state.get('description', ''))
+        
+        # Restore change state
+        self.has_unsaved_changes = state.get('has_changes', False)
+        self._update_request_title()
+        
+        # Restore response if available
+        response_data = state.get('response')
+        if response_data:
+            print(f"[DEBUG] Restoring response: status={response_data.get('status_code')}, size={response_data.get('size')}")
+            self._restore_response(response_data)
+        else:
+            print("[DEBUG] No response to restore")
+            # Clear response viewer
+            self._clear_response_viewer()
+        
+        # Restore test results if available
+        test_results_data = state.get('test_results')
+        if test_results_data and hasattr(self, 'test_results_viewer') and self.test_results_viewer is not None:
+            # Restore the test results display
+            print(f"[DEBUG] Restoring test results: {test_results_data.get('summary', {})}")
+            try:
+                self.test_results_viewer.display_results(
+                    test_results_data.get('results', []),
+                    test_results_data.get('summary', {})
+                )
+                # Store for future captures
+                self._current_test_results = test_results_data
+            except Exception as e:
+                print(f"[DEBUG] Failed to restore test results: {e}")
+                # If restoration fails, just clear
+                self.test_results_viewer.clear()
+                self._current_test_results = None
+        else:
+            print("[DEBUG] No test results to restore")
+            # No test results - clear the viewer
+            if hasattr(self, 'test_results_viewer') and self.test_results_viewer is not None:
+                self.test_results_viewer.clear()
+            self._current_test_results = None
+    
+    def _on_tab_changed(self, index: int):
+        """Handle tab switching."""
+        if index < 0:
+            print(f"[DEBUG] Tab changed to invalid index: {index}")
+            return
+        
+        print(f"[DEBUG] Tab changed: from {self.previous_tab_index} to {index}")
+        print(f"[DEBUG] Tab states keys: {list(self.tab_states.keys())}")
+        
+        # Save the previous tab's state (if there was one)
+        if self.previous_tab_index is not None and self.previous_tab_index in self.tab_states:
+            print(f"[DEBUG] Saving state for tab {self.previous_tab_index}")
+            self.tab_states[self.previous_tab_index]['ui_state'] = self._capture_current_tab_state()
+            self.tab_states[self.previous_tab_index]['has_changes'] = self.has_unsaved_changes
+        
+        # Update the previous tab index for next time
+        self.previous_tab_index = index
+        
+        # Load new tab state
+        if index in self.tab_states:
+            tab_state = self.tab_states[index]
+            print(f"[DEBUG] Tab {index} state: request_id={tab_state.get('request_id')}, has_ui_state={bool(tab_state.get('ui_state'))}")
+            
+            # Check if we have a UI state already
+            if 'ui_state' in tab_state and tab_state['ui_state']:
+                # UI state exists - restore it
+                print(f"[DEBUG] Restoring UI state for tab {index}")
+                self._restore_tab_state(tab_state['ui_state'])
+                # Update highlight after restore
+                self._update_current_request_highlight()
+            elif tab_state.get('request_id'):
+                # No UI state but has request_id - load from database
+                print(f"[DEBUG] Loading request from DB for tab {index}")
+                self._load_request(tab_state['request_id'])
+                # _load_request will call _update_current_request_highlight() at its end
+            else:
+                # Empty tab - clear editor
+                print(f"[DEBUG] Clearing editor for empty tab {index}")
+                self._clear_request_editor()
+                # Update highlight for empty tab
+                self._update_current_request_highlight()
+            
+            # Update tab title
+            self._update_tab_title(index)
+        else:
+            print(f"[DEBUG] WARNING: Tab {index} not found in tab_states!")
+    
+    def _close_tab(self, index: int):
+        """Handle tab close request."""
+        # Check for unsaved changes
+        if index in self.tab_states:
+            state = self.tab_states[index]
+            if state.get('has_changes', False):
+                reply = QMessageBox.question(
+                    self,
+                    "Unsaved Changes",
+                    f"Tab has unsaved changes. Close anyway?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.No:
+                    return
+        
+        # Remove tab
+        self.request_tabs.removeTab(index)
+        
+        # Remove from state storage
+        if index in self.tab_states:
+            del self.tab_states[index]
+        
+        # Reindex remaining tabs
+        new_states = {}
+        for i, state in self.tab_states.items():
+            if i > index:
+                new_states[i - 1] = state
+            else:
+                new_states[i] = state
+        self.tab_states = new_states
+        
+        # Reset previous_tab_index since tabs were reindexed
+        # The _on_tab_changed will be called next and will set it properly
+        self.previous_tab_index = None
+        
+        # If no tabs left, show empty state
+        if self.request_tabs.count() == 0:
+            self.center_stack.setCurrentWidget(self.no_request_empty_state)
+        else:
+            # Switch to the current tab
+            self._on_tab_changed(self.request_tabs.currentIndex())
+        
+        # Update collections tree highlighting after closing tab
+        self._update_current_request_highlight()
+    
+    def _create_new_tab(self, request_id: Optional[int] = None, request_data: Optional[Dict] = None):
+        """Create a new tab."""
+        # Save current tab state first
+        current_index = self.request_tabs.currentIndex()
+        if current_index >= 0 and current_index in self.tab_states:
+            self.tab_states[current_index]['ui_state'] = self._capture_current_tab_state()
+            self.tab_states[current_index]['has_changes'] = self.has_unsaved_changes
+        
+        # Determine tab name and method
+        if request_data:
+            name = request_data.get('name', 'Untitled')
+            method = request_data.get('method', 'GET')
+        else:
+            name = f'Untitled {self.next_untitled_num}'
+            self.next_untitled_num += 1
+            method = 'GET'
+        
+        # Add new tab with empty widget (tabs are just for visual representation)
+        tab_index = self.request_tabs.addTab(QWidget(), f"{method} {name}")
+        
+        # Store tab state
+        self.tab_states[tab_index] = {
+            'request_id': request_id,
+            'has_changes': False,
+            'name': name,
+            'method': method,
+            'ui_state': request_data or {}
+        }
+        
+        # Switch to new tab (this will trigger _on_tab_changed)
+        self.request_tabs.setCurrentIndex(tab_index)
+        
+        # Show tabs view
+        self.center_stack.setCurrentWidget(self.tabs_container)
+    
+    def _open_request_in_new_tab(self, request_id: int):
+        """Open an existing request in a new tab."""
+        print(f"[DEBUG] _open_request_in_new_tab called with request_id={request_id}")
+        
+        # Check if this request is already open in a tab
+        existing_tab = self._find_tab_with_request(request_id)
+        if existing_tab >= 0:
+            # Request is already open - switch to that tab instead of creating a new one
+            print(f"[DEBUG] Request {request_id} already open in tab {existing_tab}, switching to it")
+            self.request_tabs.setCurrentIndex(existing_tab)
+            self.center_stack.setCurrentWidget(self.tabs_container)
+            return
+        
+        # Load the request data from database
+        request_data = self.db.get_request(request_id)
+        if not request_data:
+            QMessageBox.warning(self, "Error", "Failed to load request!")
+            return
+        
+        # Save current tab state first
+        current_index = self.request_tabs.currentIndex()
+        print(f"[DEBUG] Current tab index before creating new tab: {current_index}")
+        if current_index >= 0 and current_index in self.tab_states:
+            self.tab_states[current_index]['ui_state'] = self._capture_current_tab_state()
+            self.tab_states[current_index]['has_changes'] = self.has_unsaved_changes
+        
+        # Prepare request data for new tab
+        name = request_data['name']
+        method = request_data['method']
+        
+        # Block signals to prevent premature _on_tab_changed call
+        print(f"[DEBUG] Blocking signals, about to add tab")
+        self.request_tabs.blockSignals(True)
+        
+        # Add new tab
+        tab_index = self.request_tabs.addTab(QWidget(), f"{method} {name}")
+        print(f"[DEBUG] Added tab at index: {tab_index}, total tabs: {self.request_tabs.count()}")
+        
+        # Store tab state with request data BEFORE unblocking signals
+        self.tab_states[tab_index] = {
+            'request_id': request_id,
+            'has_changes': False,
+            'name': name,
+            'method': method,
+            'ui_state': {}  # Will be populated when tab is activated
+        }
+        print(f"[DEBUG] Stored tab state for index {tab_index}, all tab_states keys: {list(self.tab_states.keys())}")
+        
+        # Unblock signals
+        self.request_tabs.blockSignals(False)
+        print(f"[DEBUG] Unblocked signals, about to switch to tab {tab_index}")
+        
+        # Switch to new tab (this will NOW trigger _on_tab_changed which loads the request)
+        old_index = self.request_tabs.currentIndex()
+        print(f"[DEBUG] Current index before setCurrentIndex: {old_index}")
+        self.request_tabs.setCurrentIndex(tab_index)
+        
+        # If the index didn't change (e.g., switching to first tab 0 from no tabs),
+        # manually trigger the tab changed logic
+        if old_index == tab_index:
+            print(f"[DEBUG] Index didn't change ({old_index} -> {tab_index}), manually triggering _on_tab_changed")
+            self._on_tab_changed(tab_index)
+        
+        # Show tabs view
+        self.center_stack.setCurrentWidget(self.tabs_container)
+    
+    def _update_tab_title(self, index: int):
+        """Update tab title with method and name."""
+        if index not in self.tab_states:
+            return
+        
+        state = self.tab_states[index]
+        method = state.get('method', 'GET')
+        name = state.get('name', 'Untitled')
+        has_changes = state.get('has_changes', False)
+        
+        # Add unsaved indicator
+        indicator = " •" if has_changes else ""
+        title = f"{method} {name}{indicator}"
+        
+        self.request_tabs.setTabText(index, title)
+    
     def _setup_shortcuts(self):
         """Setup keyboard shortcuts for common actions."""
         # Send request (Ctrl+Enter or Ctrl+Return)
@@ -327,6 +712,10 @@ class MainWindow(QMainWindow):
         new_request_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
         new_request_shortcut.activated.connect(self._add_request)
         
+        # Close tab (Ctrl+W)
+        close_tab_shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
+        close_tab_shortcut.activated.connect(lambda: self._close_tab(self.request_tabs.currentIndex()))
+        
         # Delete selected item (Delete key)
         delete_shortcut = QShortcut(QKeySequence("Delete"), self)
         delete_shortcut.activated.connect(self._delete_selected)
@@ -348,7 +737,12 @@ class MainWindow(QMainWindow):
         # Collections tree
         self.collections_tree = QTreeWidget()
         self.collections_tree.setHeaderHidden(True)  # Hide "Name" header
+        # Single-click on collections to expand/collapse
         self.collections_tree.itemClicked.connect(self._on_tree_item_clicked)
+        # Double-click on requests to open in new tab
+        self.collections_tree.itemDoubleClicked.connect(self._on_tree_item_double_clicked)
+        # Disable selection highlighting
+        self.collections_tree.setSelectionMode(QTreeWidget.SelectionMode.NoSelection)
         self.collections_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.collections_tree.customContextMenuRequested.connect(self._show_tree_context_menu)
         layout.addWidget(self.collections_tree)
@@ -437,42 +831,59 @@ class MainWindow(QMainWindow):
         # Method and URL row (fixed height, no stretch)
         # Wrap in a container widget to enforce fixed height
         url_container = QWidget()
-        url_container.setMaximumHeight(40)  # Fixed height for URL row
-        url_container.setMinimumHeight(40)
+        url_container.setMaximumHeight(48)  # Increased from 40 to 48 for better presence
+        url_container.setMinimumHeight(48)
         url_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         url_layout = QHBoxLayout(url_container)
         url_layout.setContentsMargins(0, 0, 0, 0)
+        url_layout.setSpacing(12)  # Increased spacing for better visual separation
         
+        # HTTP Method Combo with improved styling
         self.method_combo = QComboBox()
         self.method_combo.addItems(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'])
+        self.method_combo.setObjectName("methodCombo")  # For stylesheet targeting
         self.method_combo.setMaximumWidth(100)
+        self.method_combo.setMinimumHeight(38)  # Match other controls
         self.method_combo.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # Apply method-specific colors via styleSheet update on change
+        self.method_combo.currentTextChanged.connect(self._update_method_style)
         url_layout.addWidget(self.method_combo)
         
         self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("Enter request URL")
+        self.url_input.setPlaceholderText("Enter request URL or paste text")
         self.url_input.returnPressed.connect(self._send_request)  # Enter key sends request
+        self.url_input.setMinimumHeight(38)  # Make URL input taller
         self.url_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         url_layout.addWidget(self.url_input)
         
+        # IMPROVED: Larger, more prominent Send button
         self.send_btn = QPushButton("Send")
         self.send_btn.setObjectName("sendButton")  # For stylesheet targeting
         self.send_btn.setProperty("class", "primary")
-        self.send_btn.setMaximumWidth(80)
+        self.send_btn.setProperty("primary", "true")  # For QSS targeting
+        self.send_btn.setMinimumWidth(100)  # Increased from 80
+        self.send_btn.setMinimumHeight(38)  # Explicit height
         self.send_btn.clicked.connect(self._send_request)
         self.send_btn.setToolTip("Send request (Ctrl+Enter)")
         self.send_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # Set font to make it more prominent
+        send_font = QFont()
+        send_font.setBold(True)
+        send_font.setPixelSize(14)
+        self.send_btn.setFont(send_font)
         url_layout.addWidget(self.send_btn)
         
         self.save_btn = QPushButton("Save")
-        self.save_btn.setMaximumWidth(80)
+        self.save_btn.setMinimumWidth(80)
+        self.save_btn.setMinimumHeight(38)  # Match Send button height
         self.save_btn.clicked.connect(self._save_request)
         self.save_btn.setToolTip("Save request (Ctrl+S)")
         self.save_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         url_layout.addWidget(self.save_btn)
         
         self.code_btn = QPushButton("💻 Code")
-        self.code_btn.setMaximumWidth(80)
+        self.code_btn.setMinimumWidth(80)
+        self.code_btn.setMinimumHeight(38)  # Match Send button height
         self.code_btn.clicked.connect(self._generate_code)
         self.code_btn.setToolTip("Generate code snippet (Ctrl+Shift+C)")
         self.code_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -490,23 +901,24 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.description_widget)
         
         # Tabs for Params, Headers, Authorization, Body (this should expand)
-        self.request_tabs = QTabWidget()
+        self.inner_tabs = QTabWidget()
+        self.inner_tabs.setObjectName("innerTabs")  # For specific styling
         # Remove maximum height constraint - let it expand to fill available space
-        self.request_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.inner_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Params tab
         self.params_table = self._create_key_value_table()
         self.params_table.itemChanged.connect(self._update_tab_counts)
-        self.request_tabs.addTab(self.params_table, "Params")
+        self.inner_tabs.addTab(self.params_table, "Params")
         
         # Headers tab
         self.headers_table = self._create_key_value_table()
         self.headers_table.itemChanged.connect(self._update_tab_counts)
-        self.request_tabs.addTab(self.headers_table, "Headers")
+        self.inner_tabs.addTab(self.headers_table, "Headers")
         
         # Authorization tab
         auth_widget = self._create_auth_widget()
-        self.request_tabs.addTab(auth_widget, "Authorization")
+        self.inner_tabs.addTab(auth_widget, "Authorization")
         
         # Body tab
         body_widget = QWidget()
@@ -515,17 +927,17 @@ class MainWindow(QMainWindow):
         self.body_input.setPlaceholderText("Enter request body (e.g., JSON)")
         self.body_input.textChanged.connect(self._mark_as_changed)
         body_layout.addWidget(self.body_input)
-        self.request_tabs.addTab(body_widget, "Body")
+        self.inner_tabs.addTab(body_widget, "Body")
         
         # Tests tab
         self.test_tab = TestTabWidget()
         self.test_tab.assertions_changed.connect(self._on_tests_changed)
-        self.request_tabs.addTab(self.test_tab, "Tests")
+        self.inner_tabs.addTab(self.test_tab, "Tests")
         
         # Initialize tab counts
         self._update_tab_counts()
         
-        layout.addWidget(self.request_tabs, 1)  # Stretch factor 1 = expands to fill
+        layout.addWidget(self.inner_tabs, 1)  # Stretch factor 1 = expands to fill
         
         return editor
     
@@ -557,6 +969,11 @@ class MainWindow(QMainWindow):
         
         # Status info row
         status_layout = QHBoxLayout()
+        
+        # Use StatusBadge widget for professional status display
+        self.status_badge = StatusBadge()
+        self.status_badge.setVisible(False)  # Hidden until we have a response
+        status_layout.addWidget(self.status_badge)
         
         self.status_label = QLabel("Status: -")
         status_layout.addWidget(self.status_label)
@@ -622,13 +1039,26 @@ class MainWindow(QMainWindow):
         
         body_layout.addLayout(toolbar_layout)
         
+        # Use stacked widget to switch between empty state and response
+        from PyQt6.QtWidgets import QStackedWidget
+        self.response_stack = QStackedWidget()
+        
+        # Empty state widget
+        self.response_empty_state = NoResponseEmptyState()
+        self.response_stack.addWidget(self.response_empty_state)
+        
         # Response body text area
         self.response_body = QTextEdit()
         self.response_body.setReadOnly(True)
         self.response_body.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)  # No wrap by default
         self.response_body.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.response_body.customContextMenuRequested.connect(self._show_response_context_menu)
-        body_layout.addWidget(self.response_body)
+        self.response_stack.addWidget(self.response_body)
+        
+        body_layout.addWidget(self.response_stack)
+        
+        # Show empty state by default
+        self.response_stack.setCurrentWidget(self.response_empty_state)
         
         # Initialize response data storage
         self.current_response = None  # Store the ApiResponse object
@@ -869,10 +1299,8 @@ class MainWindow(QMainWindow):
             collection_item.setData(0, Qt.ItemDataRole.UserRole, 
                                    {'type': 'collection', 'id': collection['id'], 'name': collection['name']})
             
-            # Make collection names bold and set folder color
-            font = collection_item.font(0)
-            font.setBold(True)
-            collection_item.setFont(0, font)
+            # Collection names should NOT be bold by default
+            # Bold will be applied only when it contains the active request
             collection_item.setForeground(0, QBrush(QColor('#CCCCCC')))  # Light gray for collections
             
             self.collections_tree.addTopLevelItem(collection_item)
@@ -898,9 +1326,76 @@ class MainWindow(QMainWindow):
             # Restore expanded state
             if collection['id'] in expanded_ids:
                 collection_item.setExpanded(True)
+        
+        # Highlight currently opened request
+        self._update_current_request_highlight()
+    
+    def _update_current_request_highlight(self):
+        """Update the tree to highlight/bold the currently opened request and underline all open requests."""
+        print(f"[DEBUG] _update_current_request_highlight called")
+        
+        # Get current request ID from active tab
+        current_tab_index = self.request_tabs.currentIndex()
+        current_request_id = None
+        if current_tab_index >= 0 and current_tab_index in self.tab_states:
+            current_request_id = self.tab_states[current_tab_index].get('request_id')
+        
+        print(f"[DEBUG] Current tab index: {current_tab_index}, current_request_id: {current_request_id}")
+        
+        # Get all open request IDs from all tabs
+        open_request_ids = set()
+        for tab_state in self.tab_states.values():
+            req_id = tab_state.get('request_id')
+            if req_id:
+                open_request_ids.add(req_id)
+        
+        print(f"[DEBUG] Open request IDs: {open_request_ids}")
+        
+        # Iterate through all tree items and update styling
+        for i in range(self.collections_tree.topLevelItemCount()):
+            collection_item = self.collections_tree.topLevelItem(i)
+            collection_data = collection_item.data(0, Qt.ItemDataRole.UserRole)
+            
+            # Check if this collection contains the current request or any open request
+            collection_has_current = False
+            collection_has_open = False
+            
+            for j in range(collection_item.childCount()):
+                request_item = collection_item.child(j)
+                request_data = request_item.data(0, Qt.ItemDataRole.UserRole)
+                request_id = request_data.get('id') if request_data else None
+                
+                if request_id == current_request_id:
+                    # This is the active request - make it bold and underlined
+                    font = request_item.font(0)
+                    font.setBold(True)
+                    font.setUnderline(True)
+                    request_item.setFont(0, font)
+                    collection_has_current = True
+                    collection_has_open = True
+                elif request_id in open_request_ids:
+                    # This request is open in another tab - underline only
+                    font = request_item.font(0)
+                    font.setBold(False)
+                    font.setUnderline(True)
+                    request_item.setFont(0, font)
+                    collection_has_open = True
+                else:
+                    # Not open - remove all styling
+                    font = request_item.font(0)
+                    font.setBold(False)
+                    font.setUnderline(False)
+                    request_item.setFont(0, font)
+            
+            # Make collection bold if it contains the active request
+            # Underline if it contains any open requests
+            font = collection_item.font(0)
+            font.setBold(collection_has_current)
+            font.setUnderline(collection_has_open)
+            collection_item.setFont(0, font)
     
     def _on_tree_item_clicked(self, item: QTreeWidgetItem, column: int):
-        """Handle click on tree item (collection or request)."""
+        """Handle single-click on tree item - only for expanding/collapsing collections."""
         if not item:
             return
         
@@ -910,23 +1405,46 @@ class MainWindow(QMainWindow):
         if not data or not isinstance(data, dict):
             return
         
-        # Check for unsaved changes before switching
-        if not self._check_unsaved_changes():
+        if data.get('type') == 'collection':
+            # Single-click on collection - toggle expansion
+            item.setExpanded(not item.isExpanded())
+        # Requests do nothing on single-click
+    
+    def _on_tree_item_double_clicked(self, item: QTreeWidgetItem, column: int):
+        """Handle double-click on tree item - open request in new tab or toggle collection."""
+        import time
+        
+        print(f"[DEBUG] _on_tree_item_double_clicked called")
+        if not item:
+            return
+        
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        
+        # Check if data exists and is a dictionary
+        if not data or not isinstance(data, dict):
             return
         
         if data.get('type') == 'collection':
-            self.current_collection_id = data['id']
-            self.current_request_id = None
-            self._clear_request_editor()
-            self.workspace_pane.setVisible(False)  # Hide workspace when collection clicked
-            
-            # Toggle expansion when clicking anywhere on collection item
+            # Double-click on collection - just toggle expansion
+            print(f"[DEBUG] Double-click on collection, toggling expansion")
             item.setExpanded(not item.isExpanded())
         elif data.get('type') == 'request':
-            self.current_collection_id = data['collection_id']
-            self.current_request_id = data['id']
-            self.workspace_pane.setVisible(True)  # Show workspace when request clicked
-            self._load_request(data['id'])
+            request_id = data['id']
+            current_time = time.time()
+            
+            # Ignore if this is a duplicate double-click within 500ms
+            if (current_time - self._last_double_click_time < 0.5 and 
+                request_id == self._last_double_click_request_id):
+                print(f"[DEBUG] Ignoring duplicate double-click on request {request_id}")
+                return
+            
+            # Update last double-click tracking
+            self._last_double_click_time = current_time
+            self._last_double_click_request_id = request_id
+            
+            # Double-click on request - open in new tab (or switch to existing tab)
+            print(f"[DEBUG] Double-click on request {request_id}, calling _open_request_in_new_tab")
+            self._open_request_in_new_tab(request_id)
     
     def _show_tree_context_menu(self, position):
         """Show context menu for collections tree."""
@@ -974,30 +1492,36 @@ class MainWindow(QMainWindow):
             
         elif data.get('type') == 'request':
             # Request context menu
+            request_id = data['id']  # Capture in local variable to avoid closure issues
+            
             open_action = QAction("📂 Open", self)
-            open_action.triggered.connect(lambda: self._load_request(data['id']))
+            open_action.triggered.connect(lambda checked=False, rid=request_id: self._load_request(rid))
             menu.addAction(open_action)
+            
+            open_new_tab_action = QAction("🗂️ Open in New Tab", self)
+            open_new_tab_action.triggered.connect(lambda checked=False, rid=request_id: self._open_request_in_new_tab(rid))
+            menu.addAction(open_new_tab_action)
             
             menu.addSeparator()
             
             copy_curl_action = QAction("📋 Copy as cURL", self)
-            copy_curl_action.triggered.connect(lambda: self._copy_request_as_curl(data['id']))
+            copy_curl_action.triggered.connect(lambda checked=False, rid=request_id: self._copy_request_as_curl(rid))
             menu.addAction(copy_curl_action)
             
             menu.addSeparator()
             
             rename_action = QAction("✏️ Rename", self)
-            rename_action.triggered.connect(lambda: self._rename_request(data['id']))
+            rename_action.triggered.connect(lambda checked=False, rid=request_id: self._rename_request(rid))
             menu.addAction(rename_action)
             
             duplicate_action = QAction("📑 Duplicate", self)
-            duplicate_action.triggered.connect(lambda: self._duplicate_request(data['id']))
+            duplicate_action.triggered.connect(lambda checked=False, rid=request_id: self._duplicate_request(rid))
             menu.addAction(duplicate_action)
             
             menu.addSeparator()
             
             delete_action = QAction("🗑️ Delete", self)
-            delete_action.triggered.connect(lambda: self._delete_request_from_menu(data['id']))
+            delete_action.triggered.connect(lambda checked=False, rid=request_id: self._delete_request_from_menu(rid))
             menu.addAction(delete_action)
         
         menu.exec(self.collections_tree.viewport().mapToGlobal(position))
@@ -1143,13 +1667,13 @@ class MainWindow(QMainWindow):
                     collection_id=self.current_collection_id,
                     name=name,
                     method=method,
-                    url='https://api.example.com'
+                    url=''
                 )
                 self._load_collections()
                 
                 # Load the newly created request and show workspace
                 self.current_request_id = request_id
-                self.workspace_pane.setVisible(True)
+                self.center_stack.setCurrentWidget(self.tabs_container)
                 self._load_request(request_id)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to create request: {str(e)}")
@@ -1200,7 +1724,7 @@ class MainWindow(QMainWindow):
                     collection_id=collection_id,
                     name=name,
                     method=method,
-                    url='https://api.example.com'
+                    url=''
                 )
                 self._load_collections()
                 self.toast.success(f"Request '{name}' created")
@@ -1208,7 +1732,7 @@ class MainWindow(QMainWindow):
                 # Load the newly created request and show workspace
                 self.current_request_id = request_id
                 self.current_collection_id = collection_id
-                self.workspace_pane.setVisible(True)
+                self.center_stack.setCurrentWidget(self.tabs_container)
                 self._load_request(request_id)
             except Exception as e:
                 self.toast.error(f"Failed to create request: {str(e)[:50]}...")
@@ -1243,14 +1767,14 @@ class MainWindow(QMainWindow):
                     self.current_collection_id = None
                     self.current_request_id = None
                     self._clear_request_editor()
-                    self.workspace_pane.setVisible(False)
+                    self.center_stack.setCurrentWidget(self.no_request_empty_state)
                     self.toast.success(f"Collection '{item_name}' deleted")
                 elif data['type'] == 'request':
                     self.db.delete_request(data['id'])
                     if self.current_request_id == data['id']:
                         self.current_request_id = None
                         self._clear_request_editor()
-                        self.workspace_pane.setVisible(False)
+                        self.center_stack.setCurrentWidget(self.no_request_empty_state)
                     self.toast.success(f"Request '{item_name}' deleted")
                 
                 # Auto-sync to filesystem if Git sync is enabled
@@ -1264,20 +1788,26 @@ class MainWindow(QMainWindow):
     # ==================== Request Editor Management ====================
     
     def _load_request(self, request_id: int):
-        """Load a request's details into the editor."""
+        """Load a request's details into the editor.
+        Note: With the new tab model, this is only called when loading a request into a NEW tab.
+        Existing tabs are permanently bound to their request."""
         try:
             request = self.db.get_request(request_id)
             if not request:
                 QMessageBox.warning(self, "Warning", "Request not found!")
                 return
             
-            # Store request name and collection name for title
+            # Store current request info for later use
+            self.current_request_id = request_id
+            self.current_collection_id = request.get('collection_id')
             self.current_request_name = request.get('name', 'Unnamed Request')
             collection = self.db.get_collection(request.get('collection_id'))
             self.current_collection_name = collection.get('name', 'Unknown Collection') if collection else 'Unknown Collection'
             
             # Load basic info
             self.method_combo.setCurrentText(request.get('method', 'GET'))
+            # Initialize method styling
+            self._update_method_style(request.get('method', 'GET'))
             self.url_input.setText(request.get('url', ''))
             
             # Load params (handle None)
@@ -1317,6 +1847,10 @@ class MainWindow(QMainWindow):
             
             # Clear test results
             self.test_results_viewer.clear()
+            self._current_test_results = None  # Clear stored test results
+            
+            # Clear response viewer - fresh request has no response yet
+            self._clear_response_viewer()
             
             # Store original data for change detection
             self._store_original_request_data()
@@ -1330,6 +1864,18 @@ class MainWindow(QMainWindow):
             
             # Track in recent requests
             self.recent_requests_widget.add_request(request_id)
+            
+            # Update current tab state and title
+            current_tab_index = self.request_tabs.currentIndex()
+            if current_tab_index >= 0 and current_tab_index in self.tab_states:
+                self.tab_states[current_tab_index]['request_id'] = request_id
+                self.tab_states[current_tab_index]['name'] = self.current_request_name
+                self.tab_states[current_tab_index]['method'] = request.get('method', 'GET')
+                self.tab_states[current_tab_index]['has_changes'] = False
+                self._update_tab_title(current_tab_index)
+            
+            # Update collections tree highlighting
+            self._update_current_request_highlight()
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load request: {str(e)}")
@@ -1431,6 +1977,54 @@ class MainWindow(QMainWindow):
         if not self.has_unsaved_changes:
             self.has_unsaved_changes = True
             self._update_request_title()
+            
+            # Update current tab's unsaved indicator
+            current_tab_index = self.request_tabs.currentIndex()
+            if current_tab_index >= 0 and current_tab_index in self.tab_states:
+                self.tab_states[current_tab_index]['has_changes'] = True
+                self._update_tab_title(current_tab_index)
+    
+    def _update_method_style(self, method: str):
+        """Update the method combo styling based on selected method."""
+        # Define colors for each HTTP method
+        method_colors = {
+            'GET': '#4CAF50',      # Green
+            'POST': '#2196F3',     # Blue
+            'PUT': '#FF9800',      # Orange
+            'DELETE': '#F44336',   # Red
+            'PATCH': '#9C27B0',    # Purple
+            'HEAD': '#757575',     # Gray
+            'OPTIONS': '#757575',  # Gray
+        }
+        
+        color = method_colors.get(method, '#757575')
+        
+        # Apply styled dropdown with method color
+        self.method_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {color};
+                color: #FFFFFF;
+                border: 2px solid {color};
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-weight: bold;
+                font-size: 12px;
+            }}
+            QComboBox:hover {{
+                opacity: 0.9;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #FFFFFF;
+                margin-right: 5px;
+            }}
+        """)
     
     def _update_tab_counts(self):
         """Update tab labels to show item counts and status indicators."""
@@ -1464,10 +2058,10 @@ class MainWindow(QMainWindow):
         auth_label = "Authorization ✓" if auth_configured else "Authorization"
         tests_label = f"Tests ({tests_count})" if tests_count > 0 else "Tests"
         
-        self.request_tabs.setTabText(0, params_label)
-        self.request_tabs.setTabText(1, headers_label)
-        self.request_tabs.setTabText(2, auth_label)
-        self.request_tabs.setTabText(4, tests_label)
+        self.inner_tabs.setTabText(0, params_label)
+        self.inner_tabs.setTabText(1, headers_label)
+        self.inner_tabs.setTabText(2, auth_label)
+        self.inner_tabs.setTabText(4, tests_label)
     
     def _update_request_title(self):
         """Update the request title label to show current state with breadcrumb."""
@@ -1537,6 +2131,12 @@ class MainWindow(QMainWindow):
             self._store_original_request_data()
             self.has_unsaved_changes = False
             self._update_request_title()
+            
+            # Update tab title to remove unsaved indicator
+            current_tab_index = self.request_tabs.currentIndex()
+            if current_tab_index >= 0 and current_tab_index < len(self.tab_states):
+                self.tab_states[current_tab_index]['has_changes'] = False
+                self._update_tab_title(current_tab_index)
             
             # Update status bar
             self._update_save_status("✓ Request saved successfully")
@@ -1945,6 +2545,10 @@ class MainWindow(QMainWindow):
         self.current_response = response
         self.current_response_raw = response.text
         
+        # Update status badge with professional styling
+        self.status_badge.set_status(response.status_code)
+        self.status_badge.setVisible(True)
+        
         # Determine status color and icon based on status code
         status_code = response.status_code
         if 200 <= status_code < 300:
@@ -1968,21 +2572,21 @@ class MainWindow(QMainWindow):
             icon = "?"
             status_text = "Unknown"
         
-        # Display status info with color
-        self.status_label.setText(f"{icon} Status: {status_code} ({status_text})")
+        # Display status info with color (kept for backward compatibility)
+        self.status_label.setText(f"{status_text}")
         self.status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 13px;")
         
-        self.time_label.setText(f"Time: {response.elapsed_time:.2f}s")
+        self.time_label.setText(f"⏱ {response.elapsed_time:.2f}s")
         self.time_label.setStyleSheet("font-weight: bold;")
         
         # Display size with warning for large responses
         size_text = self._format_size(response.size)
         if response.size > 1_000_000:  # > 1MB
-            self.size_label.setText(f"Size: {size_text} ⚠️")
+            self.size_label.setText(f"📦 {size_text} ⚠️")
             self.size_label.setStyleSheet("color: #FF9800; font-weight: bold;")
             self.toast.warning(f"Large response: {size_text}")
         else:
-            self.size_label.setText(f"Size: {size_text}")
+            self.size_label.setText(f"📦 {size_text}")
             self.size_label.setStyleSheet("font-weight: bold;")
         
         # Determine content type
@@ -2005,6 +2609,9 @@ class MainWindow(QMainWindow):
         else:
             self.response_body.setPlainText(self.current_response_raw)
         
+        # Switch to response body view (from empty state)
+        self.response_stack.setCurrentWidget(self.response_body)
+        
         # Apply syntax highlighting based on content type
         dark_mode = (self.current_theme == 'dark')
         if is_json:
@@ -2020,6 +2627,7 @@ class MainWindow(QMainWindow):
     
     def _clear_response_viewer(self):
         """Clear the response viewer."""
+        self.status_badge.setVisible(False)
         self.status_label.setText("Status: -")
         self.time_label.setText("Time: -")
         self.size_label.setText("Size: -")
@@ -2029,6 +2637,73 @@ class MainWindow(QMainWindow):
         self.current_response = None
         self.current_response_raw = ""
         self.current_response_pretty = ""
+        # Switch back to empty state
+        self.response_stack.setCurrentWidget(self.response_empty_state)
+    
+    def _restore_response(self, response_data: Dict):
+        """Restore a response from saved data."""
+        # Create a mock ApiResponse-like object from the saved data
+        class MockResponse:
+            def __init__(self, data):
+                self.status_code = data['status_code']
+                self.headers = data['headers']
+                self.text = data['text']
+                self.size = data['size']
+                self.elapsed_time = data['elapsed_time']
+            
+            def json(self):
+                import json
+                return json.loads(self.text)
+        
+        # Create mock response object
+        mock_response = MockResponse(response_data)
+        self.current_response = mock_response
+        self.current_response_raw = response_data['text']
+        
+        # Update status badge
+        self.status_badge.set_status(response_data['status_code'])
+        self.status_badge.setVisible(True)
+        
+        # Determine status text
+        status_code = response_data['status_code']
+        if 200 <= status_code < 300:
+            status_text = "Success"
+        elif 300 <= status_code < 400:
+            status_text = "Redirect"
+        elif 400 <= status_code < 500:
+            status_text = "Client Error"
+        elif 500 <= status_code < 600:
+            status_text = "Server Error"
+        else:
+            status_text = "Unknown"
+        
+        # Update status info
+        self.status_label.setText(f"{status_text}")
+        self.time_label.setText(f"⏱️ {response_data['elapsed_time']:.2f}s")
+        self.size_label.setText(f"📦 {self._format_size(response_data['size'])}")
+        
+        # Display response body
+        self.response_body.setPlainText(response_data['text'])
+        
+        # Try to pretty print if JSON
+        try:
+            import json
+            parsed = json.loads(response_data['text'])
+            self.current_response_pretty = json.dumps(parsed, indent=2)
+            if self.response_pretty_checkbox.isChecked():
+                self.response_body.setPlainText(self.current_response_pretty)
+        except:
+            self.current_response_pretty = response_data['text']
+        
+        # Display response headers
+        self.response_headers_table.clearContents()
+        self.response_headers_table.setRowCount(len(response_data['headers']))
+        for i, (key, value) in enumerate(response_data['headers'].items()):
+            self.response_headers_table.setItem(i, 0, QTableWidgetItem(key))
+            self.response_headers_table.setItem(i, 1, QTableWidgetItem(str(value)))
+        
+        # Switch to response body view
+        self.response_stack.setCurrentWidget(self.response_body)
     
     def _format_size(self, size_bytes: int) -> str:
         """Format byte size to human-readable format."""
@@ -3067,6 +3742,12 @@ class MainWindow(QMainWindow):
             # Display results
             self.test_results_viewer.display_results(display_results, summary)
             
+            # Store test results for tab state persistence
+            self._current_test_results = {
+                'results': display_results,
+                'summary': summary
+            }
+            
         except Exception as e:
             print(f"Error executing tests: {e}")
             # Don't show error to user, just log it
@@ -3366,7 +4047,7 @@ class MainWindow(QMainWindow):
                     self.current_collection_id = None
                     self.current_request_id = None
                     self._clear_request_editor()
-                    self.workspace_pane.setVisible(False)
+                    self.center_stack.setCurrentWidget(self.no_request_empty_state)
                 self._auto_sync_to_filesystem()
                 self._load_collections()
                 self.toast.success(f"Collection '{collection['name']}' deleted")
@@ -3462,7 +4143,16 @@ class MainWindow(QMainWindow):
                 self._auto_sync_to_filesystem()
                 self._load_collections()
                 if self.current_request_id == request_id:
+                    self.current_request_name = new_name
                     self.request_title_label.setText(new_name)
+                    self._update_request_title()
+                    
+                    # Update tab title with new name
+                    current_tab_index = self.request_tabs.currentIndex()
+                    if current_tab_index >= 0 and current_tab_index < len(self.tab_states):
+                        self.tab_states[current_tab_index]['name'] = new_name
+                        self._update_tab_title(current_tab_index)
+                
                 self.toast.success(f"Request renamed to '{new_name}'")
             except Exception as e:
                 self.toast.error(f"Failed to rename: {str(e)[:30]}...")
@@ -3517,7 +4207,7 @@ class MainWindow(QMainWindow):
                 if self.current_request_id == request_id:
                     self.current_request_id = None
                     self._clear_request_editor()
-                    self.workspace_pane.setVisible(False)
+                    self.center_stack.setCurrentWidget(self.no_request_empty_state)
                 self._auto_sync_to_filesystem()
                 self._load_collections()
                 self.toast.success(f"Request '{request['name']}' deleted")
@@ -3609,6 +4299,26 @@ class MainWindow(QMainWindow):
                 self.toast.success(f"Response saved to file")
             except Exception as e:
                 self.toast.error(f"Failed to save: {str(e)[:30]}...")
+    
+    def eventFilter(self, obj, event):
+        """Event filter to handle middle-click on tabs for closing."""
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QMouseEvent
+        
+        # Check if this is a mouse button release event on the tab bar
+        if obj == self.request_tabs.tabBar() and event.type() == QEvent.Type.MouseButtonRelease:
+            mouse_event = event
+            # Check if it was a middle button click
+            if mouse_event.button() == Qt.MouseButton.MiddleButton:
+                # Get the tab index at the click position
+                tab_index = self.request_tabs.tabBar().tabAt(mouse_event.pos())
+                if tab_index >= 0:
+                    # Close the tab
+                    self._close_tab(tab_index)
+                    return True  # Event handled
+        
+        # Pass the event to the parent class
+        return super().eventFilter(obj, event)
     
     def closeEvent(self, event):
         """Handle application close event."""

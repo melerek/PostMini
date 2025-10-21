@@ -1,14 +1,14 @@
 # PostMini - Desktop API Client
 
-**Version 1.4.0** | Professional API Testing Tool | MIT License
+**Version 1.5.0** | Professional API Testing Tool | MIT License
 
-A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for collections, environment variables, OAuth 2.0, API testing, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
+A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, OAuth 2.0, API testing, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.4.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.5.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Tests](https://img.shields.io/badge/tests-347%2B%20passing-success)
+![Tests](https://img.shields.io/badge/tests-362%2B%20passing-success)
 
 ---
 
@@ -38,7 +38,30 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 
 ## Features
 
-### ✨ What's New in V1.4.0
+### ✨ What's New in V1.5.0
+- **🗂️ Multi-Request Tab System**: Work on multiple API requests simultaneously:
+  - Open unlimited requests in separate tabs
+  - Each tab preserves request data, response, and test results independently
+  - Smart duplicate prevention (can't open same request twice)
+  - Visual feedback: Bold + underline for active request, underline for others
+  - Close tabs with X button, middle-click, or Ctrl+W
+  - Double-click requests to open in new tabs
+  - Right-click → "Open in New Tab" option
+- **💎 Professional UI Polish**: Complete redesign matching Postman's quality:
+  - Bold gradient Send button with professional styling
+  - Color-coded method badges (GET=blue, POST=green, PUT=orange, DELETE=red)
+  - Color-coded status badges (2xx=green, 3xx=blue, 4xx=orange, 5xx=red)
+  - Enhanced input fields with better borders and focus states
+  - Clear visual hierarchy between request tabs and inner tabs (Params, Headers, Body)
+- **🎨 Empty State Illustrations**: Professional guidance when no content:
+  - "No Request Selected" state with helpful hints
+  - "No Response Yet" state before sending requests
+  - "No Collections" state with getting started guidance
+- **✨ Enhanced Visual Hierarchy**: Consistent spacing, professional polish throughout
+
+### Previous Updates
+
+#### V1.4.0 (October 2025)
 - **💫 Dynamic Variables**: Auto-generate test data with 38+ variables:
   - `$guid`, `$timestamp`, `$randomEmail`, `$randomInt`
   - `$randomFirstName`, `$randomLastName`, `$randomPhone`
@@ -50,8 +73,6 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
   - Auto-generates request examples from schemas
   - Extracts authentication, parameters, and descriptions
   - Saves hours of manual work!
-
-### Previous Updates
 
 #### V1.3.0 (October 2025)
 - **📝 Request Description Field**: Document your requests with collapsible description/notes section
@@ -73,6 +94,7 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 - **Polished UI**: Focus states, hover effects, improved spacing and readability
 
 ### Core Features
+- **Multi-Request Tabs**: 🆕 v1.5.0 - Open and work on multiple requests simultaneously with full state persistence
 - **Collections Management**: Organize your API requests into collections
 - **Dynamic Variables**: 🆕 v1.4.0 - 38+ auto-generated variables (`$guid`, `$timestamp`, `$randomEmail`, etc.)
 - **OpenAPI/Swagger Import**: 🆕 v1.4.0 - Import specs and auto-generate collections (OpenAPI 3.x, Swagger 2.0)
@@ -100,8 +122,9 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
   - Pretty/Raw toggle and word wrap
   - Response headers display
   - Status code, response time, and size information
+  - Per-tab response persistence (v1.5.0)
 - **Persistent Storage**: SQLite database for saving collections and requests
-- **Modern UI**: Clean, intuitive interface with responsive layouts
+- **Modern UI**: Clean, intuitive interface with responsive layouts and professional polish (v1.5.0)
 - **Asynchronous Requests**: Non-blocking HTTP requests using threading
 
 ## Technology Stack
@@ -303,6 +326,49 @@ Quickly import entire APIs from OpenAPI or Swagger specifications:
 - Preserves descriptions and documentation
 
 **Example:** Import the Petstore API in seconds and get 20+ pre-configured requests!
+
+### Working with Multi-Request Tabs (v1.5.0)
+
+Open and work on multiple requests simultaneously with full state preservation:
+
+**Opening Tabs:**
+- **Double-click** any request in the collections tree to open it in a new tab
+- **Right-click** a request → Select "Open in New Tab"
+- If the request is already open, PostMini switches to its tab (no duplicates!)
+
+**Tab Features:**
+- Each tab shows: `[METHOD] Request Name` (e.g., `GET Users`)
+- Unsaved changes marked with `•` (e.g., `GET Users •`)
+- **Tab State Persistence**: Each tab independently remembers:
+  - Request configuration (URL, params, headers, body, auth)
+  - Response data (status, headers, body, size, time)
+  - Test results (assertions, pass/fail summary)
+- Switch between tabs instantly to compare responses
+
+**Closing Tabs:**
+- Click the **X** button on any tab
+- **Middle-click** (mouse wheel button) on a tab
+- Press **Ctrl+W** to close the active tab
+- Warns before closing if you have unsaved changes
+
+**Visual Feedback:**
+- **Active request**: Bold + underlined in collections tree
+- **Other open requests**: Underlined in collections tree
+- **Collections**: Bold if contains active request, underlined if contains open requests
+
+**Keyboard Shortcuts:**
+- **Ctrl+W**: Close active tab
+- **Ctrl+S**: Save current request
+- **Ctrl+Enter**: Send request
+
+**Example Workflow:**
+1. Double-click "GET /users" → Opens in Tab 1
+2. Send request, see response and run tests
+3. Double-click "POST /users" → Opens in Tab 2
+4. Configure POST request while Tab 1 preserves GET response
+5. Switch back to Tab 1 → Response and test results still there!
+6. Compare responses between tabs
+7. Middle-click Tab 2 to close it when done
 
 ## Database Schema
 

@@ -76,31 +76,41 @@ QPushButton:disabled {
     color: #BDBDBD;
 }
 
-/* Primary Buttons (green) */
+/* Primary Buttons (green) - ENHANCED FOR PROFESSIONAL LOOK */
 QPushButton#sendButton,
+QPushButton[primary="true"],
 QPushButton[class="primary"] {
     background-color: #4CAF50;
-    border: none;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4CAF50, stop:1 #43A047);
+    border: 2px solid #388E3C;
     color: white;
     font-weight: bold;
-    font-size: 13px;
-    padding: 6px 16px;
-    min-height: 24px;
+    font-size: 14px;
+    padding: 8px 20px;
+    min-height: 32px;
+    max-height: 42px;
+    border-radius: 6px;
 }
 
 QPushButton#sendButton:hover,
+QPushButton[primary="true"]:hover,
 QPushButton[class="primary"]:hover {
-    background-color: #43A047;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #43A047, stop:1 #388E3C);
+    border-color: #2E7D32;
 }
 
 QPushButton#sendButton:pressed,
+QPushButton[primary="true"]:pressed,
 QPushButton[class="primary"]:pressed {
-    background-color: #2E7D32;
+    background: #2E7D32;
+    border-color: #1B5E20;
 }
 
 QPushButton#sendButton:disabled,
+QPushButton[primary="true"]:disabled,
 QPushButton[class="primary"]:disabled {
-    background-color: #CCCCCC;
+    background: #CCCCCC;
+    border-color: #AAAAAA;
     color: #666666;
 }
 
@@ -142,14 +152,15 @@ QPushButton[class="danger"]:pressed {
 /* ==================== LINE EDIT (Text Inputs) ==================== */
 
 QLineEdit {
-    padding: 6px 10px;
-    border: 1px solid #BDBDBD;
+    padding: 8px 12px;
+    border: 2px solid #E0E0E0;
     border-radius: 4px;
     background-color: white;
     color: #212121;
     selection-background-color: #BBDEFB;
     min-height: 28px;
-    max-height: 32px;
+    max-height: 38px;
+    font-size: 13px;
 }
 
 QLineEdit:hover {
@@ -848,5 +859,91 @@ QScrollBar::sub-line:horizontal {
 QScrollBar::add-page:horizontal,
 QScrollBar::sub-page:horizontal {
     background: none;
+}
+
+/* ==================== TABS (Request Tabs) ==================== */
+
+/* Request tabs - top-level tabs for multiple requests */
+QTabWidget#requestTabs::pane {
+    border: none;
+    border-bottom: 2px solid #E0E0E0;
+    background: transparent;
+}
+
+QTabWidget#requestTabs QTabBar::tab {
+    background-color: transparent;
+    color: #757575;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 10px 20px;
+    min-width: 120px;
+    max-width: 220px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+QTabWidget#requestTabs QTabBar::tab:hover {
+    background-color: #E3F2FD;
+    color: #212121;
+}
+
+QTabWidget#requestTabs QTabBar::tab:selected {
+    background-color: #FFFFFF;
+    color: #2196F3;
+    font-weight: 600;
+    border-bottom: 3px solid #2196F3;
+}
+
+QTabWidget#requestTabs QTabBar::close-button {
+    subcontrol-position: right;
+    margin-right: 8px;
+}
+
+QTabWidget#requestTabs QTabBar::close-button:hover {
+    /* Don't override the default icon, just change opacity/background subtly */
+}
+
+/* Inner tabs (Params, Headers, Body, etc.) - keep default styling */
+QTabWidget#innerTabs::pane {
+    border: 1px solid #E0E0E0;
+    border-radius: 4px;
+    background: #FFFFFF;
+}
+
+QTabWidget#innerTabs QTabBar::tab {
+    background-color: #F5F5F5;
+    color: #757575;
+    border: none;
+    border-right: 1px solid #E0E0E0;
+    padding: 8px 16px;
+    min-width: 80px;
+    font-size: 13px;
+}
+
+QTabWidget#innerTabs QTabBar::tab:hover {
+    background-color: #EEEEEE;
+}
+
+QTabWidget#innerTabs QTabBar::tab:selected {
+    background-color: #FFFFFF;
+    color: #2196F3;
+    font-weight: 600;
+}
+
+/* New tab button */
+QPushButton#newTabButton {
+    background-color: transparent;
+    color: #757575;
+    border: 1px solid #E0E0E0;
+    border-radius: 4px;
+    font-size: 18px;
+    font-weight: bold;
+    padding: 2px;
+}
+
+QPushButton#newTabButton:hover {
+    background-color: #E0E0E0;
+    color: #2196F3;
 }
 

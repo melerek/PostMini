@@ -66,20 +66,37 @@ QPushButton:disabled {
     border-color: #3e3e42;
 }
 
-/* Primary action button */
-QPushButton[primary="true"] {
-    background-color: #0e639c;
-    border-color: #0e639c;
+/* Primary action button - ENHANCED FOR PROFESSIONAL LOOK */
+QPushButton[primary="true"],
+QPushButton#sendButton {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0e639c, stop:1 #094771);
+    border: 2px solid #007acc;
     color: #ffffff;
-    font-weight: 600;
+    font-weight: bold;
+    font-size: 14px;
+    padding: 8px 20px;
+    min-height: 32px;
+    max-height: 42px;
+    border-radius: 6px;
 }
 
-QPushButton[primary="true"]:hover {
-    background-color: #1177bb;
+QPushButton[primary="true"]:hover,
+QPushButton#sendButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1177bb, stop:1 #0e639c);
+    border-color: #1177bb;
 }
 
-QPushButton[primary="true"]:pressed {
-    background-color: #094771;
+QPushButton[primary="true"]:pressed,
+QPushButton#sendButton:pressed {
+    background: #094771;
+    border-color: #007acc;
+}
+
+QPushButton[primary="true"]:disabled,
+QPushButton#sendButton:disabled {
+    background: #3e3e42;
+    border-color: #3e3e42;
+    color: #656565;
 }
 
 /* Checkable buttons */
@@ -97,11 +114,12 @@ QPushButton:checked:hover {
 QLineEdit, QTextEdit, QPlainTextEdit {
     background-color: #1e1e1e;
     color: #e0e0e0;
-    border: 1px solid #3e3e42;
+    border: 2px solid #3e3e42;
     border-radius: 4px;
-    padding: 8px 10px;
+    padding: 8px 12px;
     selection-background-color: #264f78;
     selection-color: #ffffff;
+    font-size: 13px;
 }
 
 QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {
@@ -111,7 +129,7 @@ QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
     border: 2px solid #007acc;
     background-color: #252526;
-    padding: 7px 9px;
+    padding: 8px 12px;
 }
 
 QLineEdit:disabled, QTextEdit:disabled {
@@ -565,4 +583,91 @@ QStatusBar::item {
 QTableWidget {
     alternate-background-color: #232323;
 }
+
+/* ==================== TABS (Request Tabs) ==================== */
+
+/* Request tabs - top-level tabs for multiple requests */
+QTabWidget#requestTabs::pane {
+    border: none;
+    border-bottom: 2px solid #3e3e42;
+    background: transparent;
+}
+
+QTabWidget#requestTabs QTabBar::tab {
+    background-color: transparent;
+    color: #9E9E9E;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 10px 20px;
+    min-width: 120px;
+    max-width: 220px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+QTabWidget#requestTabs QTabBar::tab:hover {
+    background-color: #1a3a52;
+    color: #e0e0e0;
+}
+
+QTabWidget#requestTabs QTabBar::tab:selected {
+    background-color: #1e1e1e;
+    color: #007acc;
+    font-weight: 600;
+    border-bottom: 3px solid #007acc;
+}
+
+QTabWidget#requestTabs QTabBar::close-button {
+    subcontrol-position: right;
+    margin-right: 8px;
+}
+
+QTabWidget#requestTabs QTabBar::close-button:hover {
+    /* Don't override the default icon, just change opacity/background subtly */
+}
+
+/* Inner tabs (Params, Headers, Body, etc.) - keep default styling */
+QTabWidget#innerTabs::pane {
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    background: #1e1e1e;
+}
+
+QTabWidget#innerTabs QTabBar::tab {
+    background-color: #252526;
+    color: #9E9E9E;
+    border: none;
+    border-right: 1px solid #3e3e42;
+    padding: 8px 16px;
+    min-width: 80px;
+    font-size: 13px;
+}
+
+QTabWidget#innerTabs QTabBar::tab:hover {
+    background-color: #2d2d30;
+}
+
+QTabWidget#innerTabs QTabBar::tab:selected {
+    background-color: #1e1e1e;
+    color: #007acc;
+    font-weight: 600;
+}
+
+/* New tab button */
+QPushButton#newTabButton {
+    background-color: transparent;
+    color: #9E9E9E;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    font-size: 18px;
+    font-weight: bold;
+    padding: 2px;
+}
+
+QPushButton#newTabButton:hover {
+    background-color: #2d2d30;
+    color: #007acc;
+}
+
 
