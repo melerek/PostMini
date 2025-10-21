@@ -1333,6 +1333,8 @@ class MainWindow(QMainWindow):
     
     def _update_current_request_highlight(self):
         """Update the tree to highlight/bold the currently opened request and underline all open requests."""
+        from PyQt6.QtGui import QIcon
+        
         print(f"[DEBUG] _update_current_request_highlight called")
         
         # Get current request ID from active tab
@@ -1352,6 +1354,13 @@ class MainWindow(QMainWindow):
         
         print(f"[DEBUG] Open request IDs: {open_request_ids}")
         
+        # Determine which icons to use based on current stylesheet
+        current_stylesheet = self.styleSheet()
+        is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
+        arrow_icon_path = "assets/icons/arrow-right-blue-dark.svg" if is_dark else "assets/icons/arrow-right-blue.svg"
+        dot_icon_path = "assets/icons/dot-gray-dark.svg" if is_dark else "assets/icons/dot-gray.svg"
+        collection_dot_icon_path = "assets/icons/dot-blue-dark.svg" if is_dark else "assets/icons/dot-blue.svg"
+        
         # Iterate through all tree items and update styling
         for i in range(self.collections_tree.topLevelItemCount()):
             collection_item = self.collections_tree.topLevelItem(i)
@@ -1367,33 +1376,54 @@ class MainWindow(QMainWindow):
                 request_id = request_data.get('id') if request_data else None
                 
                 if request_id == current_request_id:
-                    # This is the active request - make it bold and underlined
+                    # Active request - bold + arrow icon, no underline
                     font = request_item.font(0)
                     font.setBold(True)
-                    font.setUnderline(True)
+                    font.setUnderline(False)
                     request_item.setFont(0, font)
+                    request_item.setIcon(0, QIcon(arrow_icon_path))
                     collection_has_current = True
                     collection_has_open = True
                 elif request_id in open_request_ids:
-                    # This request is open in another tab - underline only
-                    font = request_item.font(0)
-                    font.setBold(False)
-                    font.setUnderline(True)
-                    request_item.setFont(0, font)
-                    collection_has_open = True
-                else:
-                    # Not open - remove all styling
+                    # Open in another tab - small dot icon, no bold/underline
                     font = request_item.font(0)
                     font.setBold(False)
                     font.setUnderline(False)
                     request_item.setFont(0, font)
+                    request_item.setIcon(0, QIcon(dot_icon_path))
+                    collection_has_open = True
+                else:
+                    # Not open - remove all styling and icon
+                    font = request_item.font(0)
+                    font.setBold(False)
+                    font.setUnderline(False)
+                    request_item.setFont(0, font)
+                    request_item.setIcon(0, QIcon())
             
-            # Make collection bold if it contains the active request
-            # Underline if it contains any open requests
-            font = collection_item.font(0)
-            font.setBold(collection_has_current)
-            font.setUnderline(collection_has_open)
-            collection_item.setFont(0, font)
+            # Update collection styling - add dot icon in text if has open requests
+            if collection_has_current or collection_has_open:
+                # Collection has open requests - add dot to the end
+                original_text = collection_item.text(0)
+                # Remove any existing dot first
+                if ' •' in original_text:
+                    original_text = original_text.replace(' •', '')
+                collection_item.setText(0, f"{original_text} •")
+                
+                font = collection_item.font(0)
+                # Bold if it contains the active request
+                font.setBold(collection_has_current)
+                font.setUnderline(False)
+                collection_item.setFont(0, font)
+            else:
+                # No open requests - remove dot
+                original_text = collection_item.text(0)
+                if ' •' in original_text:
+                    collection_item.setText(0, original_text.replace(' •', ''))
+                
+                font = collection_item.font(0)
+                font.setBold(False)
+                font.setUnderline(False)
+                collection_item.setFont(0, font)
     
     def _on_tree_item_clicked(self, item: QTreeWidgetItem, column: int):
         """Handle single-click on tree item - only for expanding/collapsing collections."""
