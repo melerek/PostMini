@@ -163,14 +163,18 @@ QComboBox:focus {
 }
 
 QComboBox::drop-down {
-    border: none;
+    subcontrol-origin: padding;
+    subcontrol-position: right center;
     width: 20px;
+    border: none;  /* Remove 3D border from drop-down button */
+    background: transparent;  /* Make drop-down area match the combo background */
 }
 
 QComboBox::down-arrow {
-    /* Use default Qt arrow - it works reliably */
-    width: 10px;
-    height: 10px;
+    /* Clean flat arrow icon - no 3D effects */
+    image: url(assets/icons/arrow-down-dark.svg);
+    width: 12px;
+    height: 12px;
 }
 
 QComboBox QAbstractItemView {
@@ -621,10 +625,60 @@ QTabWidget#requestTabs QTabBar::tab:selected {
 QTabWidget#requestTabs QTabBar::close-button {
     subcontrol-position: right;
     margin-right: 8px;
+    image: url(assets/icons/close-tab-dark.svg);
+    width: 14px;
+    height: 14px;
 }
 
 QTabWidget#requestTabs QTabBar::close-button:hover {
-    /* Don't override the default icon, just change opacity/background subtly */
+    image: url(assets/icons/close-tab-hover.svg);
+}
+
+/* Recent requests close button */
+QPushButton#recentRequestsCloseButton {
+    border: 1px solid #3e3e42;
+    background-color: #2d2d30;
+    border-radius: 4px;
+    image: url(assets/icons/close-visible-dark.svg);
+    qproperty-flat: true;
+    padding: 4px;
+}
+
+QPushButton#recentRequestsCloseButton:hover {
+    background-color: #4d2020;  /* Dark red background on hover */
+    border-color: #5a2020;
+    image: url(assets/icons/close-tab-hover.svg);
+}
+
+/* Recent requests panel header */
+QWidget#recentRequestsHeader {
+    background-color: #252526;
+    border-bottom: 1px solid #3e3e42;
+}
+
+QLabel#recentRequestsTitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+QPushButton#recentRequestsClearButton {
+    background-color: transparent;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    color: #9E9E9E;
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+QPushButton#recentRequestsClearButton:hover {
+    background-color: #2d2d30;
+    border-color: #555555;
+    color: #e0e0e0;
+}
+
+QPushButton#recentRequestsClearButton:pressed {
+    background-color: #1e1e1e;
 }
 
 /* Inner tabs (Params, Headers, Body, etc.) - keep default styling */

@@ -243,6 +243,7 @@ class MainWindow(QMainWindow):
         # ==================== RIGHT PANE: Recent Requests ====================
         self.recent_requests_widget = RecentRequestsWidget(self.db)
         self.recent_requests_widget.request_selected.connect(self._load_request)
+        self.recent_requests_widget.close_btn.clicked.connect(self._toggle_recent_requests)  # Connect close button
         self.recent_requests_widget.setVisible(False)  # Hidden by default
         main_splitter.addWidget(self.recent_requests_widget)
         
@@ -2014,15 +2015,17 @@ class MainWindow(QMainWindow):
                 opacity: 0.9;
             }}
             QComboBox::drop-down {{
-                border: none;
+                subcontrol-origin: padding;
+                subcontrol-position: right center;
                 width: 20px;
+                border: none;
+                background: transparent;
             }}
             QComboBox::down-arrow {{
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 5px solid #FFFFFF;
-                margin-right: 5px;
+                /* Clean flat white arrow for colored background */
+                image: url(assets/icons/arrow-down-white.svg);
+                width: 12px;
+                height: 12px;
             }}
         """)
     

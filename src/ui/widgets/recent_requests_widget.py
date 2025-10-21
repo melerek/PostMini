@@ -91,22 +91,40 @@ class RecentRequestsWidget(QWidget):
         """Initialize the user interface."""
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(0)
         
-        # Header
-        header_layout = QHBoxLayout()
+        # Header with modern styling
+        header_widget = QWidget()
+        header_widget.setObjectName("recentRequestsHeader")
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(16, 12, 12, 12)
+        header_layout.setSpacing(8)
+        
         header_label = QLabel("Recent Requests")
-        header_label.setStyleSheet("font-size: 14px; font-weight: bold; padding: 8px;")
+        header_label.setObjectName("recentRequestsTitle")
         header_layout.addWidget(header_label)
         
-        # Clear button
-        clear_btn = QPushButton("🗑️")
-        clear_btn.setMaximumWidth(30)
+        header_layout.addStretch()  # Push buttons to the right
+        
+        # Clear button with modern flat style
+        clear_btn = QPushButton()
+        clear_btn.setObjectName("recentRequestsClearButton")
+        clear_btn.setText("Clear")
+        clear_btn.setMaximumWidth(60)
+        clear_btn.setMaximumHeight(28)
         clear_btn.setToolTip("Clear recent requests")
         clear_btn.clicked.connect(self._clear_recent)
         header_layout.addWidget(clear_btn)
         
-        layout.addLayout(header_layout)
+        # Close button with custom SVG icon
+        self.close_btn = QPushButton()
+        self.close_btn.setObjectName("recentRequestsCloseButton")
+        self.close_btn.setMaximumWidth(28)
+        self.close_btn.setMaximumHeight(28)
+        self.close_btn.setToolTip("Close recent requests panel")
+        header_layout.addWidget(self.close_btn)
+        
+        layout.addWidget(header_widget)
         
         # List widget
         self.list_widget = QListWidget()
