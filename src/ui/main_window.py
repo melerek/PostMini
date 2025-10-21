@@ -418,34 +418,56 @@ class MainWindow(QMainWindow):
         """Restore UI state from a tab's saved state."""
         print(f"[DEBUG] Restoring tab state for request_id={state.get('request_id')}")
         
-        # Load basic info
-        self.current_request_id = state.get('request_id')
-        self.current_collection_id = state.get('collection_id')
-        self.current_request_name = state.get('request_name', 'Untitled')
+        # Block all signals during restoration to prevent marking as modified
+        self.method_combo.blockSignals(True)
+        self.url_input.blockSignals(True)
+        self.params_table.blockSignals(True)
+        self.headers_table.blockSignals(True)
+        self.body_input.blockSignals(True)
+        self.auth_type_combo.blockSignals(True)
+        self.auth_token_input.blockSignals(True)
+        self.description_input.blockSignals(True)
         
-        self.method_combo.setCurrentText(state.get('method', 'GET'))
-        self._update_method_style(state.get('method', 'GET'))
-        self.url_input.setText(state.get('url', ''))
-        
-        # Load params
-        self._load_dict_to_table(state.get('params', {}), self.params_table)
-        
-        # Load headers
-        self._load_dict_to_table(state.get('headers', {}), self.headers_table)
-        
-        # Load body
-        self.body_input.setPlainText(state.get('body', ''))
-        
-        # Load auth
-        self.auth_type_combo.setCurrentText(state.get('auth_type', 'None'))
-        self.auth_token_input.setText(state.get('auth_token', ''))
-        
-        # Load description
-        self.description_input.setPlainText(state.get('description', ''))
-        
-        # Restore change state
-        self.has_unsaved_changes = state.get('has_changes', False)
-        self._update_request_title()
+        try:
+            # Load basic info
+            self.current_request_id = state.get('request_id')
+            self.current_collection_id = state.get('collection_id')
+            self.current_request_name = state.get('request_name', 'Untitled')
+            
+            self.method_combo.setCurrentText(state.get('method', 'GET'))
+            self._update_method_style(state.get('method', 'GET'))
+            self.url_input.setText(state.get('url', ''))
+            
+            # Load params
+            self._load_dict_to_table(state.get('params', {}), self.params_table)
+            
+            # Load headers
+            self._load_dict_to_table(state.get('headers', {}), self.headers_table)
+            
+            # Load body
+            self.body_input.setPlainText(state.get('body', ''))
+            
+            # Load auth
+            self.auth_type_combo.setCurrentText(state.get('auth_type', 'None'))
+            self.auth_token_input.setText(state.get('auth_token', ''))
+            
+            # Load description
+            self.description_input.setPlainText(state.get('description', ''))
+            
+            # Restore change state
+            self.has_unsaved_changes = state.get('has_changes', False)
+            self._update_request_title()
+            
+        finally:
+            # Always unblock signals
+            self.method_combo.blockSignals(False)
+            self.url_input.blockSignals(False)
+            self.params_table.blockSignals(False)
+            self.headers_table.blockSignals(False)
+            self.body_input.blockSignals(False)
+            self.auth_type_combo.blockSignals(False)
+            self.auth_token_input.blockSignals(False)
+            self.description_input.blockSignals(False)
         
         # Restore response if available
         response_data = state.get('response')
