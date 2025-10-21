@@ -217,8 +217,12 @@ class EnvironmentManager:
         """Check if there is an active environment."""
         return self.active_environment is not None
     
+    def get_active_variables(self) -> Dict[str, str]:
+        """Get the active environment variables."""
+        return self.active_variables.copy()
+    
     def substitute_in_request(self, url: str, params: Dict, headers: Dict, 
-                            body: str, auth_token: str) -> Tuple[Dict, List[str]]:
+                            body: str, auth_token: str, extra_variables: Dict = None) -> Tuple[Dict, List[str]]:
         """
         Substitute variables in all request components.
         
@@ -228,6 +232,7 @@ class EnvironmentManager:
             headers: Request headers
             body: Request body
             auth_token: Authentication token
+            extra_variables: Additional variables to merge (e.g., collection variables)
             
         Returns:
             Tuple of (substituted_data_dict, unresolved_variables_list)
@@ -239,46 +244,48 @@ class EnvironmentManager:
             - body: Substituted body
             - auth_token: Substituted auth token
         """
+        # Merge active variables with extra variables (extra takes precedence)
+        variables = self.active_variables.copy()
+        if extra_variables:
+            variables.update(extra_variables)
+        
         all_unresolved = []
         
         # Substitute URL
-        new_url, unresolved = VariableSubstitution.substitute(url, self.active_variables)
+        new_url, unresolved = VariableSubstitution.substitute(url, variables)
         all_unresolved.extend(unresolved)
         
         # Substitute params
         new_params, unresolved = VariableSubstitution.substitute_dict(
-            params or {}, self.active_variables
-        )
+            params, variables
+        ) if params else ({}, [])
         all_unresolved.extend(unresolved)
         
         # Substitute headers
         new_headers, unresolved = VariableSubstitution.substitute_dict(
-            headers or {}, self.active_variables
-        )
+            headers, variables
+        ) if headers else ({}, [])
         all_unresolved.extend(unresolved)
         
         # Substitute body
-        new_body, unresolved = VariableSubstitution.substitute(
-            body or '', self.active_variables
-        )
+        new_body, unresolved = VariableSubstitution.substitute(body, variables) if body else ('', [])
         all_unresolved.extend(unresolved)
         
         # Substitute auth token
         new_auth_token, unresolved = VariableSubstitution.substitute(
-            auth_token or '', self.active_variables
-        )
+            auth_token, variables
+        ) if auth_token else ('', [])
         all_unresolved.extend(unresolved)
         
-        # Remove duplicate unresolved variables
+        # Remove duplicates from unresolved list
         all_unresolved = list(set(all_unresolved))
         
-        result = {
+        return {
             'url': new_url,
             'params': new_params,
             'headers': new_headers,
             'body': new_body,
             'auth_token': new_auth_token
-        }
-        
-        return result, all_unresolved
+        }, all_unresolved
+
 

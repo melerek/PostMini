@@ -46,6 +46,89 @@ from datetime import datetime
 import requests
 
 
+class RequestTreeItemDelegate(QStyledItemDelegate):
+    """Custom delegate to render request items with colored method badges."""
+    
+    def paint(self, painter, option, index):
+        """Custom paint method to color only the method badge."""
+        from PyQt6.QtGui import QPen, QFontMetrics, QIcon, QFont
+        from PyQt6.QtCore import QRect, QSize
+        
+        # Get the text
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if not text or not isinstance(text, str):
+            super().paint(painter, option, index)
+            return
+        
+        # Check if this is a request item (has method badge like [GET], [POST], etc.)
+        if text.startswith('[') and ']' in text:
+            painter.save()
+            
+            # Extract method badge and request name
+            end_bracket = text.index(']')
+            method_badge = text[:end_bracket + 1]  # e.g., "[GET]"
+            request_name = text[end_bracket + 1:]  # e.g., " Request Name"
+            method = method_badge[1:-1]  # Extract method name without brackets
+            
+            # Get method color
+            method_colors = {
+                'GET': '#4EC9B0',      # Teal
+                'POST': '#FF9800',     # Orange
+                'PUT': '#2196F3',      # Blue
+                'PATCH': '#FFC107',    # Yellow
+                'DELETE': '#F44336',   # Red
+                'HEAD': '#9E9E9E',     # Gray
+                'OPTIONS': '#9C27B0'   # Purple
+            }
+            method_color = method_colors.get(method, '#FFFFFF')
+            
+            # Get font from item (respects bold if set)
+            item_font = index.data(Qt.ItemDataRole.FontRole)
+            if item_font and isinstance(item_font, QFont):
+                font = item_font
+            else:
+                font = option.font
+            
+            painter.setFont(font)
+            fm = QFontMetrics(font)
+            
+            # Get icon (arrow or dot for active/open requests)
+            icon = index.data(Qt.ItemDataRole.DecorationRole)
+            
+            # Calculate text positions
+            text_rect = option.rect
+            x = text_rect.x() + 3  # Small left padding
+            
+            # Draw icon if present (arrow or dot)
+            icon_width = 0
+            if icon and isinstance(icon, QIcon) and not icon.isNull():
+                icon_size = 16
+                icon_rect = QRect(x, text_rect.y() + (text_rect.height() - icon_size) // 2, icon_size, icon_size)
+                icon.paint(painter, icon_rect)
+                icon_width = icon_size + 3  # Icon width + spacing
+                x += icon_width
+            
+            # Calculate y position for text
+            y = text_rect.y() + text_rect.height() // 2 + fm.ascent() // 2 - 1
+            
+            # Draw the method badge in color
+            painter.setPen(QPen(QColor(method_color)))
+            painter.drawText(x, y, method_badge)
+            
+            # Move x position for request name
+            badge_width = fm.horizontalAdvance(method_badge)
+            x += badge_width
+            
+            # Draw the request name in gray
+            painter.setPen(QPen(QColor('#CCCCCC')))
+            painter.drawText(x, y, request_name)
+            
+            painter.restore()
+        else:
+            # Not a request item, use default painting
+            super().paint(painter, option, index)
+
+
 class RequestThread(QThread):
     """
     Thread for executing HTTP requests without blocking the UI.
@@ -756,10 +839,15 @@ class MainWindow(QMainWindow):
         # Collections tree
         self.collections_tree = QTreeWidget()
         self.collections_tree.setHeaderHidden(True)  # Hide "Name" header
+        # Set custom delegate for colored method badges
+        self.collections_tree.setItemDelegate(RequestTreeItemDelegate())
         # Single-click on collections to expand/collapse
         self.collections_tree.itemClicked.connect(self._on_tree_item_clicked)
         # Double-click on requests to open in new tab
         self.collections_tree.itemDoubleClicked.connect(self._on_tree_item_double_clicked)
+        # Connect expand/collapse signals for folder icon updates
+        self.collections_tree.itemExpanded.connect(self._on_tree_item_expanded)
+        self.collections_tree.itemCollapsed.connect(self._on_tree_item_collapsed)
         # Disable selection highlighting
         self.collections_tree.setSelectionMode(QTreeWidget.SelectionMode.NoSelection)
         self.collections_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -1294,29 +1382,37 @@ class MainWindow(QMainWindow):
     # ==================== Collections Tree Management ====================
     
     def _load_collections(self):
-        """Load all collections and requests from database into the tree."""
-        # Store currently expanded collection IDs before clearing
-        expanded_ids = set()
+        """Load all collections, folders, and requests from database into the tree."""
+        from PyQt6.QtGui import QIcon
+        
+        # Store currently expanded items (collections and folders) before clearing
+        expanded_collection_ids = set()
+        expanded_folder_ids = set()
         for i in range(self.collections_tree.topLevelItemCount()):
             item = self.collections_tree.topLevelItem(i)
-            if item.isExpanded():
-                data = item.data(0, Qt.ItemDataRole.UserRole)
-                if data and isinstance(data, dict):
-                    expanded_ids.add(data.get('id'))
+            self._store_expanded_state(item, expanded_collection_ids, expanded_folder_ids)
         
         self.collections_tree.clear()
         collections = self.db.get_all_collections()
         
+        # Determine which icons to use based on current stylesheet
+        current_stylesheet = self.styleSheet()
+        is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
+        collection_icon_path = "assets/icons/collection-icon-dark.svg" if is_dark else "assets/icons/collection-icon.svg"
+        folder_icon_path = "assets/icons/folder-icon-dark.svg" if is_dark else "assets/icons/folder-icon.svg"
+        folder_open_icon_path = "assets/icons/folder-open-icon-dark.svg" if is_dark else "assets/icons/folder-open-icon.svg"
+        
         for collection in collections:
-            # Load requests for this collection
-            requests = self.db.get_requests_by_collection(collection['id'])
-            request_count = len(requests)
+            # Load all requests for this collection (for count)
+            all_requests = self.db.get_requests_by_collection(collection['id'])
+            request_count = len(all_requests)
             
-            # Create collection item with folder icon
-            collection_name = f"📁 {collection['name']} [{request_count}]"
+            # Create collection item with custom icon
+            collection_name = f"{collection['name']} [{request_count}]"
             collection_item = QTreeWidgetItem([collection_name])
             collection_item.setData(0, Qt.ItemDataRole.UserRole, 
                                    {'type': 'collection', 'id': collection['id'], 'name': collection['name']})
+            collection_item.setIcon(0, QIcon(collection_icon_path))
             
             # Collection names should NOT be bold by default
             # Bold will be applied only when it contains the active request
@@ -1324,30 +1420,116 @@ class MainWindow(QMainWindow):
             
             self.collections_tree.addTopLevelItem(collection_item)
             
-            # Add request items with method badges (no emoji)
-            for request in requests:
-                method = request['method']
-                method_badge = self._get_method_icon(method)
-                method_color = self._get_method_color(method)
+            # Load folders for this collection
+            folders = self.db.get_folders_by_collection(collection['id'])
+            
+            # Build folder hierarchy
+            folder_items = {}  # folder_id -> QTreeWidgetItem
+            root_folders = [f for f in folders if f['parent_id'] is None]
+            
+            # Create folder items recursively
+            def create_folder_item(folder_data, parent_item):
+                # Count subfolders and requests recursively
+                def count_items(folder_id):
+                    subfolder_count = 0
+                    request_count = 0
+                    
+                    # Count direct requests in this folder
+                    direct_requests = self.db.get_requests_by_folder(folder_id, folder_data['collection_id'])
+                    request_count += len(direct_requests)
+                    
+                    # Count subfolders and their contents
+                    subfolders = [f for f in folders if f['parent_id'] == folder_id]
+                    subfolder_count += len(subfolders)
+                    
+                    for subfolder in subfolders:
+                        sub_folder_count, sub_request_count = count_items(subfolder['id'])
+                        subfolder_count += sub_folder_count
+                        request_count += sub_request_count
+                    
+                    return subfolder_count, request_count
                 
-                # Create item with badge and name - cleaner text format
-                request_text = f"{method_badge} {request['name']}"
-                request_item = QTreeWidgetItem([request_text])
-                request_item.setData(0, Qt.ItemDataRole.UserRole,
-                                    {'type': 'request', 'id': request['id'],
-                                     'collection_id': collection['id']})
+                folder_count, request_count = count_items(folder_data['id'])
                 
-                # Set text color based on method
-                request_item.setForeground(0, QBrush(QColor(method_color)))
+                # Format folder name with counts
+                folder_name = f"{folder_data['name']} [{folder_count}] [{request_count}]"
+                folder_item = QTreeWidgetItem([folder_name])
+                folder_item.setData(0, Qt.ItemDataRole.UserRole,
+                                   {'type': 'folder', 'id': folder_data['id'],
+                                    'collection_id': folder_data['collection_id'],
+                                    'name': folder_data['name']})
                 
-                collection_item.addChild(request_item)
+                # Set icon based on expanded state
+                if folder_data['id'] in expanded_folder_ids:
+                    folder_item.setIcon(0, QIcon(folder_open_icon_path))
+                    folder_item.setExpanded(True)
+                else:
+                    folder_item.setIcon(0, QIcon(folder_icon_path))
+                
+                folder_item.setForeground(0, QBrush(QColor('#CCCCCC')))  # Same gray as collections
+                
+                parent_item.addChild(folder_item)
+                folder_items[folder_data['id']] = folder_item
+                
+                # Add requests in this folder
+                folder_requests = self.db.get_requests_by_folder(folder_data['id'], folder_data['collection_id'])
+                for request in folder_requests:
+                    self._add_request_item_to_tree(request, folder_item, collection['id'])
+                
+                # Recursively add child folders
+                child_folders = [f for f in folders if f['parent_id'] == folder_data['id']]
+                for child_folder in child_folders:
+                    create_folder_item(child_folder, folder_item)
+            
+            # Create root-level folders
+            for folder in root_folders:
+                create_folder_item(folder, collection_item)
+            
+            # Add requests that are not in any folder (collection root)
+            root_requests = self.db.get_requests_by_folder(None, collection['id'])
+            for request in root_requests:
+                self._add_request_item_to_tree(request, collection_item, collection['id'])
             
             # Restore expanded state
-            if collection['id'] in expanded_ids:
+            if collection['id'] in expanded_collection_ids:
                 collection_item.setExpanded(True)
         
         # Highlight currently opened request
         self._update_current_request_highlight()
+    
+    def _store_expanded_state(self, item, expanded_collection_ids, expanded_folder_ids):
+        """Recursively store expanded state of collections and folders."""
+        if item.isExpanded():
+            data = item.data(0, Qt.ItemDataRole.UserRole)
+            if data and isinstance(data, dict):
+                item_type = data.get('type')
+                item_id = data.get('id')
+                if item_type == 'collection':
+                    expanded_collection_ids.add(item_id)
+                elif item_type == 'folder':
+                    expanded_folder_ids.add(item_id)
+        
+        # Recurse through children
+        for i in range(item.childCount()):
+            self._store_expanded_state(item.child(i), expanded_collection_ids, expanded_folder_ids)
+    
+    def _add_request_item_to_tree(self, request, parent_item, collection_id):
+        """Add a request item to the tree under the given parent."""
+        method = request['method']
+        method_badge = self._get_method_icon(method)
+        
+        # Create item with badge and name - request name in default gray color
+        request_text = f"{method_badge} {request['name']}"
+        request_item = QTreeWidgetItem([request_text])
+        request_item.setData(0, Qt.ItemDataRole.UserRole,
+                            {'type': 'request', 'id': request['id'],
+                             'collection_id': collection_id,
+                             'folder_id': request.get('folder_id')})
+        
+        # Set text color to gray (same as collections/folders)
+        request_item.setForeground(0, QBrush(QColor('#CCCCCC')))
+        
+        parent_item.addChild(request_item)
     
     def _update_current_request_highlight(self):
         """Update the tree to highlight/bold the currently opened request and underline all open requests."""
@@ -1377,46 +1559,92 @@ class MainWindow(QMainWindow):
         is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
         arrow_icon_path = "assets/icons/arrow-right-blue-dark.svg" if is_dark else "assets/icons/arrow-right-blue.svg"
         dot_icon_path = "assets/icons/dot-gray-dark.svg" if is_dark else "assets/icons/dot-gray.svg"
-        collection_dot_icon_path = "assets/icons/dot-blue-dark.svg" if is_dark else "assets/icons/dot-blue.svg"
         
-        # Iterate through all tree items and update styling
+        # Recursive function to update all children (including nested folders)
+        def update_item_recursive(item):
+            """Recursively update styling for all children of an item."""
+            has_current = False
+            has_open = False
+            
+            for i in range(item.childCount()):
+                child = item.child(i)
+                child_data = child.data(0, Qt.ItemDataRole.UserRole)
+                
+                if not child_data or not isinstance(child_data, dict):
+                    continue
+                
+                child_type = child_data.get('type')
+                
+                if child_type == 'request':
+                    request_id = child_data.get('id')
+                    
+                    if request_id == current_request_id:
+                        # Active request - bold + arrow icon
+                        font = child.font(0)
+                        font.setBold(True)
+                        font.setUnderline(False)
+                        child.setFont(0, font)
+                        child.setIcon(0, QIcon(arrow_icon_path))
+                        has_current = True
+                        has_open = True
+                    elif request_id in open_request_ids:
+                        # Open in another tab - small dot icon
+                        font = child.font(0)
+                        font.setBold(False)
+                        font.setUnderline(False)
+                        child.setFont(0, font)
+                        child.setIcon(0, QIcon(dot_icon_path))
+                        has_open = True
+                    else:
+                        # Not open - remove all styling
+                        font = child.font(0)
+                        font.setBold(False)
+                        font.setUnderline(False)
+                        child.setFont(0, font)
+                        child.setIcon(0, QIcon())
+                        
+                elif child_type == 'folder':
+                    # Recursively check folder's children
+                    folder_has_current, folder_has_open = update_item_recursive(child)
+                    if folder_has_current:
+                        has_current = True
+                        has_open = True
+                    elif folder_has_open:
+                        has_open = True
+                    
+                    # Update folder styling based on its contents
+                    if folder_has_current or folder_has_open:
+                        # Folder has open requests - add dot to the end
+                        original_text = child.text(0)
+                        # Remove any existing dot first
+                        if ' •' in original_text:
+                            original_text = original_text.replace(' •', '')
+                        child.setText(0, f"{original_text} •")
+                        
+                        font = child.font(0)
+                        # Bold if it contains the active request
+                        font.setBold(folder_has_current)
+                        font.setUnderline(False)
+                        child.setFont(0, font)
+                    else:
+                        # No open requests - remove dot
+                        original_text = child.text(0)
+                        if ' •' in original_text:
+                            child.setText(0, original_text.replace(' •', ''))
+                        
+                        font = child.font(0)
+                        font.setBold(False)
+                        font.setUnderline(False)
+                        child.setFont(0, font)
+            
+            return has_current, has_open
+        
+        # Iterate through all collections
         for i in range(self.collections_tree.topLevelItemCount()):
             collection_item = self.collections_tree.topLevelItem(i)
-            collection_data = collection_item.data(0, Qt.ItemDataRole.UserRole)
             
-            # Check if this collection contains the current request or any open request
-            collection_has_current = False
-            collection_has_open = False
-            
-            for j in range(collection_item.childCount()):
-                request_item = collection_item.child(j)
-                request_data = request_item.data(0, Qt.ItemDataRole.UserRole)
-                request_id = request_data.get('id') if request_data else None
-                
-                if request_id == current_request_id:
-                    # Active request - bold + arrow icon, no underline
-                    font = request_item.font(0)
-                    font.setBold(True)
-                    font.setUnderline(False)
-                    request_item.setFont(0, font)
-                    request_item.setIcon(0, QIcon(arrow_icon_path))
-                    collection_has_current = True
-                    collection_has_open = True
-                elif request_id in open_request_ids:
-                    # Open in another tab - small dot icon, no bold/underline
-                    font = request_item.font(0)
-                    font.setBold(False)
-                    font.setUnderline(False)
-                    request_item.setFont(0, font)
-                    request_item.setIcon(0, QIcon(dot_icon_path))
-                    collection_has_open = True
-                else:
-                    # Not open - remove all styling and icon
-                    font = request_item.font(0)
-                    font.setBold(False)
-                    font.setUnderline(False)
-                    request_item.setFont(0, font)
-                    request_item.setIcon(0, QIcon())
+            # Recursively check all children (including nested folders)
+            collection_has_current, collection_has_open = update_item_recursive(collection_item)
             
             # Update collection styling - add dot icon in text if has open requests
             if collection_has_current or collection_has_open:
@@ -1444,7 +1672,7 @@ class MainWindow(QMainWindow):
                 collection_item.setFont(0, font)
     
     def _on_tree_item_clicked(self, item: QTreeWidgetItem, column: int):
-        """Handle single-click on tree item - only for expanding/collapsing collections."""
+        """Handle single-click on tree item - only for expanding/collapsing collections and folders."""
         if not item:
             return
         
@@ -1454,13 +1682,14 @@ class MainWindow(QMainWindow):
         if not data or not isinstance(data, dict):
             return
         
-        if data.get('type') == 'collection':
-            # Single-click on collection - toggle expansion
+        item_type = data.get('type')
+        if item_type in ('collection', 'folder'):
+            # Single-click on collection or folder - toggle expansion
             item.setExpanded(not item.isExpanded())
         # Requests do nothing on single-click
     
     def _on_tree_item_double_clicked(self, item: QTreeWidgetItem, column: int):
-        """Handle double-click on tree item - open request in new tab or toggle collection."""
+        """Handle double-click on tree item - open request in new tab or toggle collection/folder."""
         import time
         
         print(f"[DEBUG] _on_tree_item_double_clicked called")
@@ -1473,7 +1702,8 @@ class MainWindow(QMainWindow):
         if not data or not isinstance(data, dict):
             return
         
-        if data.get('type') == 'collection':
+        item_type = data.get('type')
+        if item_type in ('collection', 'folder'):
             # Double-click on collection - just toggle expansion
             print(f"[DEBUG] Double-click on collection, toggling expansion")
             item.setExpanded(not item.isExpanded())
@@ -1495,6 +1725,44 @@ class MainWindow(QMainWindow):
             print(f"[DEBUG] Double-click on request {request_id}, calling _open_request_in_new_tab")
             self._open_request_in_new_tab(request_id)
     
+    def _on_tree_item_expanded(self, item: QTreeWidgetItem):
+        """Handle folder expansion - change icon to open folder."""
+        if not item:
+            return
+        
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data or not isinstance(data, dict):
+            return
+        
+        # Only update icon for folders
+        if data.get('type') == 'folder':
+            # Determine which icon to use based on current stylesheet
+            current_stylesheet = self.styleSheet()
+            is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
+            folder_open_icon_path = "assets/icons/folder-open-icon-dark.svg" if is_dark else "assets/icons/folder-open-icon.svg"
+            
+            from PyQt6.QtGui import QIcon
+            item.setIcon(0, QIcon(folder_open_icon_path))
+    
+    def _on_tree_item_collapsed(self, item: QTreeWidgetItem):
+        """Handle folder collapse - change icon to closed folder."""
+        if not item:
+            return
+        
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data or not isinstance(data, dict):
+            return
+        
+        # Only update icon for folders
+        if data.get('type') == 'folder':
+            # Determine which icon to use based on current stylesheet
+            current_stylesheet = self.styleSheet()
+            is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
+            folder_icon_path = "assets/icons/folder-icon-dark.svg" if is_dark else "assets/icons/folder-icon.svg"
+            
+            from PyQt6.QtGui import QIcon
+            item.setIcon(0, QIcon(folder_icon_path))
+    
     def _show_tree_context_menu(self, position):
         """Show context menu for collections tree."""
         item = self.collections_tree.itemAt(position)
@@ -1506,12 +1774,23 @@ class MainWindow(QMainWindow):
             return
         
         menu = QMenu(self)
+        item_type = data.get('type')
         
-        if data.get('type') == 'collection':
+        if item_type == 'collection':
             # Collection context menu
+            add_folder_action = QAction("📁 Add Folder", self)
+            add_folder_action.triggered.connect(lambda: self._add_folder_to_collection(data['id']))
+            menu.addAction(add_folder_action)
+            
             add_request_action = QAction("➕ Add Request", self)
             add_request_action.triggered.connect(lambda: self._add_request_to_collection(data['id']))
             menu.addAction(add_request_action)
+            
+            menu.addSeparator()
+            
+            variables_action = QAction("🔧 Manage Variables", self)
+            variables_action.triggered.connect(lambda: self._manage_collection_variables(data['id']))
+            menu.addAction(variables_action)
             
             menu.addSeparator()
             
@@ -1539,9 +1818,35 @@ class MainWindow(QMainWindow):
             delete_action.triggered.connect(lambda: self._delete_collection_from_menu(data['id']))
             menu.addAction(delete_action)
             
-        elif data.get('type') == 'request':
+        elif item_type == 'folder':
+            # Folder context menu
+            folder_id = data['id']
+            collection_id = data['collection_id']
+            
+            add_folder_action = QAction("📁 Add Subfolder", self)
+            add_folder_action.triggered.connect(lambda checked=False, fid=folder_id, cid=collection_id: self._add_folder_to_folder(cid, fid))
+            menu.addAction(add_folder_action)
+            
+            add_request_action = QAction("➕ Add Request", self)
+            add_request_action.triggered.connect(lambda checked=False, fid=folder_id, cid=collection_id: self._add_request_to_folder(cid, fid))
+            menu.addAction(add_request_action)
+            
+            menu.addSeparator()
+            
+            rename_action = QAction("✏️ Rename", self)
+            rename_action.triggered.connect(lambda checked=False, fid=folder_id: self._rename_folder(fid))
+            menu.addAction(rename_action)
+            
+            menu.addSeparator()
+            
+            delete_action = QAction("🗑️ Delete", self)
+            delete_action.triggered.connect(lambda checked=False, fid=folder_id: self._delete_folder_from_menu(fid))
+            menu.addAction(delete_action)
+            
+        elif item_type == 'request':
             # Request context menu
             request_id = data['id']  # Capture in local variable to avoid closure issues
+            collection_id = data['collection_id']
             
             open_action = QAction("📂 Open", self)
             open_action.triggered.connect(lambda checked=False, rid=request_id: self._load_request(rid))
@@ -1550,6 +1855,28 @@ class MainWindow(QMainWindow):
             open_new_tab_action = QAction("🗂️ Open in New Tab", self)
             open_new_tab_action.triggered.connect(lambda checked=False, rid=request_id: self._open_request_in_new_tab(rid))
             menu.addAction(open_new_tab_action)
+            
+            menu.addSeparator()
+            
+            # Move to folder submenu
+            move_menu = QMenu("📂 Move to", self)
+            
+            # Add "Collection Root" option
+            move_to_root_action = QAction("📦 Collection Root", self)
+            move_to_root_action.triggered.connect(lambda checked=False, rid=request_id: self._move_request_to_folder(rid, None))
+            move_menu.addAction(move_to_root_action)
+            
+            # Add folders
+            folders = self.db.get_folders_by_collection(collection_id)
+            if folders:
+                move_menu.addSeparator()
+                for folder in folders:
+                    folder_action = QAction(f"📁 {folder['name']}", self)
+                    folder_id = folder['id']
+                    folder_action.triggered.connect(lambda checked=False, rid=request_id, fid=folder_id: self._move_request_to_folder(rid, fid))
+                    move_menu.addAction(folder_action)
+            
+            menu.addMenu(move_menu)
             
             menu.addSeparator()
             
@@ -1787,8 +2114,156 @@ class MainWindow(QMainWindow):
                 self.toast.error(f"Failed to create request: {str(e)[:50]}...")
                 QMessageBox.critical(self, "Error", f"Failed to create request: {str(e)}")
     
+    # ==================== Folder Management ====================
+    
+    def _add_folder_to_collection(self, collection_id: int):
+        """Add a new folder to a collection root."""
+        collection = self.db.get_collection(collection_id)
+        collection_name = collection.get('name', 'Unknown') if collection else 'Unknown'
+        
+        name, ok = QInputDialog.getText(
+            self,
+            "New Folder",
+            f"Folder name (will be added to '{collection_name}'):"
+        )
+        if ok and name.strip():
+            try:
+                self.db.create_folder(collection_id, name.strip())
+                self._load_collections()
+                self.toast.success(f"Folder '{name}' created")
+            except Exception as e:
+                self.toast.error(f"Failed to create folder: {str(e)[:50]}...")
+                QMessageBox.critical(self, "Error", f"Failed to create folder: {str(e)}")
+    
+    def _add_folder_to_folder(self, collection_id: int, parent_folder_id: int):
+        """Add a subfolder to an existing folder."""
+        parent_folder = self.db.get_folder(parent_folder_id)
+        parent_name = parent_folder.get('name', 'Unknown') if parent_folder else 'Unknown'
+        
+        name, ok = QInputDialog.getText(
+            self,
+            "New Subfolder",
+            f"Subfolder name (will be added to '{parent_name}'):"
+        )
+        if ok and name.strip():
+            try:
+                self.db.create_folder(collection_id, name.strip(), parent_folder_id)
+                self._load_collections()
+                self.toast.success(f"Subfolder '{name}' created")
+            except Exception as e:
+                self.toast.error(f"Failed to create subfolder: {str(e)[:50]}...")
+                QMessageBox.critical(self, "Error", f"Failed to create subfolder: {str(e)}")
+    
+    def _add_request_to_folder(self, collection_id: int, folder_id: int):
+        """Add a new request to a specific folder."""
+        folder = self.db.get_folder(folder_id)
+        folder_name = folder.get('name', 'Unknown') if folder else 'Unknown'
+        
+        name, ok = QInputDialog.getText(
+            self,
+            "New Request",
+            f"Request name (will be added to folder '{folder_name}'):"
+        )
+        if ok and name.strip():
+            name = name.strip()
+            method = 'GET'
+            
+            try:
+                request_id = self.db.create_request(
+                    collection_id=collection_id,
+                    name=name,
+                    method=method,
+                    url=''
+                )
+                # Move request to folder
+                self.db.move_request_to_folder(request_id, folder_id)
+                self._load_collections()
+                self.toast.success(f"Request '{name}' created in folder '{folder_name}'")
+                
+                # Load the newly created request
+                self.current_request_id = request_id
+                self.current_collection_id = collection_id
+                self.center_stack.setCurrentWidget(self.tabs_container)
+                self._load_request(request_id)
+            except Exception as e:
+                self.toast.error(f"Failed to create request: {str(e)[:50]}...")
+                QMessageBox.critical(self, "Error", f"Failed to create request: {str(e)}")
+    
+    def _rename_folder(self, folder_id: int):
+        """Rename a folder."""
+        folder = self.db.get_folder(folder_id)
+        if not folder:
+            QMessageBox.warning(self, "Error", "Folder not found!")
+            return
+        
+        name, ok = QInputDialog.getText(
+            self,
+            "Rename Folder",
+            "New folder name:",
+            text=folder['name']
+        )
+        if ok and name.strip():
+            try:
+                self.db.update_folder(folder_id, name=name.strip())
+                self._load_collections()
+                self.toast.success(f"Folder renamed to '{name}'")
+            except Exception as e:
+                self.toast.error(f"Failed to rename folder: {str(e)[:50]}...")
+                QMessageBox.critical(self, "Error", f"Failed to rename folder: {str(e)}")
+    
+    def _delete_folder_from_menu(self, folder_id: int):
+        """Delete a folder (from context menu)."""
+        folder = self.db.get_folder(folder_id)
+        if not folder:
+            QMessageBox.warning(self, "Error", "Folder not found!")
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Are you sure you want to delete folder '{folder['name']}'?\n\n"
+            "All subfolders and requests inside will also be deleted!",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                self.db.delete_folder(folder_id)
+                self._load_collections()
+                self.toast.success(f"Folder '{folder['name']}' deleted")
+            except Exception as e:
+                self.toast.error(f"Failed to delete folder: {str(e)[:50]}...")
+                QMessageBox.critical(self, "Error", f"Failed to delete folder: {str(e)}")
+    
+    def _move_request_to_folder(self, request_id: int, folder_id: Optional[int]):
+        """Move a request to a folder (or collection root if folder_id is None)."""
+        try:
+            self.db.move_request_to_folder(request_id, folder_id)
+            self._load_collections()
+            
+            if folder_id is None:
+                self.toast.success("Request moved to collection root")
+            else:
+                folder = self.db.get_folder(folder_id)
+                folder_name = folder.get('name', 'folder') if folder else 'folder'
+                self.toast.success(f"Request moved to '{folder_name}'")
+        except Exception as e:
+            self.toast.error(f"Failed to move request: {str(e)[:50]}...")
+            QMessageBox.critical(self, "Error", f"Failed to move request: {str(e)}")
+    
+    def _manage_collection_variables(self, collection_id: int):
+        """Show collection variables management dialog."""
+        from src.ui.dialogs.collection_variables_dialog import CollectionVariablesDialog
+        
+        collection = self.db.get_collection(collection_id)
+        collection_name = collection.get('name', 'Unknown') if collection else 'Unknown'
+        
+        dialog = CollectionVariablesDialog(self, self.db, collection_id, collection_name)
+        dialog.exec()
+    
     def _delete_selected(self):
-        """Delete the currently selected collection or request."""
+        """Delete the currently selected collection, folder, or request."""
         current_item = self.collections_tree.currentItem()
         if not current_item:
             QMessageBox.warning(self, "Warning", "Please select an item to delete!")
@@ -1818,6 +2293,9 @@ class MainWindow(QMainWindow):
                     self._clear_request_editor()
                     self.center_stack.setCurrentWidget(self.no_request_empty_state)
                     self.toast.success(f"Collection '{item_name}' deleted")
+                elif data['type'] == 'folder':
+                    self.db.delete_folder(data['id'])
+                    self.toast.success(f"Folder '{item_name}' deleted")
                 elif data['type'] == 'request':
                     self.db.delete_request(data['id'])
                     if self.current_request_id == data['id']:
@@ -1976,8 +2454,7 @@ class MainWindow(QMainWindow):
         self._update_tab_counts()
     
     def _get_method_icon(self, method: str) -> str:
-        """Get text badge for HTTP method (no emoji - better rendering)."""
-        # Use method name directly - we'll color it with CSS
+        """Get text badge for HTTP method."""
         return f"[{method}]"
     
     def _get_method_color(self, method: str) -> str:
@@ -2266,19 +2743,31 @@ class MainWindow(QMainWindow):
             auth_type = 'None'
             auth_token = ""
         
-        # Apply variable substitution (both environment and dynamic variables)
+        # Apply variable substitution (collection vars -> environment vars -> dynamic variables)
         # Dynamic variables ($variable) work even without an active environment
+        
+        # Get collection variables if we have a current collection
+        collection_variables = {}
+        if self.current_collection_id:
+            collection_variables = self.db.get_collection_variables(self.current_collection_id)
+        
         if self.env_manager.has_active_environment():
+            # Get environment variables
+            env_variables = self.env_manager.get_active_variables()
+            
+            # Merge variables with collection variables taking precedence
+            merged_variables = {**env_variables, **collection_variables}
+            
             # Substitute both {{env}} and $dynamic variables
             substituted, unresolved = self.env_manager.substitute_in_request(
-                url, params, headers, body, auth_token
+                url, params, headers, body, auth_token, extra_variables=merged_variables
             )
             
             # Warn about unresolved variables
             if unresolved:
                 reply = QMessageBox.question(
                     self, "Unresolved Variables",
-                    f"The following variables are not defined in the current environment:\n"
+                    f"The following variables are not defined:\n"
                     f"{', '.join(unresolved)}\n\n"
                     f"Do you want to continue anyway?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
@@ -2297,6 +2786,38 @@ class MainWindow(QMainWindow):
             # Don't overwrite OAuth token with substituted auth_token
             if auth_type == 'Bearer Token':
                 auth_token = substituted['auth_token']
+        elif collection_variables:
+            # No active environment, but we have collection variables
+            from src.features.variable_substitution import VariableSubstitution
+            
+            # Substitute URL
+            url, _ = VariableSubstitution.substitute(url, collection_variables)
+            
+            # Substitute params
+            if params:
+                new_params = {}
+                for k, v in params.items():
+                    new_key, _ = VariableSubstitution.substitute(k, collection_variables)
+                    new_val, _ = VariableSubstitution.substitute(v, collection_variables)
+                    new_params[new_key] = new_val
+                params = new_params
+            
+            # Substitute headers
+            if headers:
+                new_headers = {}
+                for k, v in headers.items():
+                    new_key, _ = VariableSubstitution.substitute(k, collection_variables)
+                    new_val, _ = VariableSubstitution.substitute(v, collection_variables)
+                    new_headers[new_key] = new_val
+                headers = new_headers
+            
+            # Substitute body
+            if body:
+                body, _ = VariableSubstitution.substitute(body, collection_variables)
+            
+            # Substitute auth token
+            if auth_token:
+                auth_token, _ = VariableSubstitution.substitute(auth_token, collection_variables)
         else:
             # No active environment, but still substitute dynamic variables
             from src.features.variable_substitution import VariableSubstitution

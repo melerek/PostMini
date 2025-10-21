@@ -180,6 +180,40 @@ class DatabaseManager:
             )
         """)
         
+        # Create folders table for organizing requests within collections
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collection_id INTEGER NOT NULL,
+                parent_id INTEGER,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Create collection variables table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS collection_variables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collection_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT,
+                description TEXT,
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                UNIQUE(collection_id, key)
+            )
+        """)
+        
+        # Add folder_id column to requests table if it doesn't exist (migration)
+        try:
+            cursor.execute("ALTER TABLE requests ADD COLUMN folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
         self.connection.commit()
     
     # ==================== Collection Operations ====================
@@ -1119,6 +1153,312 @@ class DatabaseManager:
         """Delete a Git workspace configuration."""
         cursor = self.connection.cursor()
         cursor.execute("DELETE FROM git_workspaces WHERE id = ?", (workspace_id,))
+        self.connection.commit()
+    
+    # ==================== Folder Operations ====================
+    
+    def create_folder(self, collection_id: int, name: str, parent_id: Optional[int] = None) -> int:
+        """
+        Create a new folder within a collection.
+        
+        Args:
+            collection_id: ID of the collection
+            name: Name of the folder
+            parent_id: ID of the parent folder (for nesting), or None for root level
+            
+        Returns:
+            ID of the newly created folder
+        """
+        from datetime import datetime
+        cursor = self.connection.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute("""
+            INSERT INTO folders (collection_id, parent_id, name, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (collection_id, parent_id, name, now))
+        self.connection.commit()
+        return cursor.lastrowid
+    
+    def get_folders_by_collection(self, collection_id: int) -> List[Dict]:
+        """
+        Get all folders in a collection.
+        
+        Args:
+            collection_id: ID of the collection
+            
+        Returns:
+            List of folder dictionaries
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT id, collection_id, parent_id, name, created_at
+            FROM folders
+            WHERE collection_id = ?
+            ORDER BY name
+        """, (collection_id,))
+        
+        folders = []
+        for row in cursor.fetchall():
+            folders.append({
+                'id': row[0],
+                'collection_id': row[1],
+                'parent_id': row[2],
+                'name': row[3],
+                'created_at': row[4]
+            })
+        return folders
+    
+    def get_folder(self, folder_id: int) -> Optional[Dict]:
+        """
+        Get a folder by ID.
+        
+        Args:
+            folder_id: ID of the folder
+            
+        Returns:
+            Folder dictionary or None if not found
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT id, collection_id, parent_id, name, created_at
+            FROM folders
+            WHERE id = ?
+        """, (folder_id,))
+        
+        row = cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'collection_id': row[1],
+                'parent_id': row[2],
+                'name': row[3],
+                'created_at': row[4]
+            }
+        return None
+    
+    def update_folder(self, folder_id: int, name: Optional[str] = None, parent_id: Optional[int] = None):
+        """
+        Update a folder's name or parent.
+        
+        Args:
+            folder_id: ID of the folder to update
+            name: New name (if changing)
+            parent_id: New parent ID (if moving), use -1 to set to None (root level)
+        """
+        cursor = self.connection.cursor()
+        
+        if name is not None:
+            cursor.execute("UPDATE folders SET name = ? WHERE id = ?", (name, folder_id))
+        
+        if parent_id is not None:
+            # Allow -1 to explicitly set parent_id to NULL (move to root)
+            actual_parent_id = None if parent_id == -1 else parent_id
+            cursor.execute("UPDATE folders SET parent_id = ? WHERE id = ?", (actual_parent_id, folder_id))
+        
+        self.connection.commit()
+    
+    def delete_folder(self, folder_id: int):
+        """
+        Delete a folder. Child folders and requests will be handled by CASCADE.
+        
+        Args:
+            folder_id: ID of the folder to delete
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
+        self.connection.commit()
+    
+    def move_request_to_folder(self, request_id: int, folder_id: Optional[int]):
+        """
+        Move a request to a folder (or to collection root if folder_id is None).
+        
+        Args:
+            request_id: ID of the request to move
+            folder_id: ID of the destination folder, or None for collection root
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("UPDATE requests SET folder_id = ? WHERE id = ?", (folder_id, request_id))
+        self.connection.commit()
+    
+    def get_requests_by_folder(self, folder_id: Optional[int], collection_id: int) -> List[Dict]:
+        """
+        Get all requests in a folder (or in collection root if folder_id is None).
+        
+        Args:
+            folder_id: ID of the folder, or None for collection root
+            collection_id: ID of the collection
+            
+        Returns:
+            List of request dictionaries
+        """
+        cursor = self.connection.cursor()
+        
+        if folder_id is None:
+            # Get requests at collection root (no folder)
+            cursor.execute("""
+                SELECT id, collection_id, folder_id, name, method, url, params, 
+                       headers, body, auth_type, auth_token, description
+                FROM requests
+                WHERE collection_id = ? AND folder_id IS NULL
+                ORDER BY name
+            """, (collection_id,))
+        else:
+            # Get requests in specific folder
+            cursor.execute("""
+                SELECT id, collection_id, folder_id, name, method, url, params, 
+                       headers, body, auth_type, auth_token, description
+                FROM requests
+                WHERE folder_id = ?
+                ORDER BY name
+            """, (folder_id,))
+        
+        requests = []
+        for row in cursor.fetchall():
+            requests.append({
+                'id': row[0],
+                'collection_id': row[1],
+                'folder_id': row[2],
+                'name': row[3],
+                'method': row[4],
+                'url': row[5],
+                'params': json.loads(row[6]) if row[6] else {},
+                'headers': json.loads(row[7]) if row[7] else {},
+                'body': row[8] or '',
+                'auth_type': row[9] or 'None',
+                'auth_token': row[10] or '',
+                'description': row[11] or ''
+            })
+        return requests
+    
+    # ==================== Collection Variables Operations ====================
+    
+    def create_collection_variable(self, collection_id: int, key: str, value: str, description: str = "") -> int:
+        """
+        Create or update a collection variable.
+        
+        Args:
+            collection_id: ID of the collection
+            key: Variable key/name
+            value: Variable value
+            description: Optional description
+            
+        Returns:
+            ID of the variable
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            INSERT INTO collection_variables (collection_id, key, value, description)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(collection_id, key) DO UPDATE SET
+                value = excluded.value,
+                description = excluded.description
+        """, (collection_id, key, value, description))
+        self.connection.commit()
+        return cursor.lastrowid
+    
+    def get_collection_variables(self, collection_id: int) -> Dict[str, str]:
+        """
+        Get all variables for a collection.
+        
+        Args:
+            collection_id: ID of the collection
+            
+        Returns:
+            Dictionary of key-value pairs
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT key, value
+            FROM collection_variables
+            WHERE collection_id = ?
+            ORDER BY key
+        """, (collection_id,))
+        
+        variables = {}
+        for row in cursor.fetchall():
+            variables[row[0]] = row[1]
+        return variables
+    
+    def get_collection_variables_with_metadata(self, collection_id: int) -> List[Dict]:
+        """
+        Get all variables for a collection with full metadata.
+        
+        Args:
+            collection_id: ID of the collection
+            
+        Returns:
+            List of variable dictionaries with id, key, value, and description
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT id, key, value, description
+            FROM collection_variables
+            WHERE collection_id = ?
+            ORDER BY key
+        """, (collection_id,))
+        
+        variables = []
+        for row in cursor.fetchall():
+            variables.append({
+                'id': row[0],
+                'key': row[1],
+                'value': row[2],
+                'description': row[3] or ''
+            })
+        return variables
+    
+    def update_collection_variable(self, variable_id: int, key: Optional[str] = None, 
+                                  value: Optional[str] = None, description: Optional[str] = None):
+        """
+        Update a collection variable.
+        
+        Args:
+            variable_id: ID of the variable to update
+            key: New key (if changing)
+            value: New value (if changing)
+            description: New description (if changing)
+        """
+        cursor = self.connection.cursor()
+        
+        updates = []
+        params = []
+        
+        if key is not None:
+            updates.append("key = ?")
+            params.append(key)
+        if value is not None:
+            updates.append("value = ?")
+            params.append(value)
+        if description is not None:
+            updates.append("description = ?")
+            params.append(description)
+        
+        if updates:
+            params.append(variable_id)
+            query = f"UPDATE collection_variables SET {', '.join(updates)} WHERE id = ?"
+            cursor.execute(query, params)
+            self.connection.commit()
+    
+    def delete_collection_variable(self, variable_id: int):
+        """
+        Delete a collection variable.
+        
+        Args:
+            variable_id: ID of the variable to delete
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM collection_variables WHERE id = ?", (variable_id,))
+        self.connection.commit()
+    
+    def delete_collection_variables_by_collection(self, collection_id: int):
+        """
+        Delete all variables for a collection.
+        
+        Args:
+            collection_id: ID of the collection
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM collection_variables WHERE collection_id = ?", (collection_id,))
         self.connection.commit()
     
     def close(self):
