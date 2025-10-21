@@ -731,10 +731,6 @@ class MainWindow(QMainWindow):
         code_shortcut = QShortcut(QKeySequence("Ctrl+Shift+C"), self)
         code_shortcut.activated.connect(self._generate_code)
         
-        # New request (Ctrl+N)
-        new_request_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
-        new_request_shortcut.activated.connect(self._add_request)
-        
         # Close tab (Ctrl+W)
         close_tab_shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
         close_tab_shortcut.activated.connect(lambda: self._close_tab(self.request_tabs.currentIndex()))
@@ -3412,22 +3408,38 @@ class MainWindow(QMainWindow):
         help_text = """
 <h2>Keyboard Shortcuts</h2>
 
+<h3>Tab Management:</h3>
+<table cellpadding="5">
+<tr><td><b>Ctrl+W</b></td><td>Close current tab</td></tr>
+<tr><td><b>Double-click request</b></td><td>Open request in new tab</td></tr>
+<tr><td><b>Middle-click tab</b></td><td>Close tab</td></tr>
+</table>
+
 <h3>Request Operations:</h3>
 <table cellpadding="5">
 <tr><td><b>Ctrl+Enter</b></td><td>Send request</td></tr>
 <tr><td><b>Ctrl+S</b></td><td>Save request</td></tr>
-<tr><td><b>Ctrl+N</b></td><td>Create new request</td></tr>
 <tr><td><b>Delete</b></td><td>Delete selected item</td></tr>
 </table>
 
 <h3>Navigation:</h3>
 <table cellpadding="5">
 <tr><td><b>Ctrl+L</b></td><td>Focus URL bar</td></tr>
+<tr><td><b>Single-click collection</b></td><td>Expand/collapse collection</td></tr>
+<tr><td><b>Double-click collection</b></td><td>Expand/collapse collection</td></tr>
 </table>
 
 <h3>Tools:</h3>
 <table cellpadding="5">
 <tr><td><b>Ctrl+Shift+C</b></td><td>Generate code snippet</td></tr>
+</table>
+
+<h3>Visual Indicators:</h3>
+<table cellpadding="5">
+<tr><td><b>Bold + Arrow (→)</b></td><td>Active request in current tab</td></tr>
+<tr><td><b>Gray dot (•)</b></td><td>Request open in another tab</td></tr>
+<tr><td><b>Bold + Blue dot (•)</b></td><td>Collection contains active request</td></tr>
+<tr><td><b>Blue dot (•)</b></td><td>Collection has open requests</td></tr>
 </table>
 
 <h3>Help:</h3>
