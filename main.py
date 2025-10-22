@@ -37,14 +37,23 @@ def load_stylesheet(filename: str = "styles.qss") -> str:
         
         if stylesheet_path.exists():
             with open(stylesheet_path, 'r', encoding='utf-8') as f:
-                return f.read()
+                content = f.read()
+        else:
+            # Fallback: try current directory (for development)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            stylesheet_path = os.path.join(script_dir, filename)
+            
+            with open(stylesheet_path, 'r', encoding='utf-8') as f:
+                content = f.read()
         
-        # Fallback: try current directory (for development)
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        stylesheet_path = os.path.join(script_dir, filename)
+        # Replace relative asset paths with absolute paths
+        assets_dir = resources_dir / "assets"
+        # Convert Windows backslashes to forward slashes for CSS
+        assets_path_str = str(assets_dir).replace('\\', '/')
+        content = content.replace('assets/', f'{assets_path_str}/')
         
-        with open(stylesheet_path, 'r', encoding='utf-8') as f:
-            return f.read()
+        return content
+        
     except FileNotFoundError:
         print(f"Warning: Stylesheet file '{filename}' not found. Using default styling.")
         return ""

@@ -20,6 +20,7 @@ from typing import Dict, Optional
 
 from src.core.database import DatabaseManager
 from src.core.api_client import ApiClient, ApiResponse
+from src.core.app_paths import AppPaths
 from src.ui.dialogs.environment_dialog import EnvironmentDialog
 from src.features.variable_substitution import EnvironmentManager
 from src.features.collection_io import CollectionExporter, CollectionImporter, get_safe_filename
@@ -248,6 +249,20 @@ class MainWindow(QMainWindow):
         
         # Initialize method combo styling
         self._update_method_style('GET')
+    
+    def _get_icon_path(self, icon_name: str) -> str:
+        """
+        Get the full path to an icon file.
+        
+        Args:
+            icon_name: Name of the icon file (e.g., 'collection-icon.svg')
+            
+        Returns:
+            Full path to the icon file
+        """
+        resources_dir = AppPaths.get_resources_dir()
+        icon_path = resources_dir / "assets" / "icons" / icon_name
+        return str(icon_path)
     
     def _init_ui(self):
         """Initialize the user interface with all components."""
@@ -1398,9 +1413,9 @@ class MainWindow(QMainWindow):
         # Determine which icons to use based on current stylesheet
         current_stylesheet = self.styleSheet()
         is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
-        collection_icon_path = "assets/icons/collection-icon-dark.svg" if is_dark else "assets/icons/collection-icon.svg"
-        folder_icon_path = "assets/icons/folder-icon-dark.svg" if is_dark else "assets/icons/folder-icon.svg"
-        folder_open_icon_path = "assets/icons/folder-open-icon-dark.svg" if is_dark else "assets/icons/folder-open-icon.svg"
+        collection_icon_path = self._get_icon_path("collection-icon-dark.svg" if is_dark else "collection-icon.svg")
+        folder_icon_path = self._get_icon_path("folder-icon-dark.svg" if is_dark else "folder-icon.svg")
+        folder_open_icon_path = self._get_icon_path("folder-open-icon-dark.svg" if is_dark else "folder-open-icon.svg")
         
         for collection in collections:
             # Load all requests for this collection (for count)
@@ -1557,8 +1572,8 @@ class MainWindow(QMainWindow):
         # Determine which icons to use based on current stylesheet
         current_stylesheet = self.styleSheet()
         is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
-        arrow_icon_path = "assets/icons/arrow-right-blue-dark.svg" if is_dark else "assets/icons/arrow-right-blue.svg"
-        dot_icon_path = "assets/icons/dot-gray-dark.svg" if is_dark else "assets/icons/dot-gray.svg"
+        arrow_icon_path = self._get_icon_path("arrow-right-blue-dark.svg" if is_dark else "arrow-right-blue.svg")
+        dot_icon_path = self._get_icon_path("dot-gray-dark.svg" if is_dark else "dot-gray.svg")
         
         # Recursive function to update all children (including nested folders)
         def update_item_recursive(item):
@@ -1739,7 +1754,7 @@ class MainWindow(QMainWindow):
             # Determine which icon to use based on current stylesheet
             current_stylesheet = self.styleSheet()
             is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
-            folder_open_icon_path = "assets/icons/folder-open-icon-dark.svg" if is_dark else "assets/icons/folder-open-icon.svg"
+            folder_open_icon_path = self._get_icon_path("folder-open-icon-dark.svg" if is_dark else "folder-open-icon.svg")
             
             from PyQt6.QtGui import QIcon
             item.setIcon(0, QIcon(folder_open_icon_path))
@@ -1758,7 +1773,7 @@ class MainWindow(QMainWindow):
             # Determine which icon to use based on current stylesheet
             current_stylesheet = self.styleSheet()
             is_dark = 'dark' in current_stylesheet.lower() or '#252526' in current_stylesheet or '#1e1e1e' in current_stylesheet
-            folder_icon_path = "assets/icons/folder-icon-dark.svg" if is_dark else "assets/icons/folder-icon.svg"
+            folder_icon_path = self._get_icon_path("folder-icon-dark.svg" if is_dark else "folder-icon.svg")
             
             from PyQt6.QtGui import QIcon
             item.setIcon(0, QIcon(folder_icon_path))
