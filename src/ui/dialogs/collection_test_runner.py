@@ -6,16 +6,21 @@ Runs tests for all requests in a collection.
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QProgressBar, QTextEdit, QGroupBox
+    QLabel, QProgressBar, QTextEdit, QGroupBox, QFileDialog, QMessageBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 from typing import Dict, List
+import webbrowser
+import os
 
 from src.core.database import DatabaseManager
 from src.core.api_client import ApiClient
-from src.features.test_engine import TestEngine, TestAssertion
+from src.features.test_engine import TestEngine, TestAssertion, TestResult
 from src.features.variable_substitution import EnvironmentManager
+from src.features.test_report_generator import (
+    HTMLReportGenerator, JUnitXMLGenerator, JSONReportGenerator, CSVReportGenerator
+)
 
 
 class CollectionTestThread(QThread):
@@ -183,9 +188,11 @@ class CollectionTestRunnerDialog(QDialog):
         self.collection_name = collection_name
         self.env_manager = env_manager
         self.test_thread = None
+        self.test_results = []  # Store all test results for export
+        self.test_summary = {}  # Store summary for export
         
         self.setWindowTitle(f"Test Runner: {collection_name}")
-        self.setGeometry(200, 200, 700, 500)
+        self.setGeometry(200, 200, 750, 550)
         
         self._init_ui()
     
@@ -232,6 +239,26 @@ class CollectionTestRunnerDialog(QDialog):
         
         # Buttons
         button_layout = QHBoxLayout()
+        
+        # Export buttons (initially disabled)
+        self.export_html_btn = QPushButton("📄 Export HTML")
+        self.export_html_btn.clicked.connect(self._export_html)
+        self.export_html_btn.setEnabled(False)
+        self.export_html_btn.setToolTip("Export test results as HTML report")
+        button_layout.addWidget(self.export_html_btn)
+        
+        self.export_junit_btn = QPushButton("📋 Export JUnit XML")
+        self.export_junit_btn.clicked.connect(self._export_junit)
+        self.export_junit_btn.setEnabled(False)
+        self.export_junit_btn.setToolTip("Export for CI/CD (Jenkins, GitLab, etc.)")
+        button_layout.addWidget(self.export_junit_btn)
+        
+        self.export_json_btn = QPushButton("🔧 Export JSON")
+        self.export_json_btn.clicked.connect(self._export_json)
+        self.export_json_btn.setEnabled(False)
+        self.export_json_btn.setToolTip("Export as JSON for automation")
+        button_layout.addWidget(self.export_json_btn)
+        
         button_layout.addStretch()
         
         self.run_btn = QPushButton("▶️ Run Tests")
@@ -306,6 +333,15 @@ class CollectionTestRunnerDialog(QDialog):
         self.stop_btn.setEnabled(False)
         self.close_btn.setEnabled(True)
         
+        # Store results for export
+        self.test_summary = summary
+        if 'results' in summary:
+            # Collect all TestResult objects
+            self.test_results = []
+            for result_data in summary['results']:
+                if 'results' in result_data:
+                    self.test_results.extend(result_data['results'])
+        
         if 'error' in summary:
             self._log(f"\n❌ Test run failed: {summary['error']}\n")
             self.summary_label.setText("Test run failed!")
@@ -318,6 +354,12 @@ class CollectionTestRunnerDialog(QDialog):
         total_tests = summary.get('total_tests', 0)
         passed = summary.get('passed', 0)
         failed = summary.get('failed', 0)
+        
+        # Enable export buttons if we have results
+        if total_tests > 0:
+            self.export_html_btn.setEnabled(True)
+            self.export_junit_btn.setEnabled(True)
+            self.export_json_btn.setEnabled(True)
         
         self._log(f"\n{'='*50}\n")
         self._log(f"Test Run Complete!\n")
@@ -350,6 +392,123 @@ class CollectionTestRunnerDialog(QDialog):
         self.log_text.verticalScrollBar().setValue(
             self.log_text.verticalScrollBar().maximum()
         )
+    
+    def _get_report_metadata(self) -> Dict:
+        """Get metadata for report generation."""
+        from datetime import datetime
+        metadata = {
+            'collection_name': self.collection_name,
+            'timestamp': datetime.now().isoformat(),
+        }
+        
+        if self.env_manager and self.env_manager.has_active_environment():
+            metadata['environment'] = self.env_manager.get_active_environment_name()
+        
+        return metadata
+    
+    def _export_html(self):
+        """Export test results as HTML."""
+        if not self.test_results:
+            QMessageBox.warning(self, "No Results", "No test results to export!")
+            return
+        
+        # Get save location
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save HTML Report",
+            f"test_report_{self.collection_name.replace(' ', '_')}.html",
+            "HTML Files (*.html)"
+        )
+        
+        if not filename:
+            return
+        
+        try:
+            metadata = self._get_report_metadata()
+            html_content = HTMLReportGenerator.generate(self.test_results, metadata)
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            # Ask if user wants to open the report
+            reply = QMessageBox.question(
+                self,
+                "Export Successful",
+                f"HTML report saved successfully!\n\nWould you like to open it in your browser?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                webbrowser.open('file://' + os.path.abspath(filename))
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Failed to export HTML:\n{str(e)}")
+    
+    def _export_junit(self):
+        """Export test results as JUnit XML."""
+        if not self.test_results:
+            QMessageBox.warning(self, "No Results", "No test results to export!")
+            return
+        
+        # Get save location
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save JUnit XML Report",
+            f"junit_{self.collection_name.replace(' ', '_')}.xml",
+            "XML Files (*.xml)"
+        )
+        
+        if not filename:
+            return
+        
+        try:
+            metadata = self._get_report_metadata()
+            xml_content = JUnitXMLGenerator.generate(self.test_results, metadata)
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(xml_content)
+            
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                f"JUnit XML report saved successfully!\n\n{filename}\n\nYou can now use this report in your CI/CD pipeline (Jenkins, GitLab, etc.)"
+            )
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Failed to export JUnit XML:\n{str(e)}")
+    
+    def _export_json(self):
+        """Export test results as JSON."""
+        if not self.test_results:
+            QMessageBox.warning(self, "No Results", "No test results to export!")
+            return
+        
+        # Get save location
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save JSON Report",
+            f"test_results_{self.collection_name.replace(' ', '_')}.json",
+            "JSON Files (*.json)"
+        )
+        
+        if not filename:
+            return
+        
+        try:
+            metadata = self._get_report_metadata()
+            json_content = JSONReportGenerator.generate(self.test_results, metadata)
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(json_content)
+            
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                f"JSON report saved successfully!\n\n{filename}\n\nYou can now process this report with custom automation scripts."
+            )
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Failed to export JSON:\n{str(e)}")
     
     def closeEvent(self, event):
         """Handle dialog close event - clean up test thread."""

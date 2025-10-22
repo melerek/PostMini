@@ -1,0 +1,123 @@
+{
+  "export_version": "1.0",
+  "export_date": "2025-10-22T12:00:00",
+  "collection": {
+    "name": "QA Features Test Collection",
+    "requests": [
+      {
+        "name": "1. Get All Posts",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 1: Get all posts. This is a simple GET request to verify the API works."
+      },
+      {
+        "name": "2. Get Single Post - Extract userId",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 2: Get a single post. AFTER SENDING: Click 'userId' in response to extract it (when feature is integrated)"
+      },
+      {
+        "name": "3. Get User (would use extracted userId)",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/users/1",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 3: Get user details. NOTE: When variable extraction is integrated, change URL to: /users/{{extracted.userId}}"
+      },
+      {
+        "name": "4. Create New Post - Extract id",
+        "method": "POST",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "params": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\n  \"title\": \"Test Post from PostMini\",\n  \"body\": \"This is a test post to demonstrate request chaining\",\n  \"userId\": 1\n}",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 4: Create a new post. AFTER SENDING: Extract 'id' from response as 'postId' (when feature is integrated)"
+      },
+      {
+        "name": "5. Get All Comments",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/comments?postId=1",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 5: Get comments for a post."
+      },
+      {
+        "name": "6. Test Multiple Response Types",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/users/1",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 6: Comprehensive test with nested JSON to demonstrate extraction capabilities."
+      },
+      {
+        "name": "7. Update Post Example",
+        "method": "PUT",
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "params": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\n  \"id\": 1,\n  \"title\": \"Updated Title\",\n  \"body\": \"Updated body content\",\n  \"userId\": 1\n}",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 7: Update a post."
+      },
+      {
+        "name": "8. Delete Example",
+        "method": "DELETE",
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 8: Delete a post."
+      },
+      {
+        "name": "9. Get Albums",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/albums",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 9: Get all albums."
+      },
+      {
+        "name": "10. Get Photos",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/photos?albumId=1&_limit=5",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "description": "Step 10: Get photos (limited to 5 for faster response)."
+      }
+    ]
+  }
+}

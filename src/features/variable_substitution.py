@@ -17,36 +17,43 @@ class VariableSubstitution:
     """
     Handles variable substitution with support for:
     - {{variable}} - Environment variables
+    - {{extracted.variable}} - Extracted variables (from responses)
     - $variable - Dynamic variables (auto-generated)
     """
     
-    # Regex pattern to match {{variableName}}
-    VARIABLE_PATTERN = re.compile(r'\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
+    # Regex pattern to match {{variableName}} or {{extracted.variableName}}
+    VARIABLE_PATTERN = re.compile(r'\{\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?)\}\}')
     
     # Regex pattern to match $variableName
     DYNAMIC_VARIABLE_PATTERN = re.compile(r'\$([a-zA-Z][a-zA-Z0-9]*)')
     
     @staticmethod
-    def substitute(text: str, variables: Dict[str, str]) -> Tuple[str, List[str]]:
+    def substitute(text: str, variables: Dict[str, str], extracted_variables: Dict[str, str] = None) -> Tuple[str, List[str]]:
         """
-        Replace all {{variable}} and $variable occurrences in text with their values.
+        Replace all {{variable}}, {{extracted.variable}}, and $variable occurrences in text with their values.
         
         Dynamic variables ($variable) are processed first, then environment variables ({{variable}}).
+        Extracted variables use {{extracted.variableName}} syntax.
         
         Args:
             text: The text containing variables to substitute
             variables: Dictionary of variable names to values (for {{var}} syntax)
+            extracted_variables: Dictionary of extracted variable names to values
             
         Returns:
             Tuple of (substituted_text, list_of_unresolved_variables)
             
         Example:
             >>> variables = {'baseUrl': 'https://api.example.com', 'version': 'v1'}
-            >>> substitute('{{baseUrl}}/{{version}}/users/$guid', variables)
-            ('https://api.example.com/v1/users/a3f2e8d1-...', [])
+            >>> extracted = {'authToken': 'abc123'}
+            >>> substitute('{{baseUrl}}/{{version}}/users?token={{extracted.authToken}}', variables, extracted)
+            ('https://api.example.com/v1/users?token=abc123', [])
         """
         if not text:
             return text, []
+        
+        if extracted_variables is None:
+            extracted_variables = {}
         
         unresolved = []
         
@@ -61,26 +68,38 @@ class VariableSubstitution:
         
         result = VariableSubstitution.DYNAMIC_VARIABLE_PATTERN.sub(replace_dynamic, text)
         
-        # Second pass: substitute environment variables ({{variable}})
+        # Second pass: substitute environment and extracted variables ({{variable}} or {{extracted.variable}})
         def replace_env(match):
-            var_name = match.group(1)
-            if var_name in variables:
-                return str(variables[var_name])
+            var_path = match.group(1)
+            
+            # Check if it's an extracted variable
+            if var_path.startswith('extracted.'):
+                var_name = var_path.split('.', 1)[1]
+                if var_name in extracted_variables:
+                    return str(extracted_variables[var_name])
+                else:
+                    unresolved.append(f"extracted.{var_name}")
+                    return match.group(0)  # Keep original if not found
             else:
-                unresolved.append(var_name)
-                return match.group(0)  # Keep original {{var}} if not found
+                # Regular environment variable
+                if var_path in variables:
+                    return str(variables[var_path])
+                else:
+                    unresolved.append(var_path)
+                    return match.group(0)  # Keep original {{var}} if not found
         
         result = VariableSubstitution.VARIABLE_PATTERN.sub(replace_env, result)
         return result, unresolved
     
     @staticmethod
-    def substitute_dict(data: Dict, variables: Dict[str, str]) -> Tuple[Dict, List[str]]:
+    def substitute_dict(data: Dict, variables: Dict[str, str], extracted_variables: Dict[str, str] = None) -> Tuple[Dict, List[str]]:
         """
         Substitute variables in all values of a dictionary.
         
         Args:
             data: Dictionary with values that may contain variables
             variables: Dictionary of variable names to values
+            extracted_variables: Dictionary of extracted variable names to values
             
         Returns:
             Tuple of (substituted_dict, list_of_unresolved_variables)
@@ -93,8 +112,8 @@ class VariableSubstitution:
         
         for key, value in data.items():
             # Substitute in both key and value
-            new_key, unresolved_key = VariableSubstitution.substitute(str(key), variables)
-            new_value, unresolved_value = VariableSubstitution.substitute(str(value), variables)
+            new_key, unresolved_key = VariableSubstitution.substitute(str(key), variables, extracted_variables)
+            new_value, unresolved_value = VariableSubstitution.substitute(str(value), variables, extracted_variables)
             
             result[new_key] = new_value
             all_unresolved.extend(unresolved_key)
@@ -191,6 +210,20 @@ class EnvironmentManager:
     def __init__(self):
         self.active_environment = None
         self.active_variables = {}
+        self.extracted_variables = {}  # For extracted variables from responses
+    
+    def set_extracted_variables(self, extracted_vars: Dict[str, str]):
+        """
+        Set extracted variables (from database).
+        
+        Args:
+            extracted_vars: Dictionary of extracted variable names to values
+        """
+        self.extracted_variables = extracted_vars
+    
+    def get_extracted_variables(self) -> Dict[str, str]:
+        """Get the extracted variables."""
+        return self.extracted_variables.copy()
     
     def set_active_environment(self, environment: Dict):
         """
@@ -252,28 +285,28 @@ class EnvironmentManager:
         all_unresolved = []
         
         # Substitute URL
-        new_url, unresolved = VariableSubstitution.substitute(url, variables)
+        new_url, unresolved = VariableSubstitution.substitute(url, variables, self.extracted_variables)
         all_unresolved.extend(unresolved)
         
         # Substitute params
         new_params, unresolved = VariableSubstitution.substitute_dict(
-            params, variables
+            params, variables, self.extracted_variables
         ) if params else ({}, [])
         all_unresolved.extend(unresolved)
         
         # Substitute headers
         new_headers, unresolved = VariableSubstitution.substitute_dict(
-            headers, variables
+            headers, variables, self.extracted_variables
         ) if headers else ({}, [])
         all_unresolved.extend(unresolved)
         
         # Substitute body
-        new_body, unresolved = VariableSubstitution.substitute(body, variables) if body else ('', [])
+        new_body, unresolved = VariableSubstitution.substitute(body, variables, self.extracted_variables) if body else ('', [])
         all_unresolved.extend(unresolved)
         
         # Substitute auth token
         new_auth_token, unresolved = VariableSubstitution.substitute(
-            auth_token, variables
+            auth_token, variables, self.extracted_variables
         ) if auth_token else ('', [])
         all_unresolved.extend(unresolved)
         

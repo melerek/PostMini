@@ -1,14 +1,14 @@
 # PostMini - Desktop API Client
 
-**Version 1.5.0** | Professional API Testing Tool | MIT License
+**Version 1.7.0** | Professional API Testing Tool | MIT License
 
-A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, OAuth 2.0, API testing, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
+A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, **request chaining**, **variable extraction**, OAuth 2.0, API testing with advanced reporting, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.5.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.7.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Tests](https://img.shields.io/badge/tests-362%2B%20passing-success)
+![Tests](https://img.shields.io/badge/tests-365%2B%20passing-success)
 
 ---
 
@@ -37,6 +37,30 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 ---
 
 ## Features
+
+### ✨ What's New in V1.7.0
+- **🔗 Request Chaining & Variable Extraction**: Extract values from API responses and use in subsequent requests
+  - Interactive "Extract Variables" tab with JSON tree viewer
+  - Click any value to extract as a variable
+  - Use `{{extracted.variableName}}` in URL, headers, params, body
+  - Variable Library (📚 button) to manage all extracted variables
+  - Perfect for authentication workflows (extract token → use in next request)
+  - Variables persist across sessions
+- **📊 Advanced Test Reporting**: Export test results in multiple formats
+  - HTML reports (styled and readable)
+  - JUnit XML (CI/CD integration)
+  - JSON (programmatic processing)
+  - CSV (spreadsheet analysis)
+- **🎨 UI Optimizations**:
+  - Extract Variables widget now uses compact 2×2 grid layout (50% space savings)
+  - Delete key works in Params/Headers tables (+ right-click menu)
+  - Test count updates immediately when adding/removing tests
+  - Dark theme fixes for input fields
+- **🐛 Critical Bug Fixes**:
+  - Fixed `{{extracted.variableName}}` substitution (now works correctly!)
+  - Fixed tab state management (Extract Variables widget properly cleared/restored)
+  - Fixed toast notification errors
+  - Removed annoying "Invalid JSON" popup (now shows inline message)
 
 ### ✨ What's New in V1.5.0
 - **🗂️ Multi-Request Tab System**: Work on multiple API requests simultaneously:
@@ -94,6 +118,8 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 - **Polished UI**: Focus states, hover effects, improved spacing and readability
 
 ### Core Features
+- **Request Chaining & Variable Extraction**: 🆕 v1.7.0 - Extract values from responses and use in subsequent requests (`{{extracted.variableName}}`)
+- **Advanced Test Reporting**: 🆕 v1.7.0 - Export test results as HTML, JUnit XML, JSON, or CSV
 - **Multi-Request Tabs**: 🆕 v1.5.0 - Open and work on multiple requests simultaneously with full state persistence
 - **Collections Management**: Organize your API requests into collections
 - **Dynamic Variables**: 🆕 v1.4.0 - 38+ auto-generated variables (`$guid`, `$timestamp`, `$randomEmail`, etc.)

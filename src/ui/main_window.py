@@ -34,6 +34,8 @@ from src.ui.widgets.toast_notification import ToastManager
 from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
 from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
 from src.ui.widgets.method_badge import MethodBadge, StatusBadge
+from src.ui.widgets.variable_extraction_widget import VariableExtractionWidget
+from src.ui.widgets.variable_library_widget import VariableLibraryWidget
 from src.ui.widgets.empty_state import NoRequestEmptyState, NoResponseEmptyState, NoCollectionsEmptyState
 from src.features.test_engine import TestEngine, TestAssertion
 from src.ui.dialogs.collection_test_runner import CollectionTestRunnerDialog
@@ -383,6 +385,14 @@ class MainWindow(QMainWindow):
         
         toolbar.addSeparator()
         
+        # Variable Library button
+        variables_btn = QPushButton("📚 Variables")
+        variables_btn.setToolTip("View and manage extracted variables")
+        variables_btn.clicked.connect(self._open_variable_library)
+        toolbar.addWidget(variables_btn)
+        
+        toolbar.addSeparator()
+        
         # Git Sync button
         self.git_sync_btn = QPushButton("🔄 Git Sync")
         self.git_sync_btn.setToolTip("Manage Git-based collaboration")
@@ -552,6 +562,12 @@ class MainWindow(QMainWindow):
             # Load description
             self.description_input.setPlainText(state.get('description', ''))
             
+            # Load test assertions from database (FIX: This was missing!)
+            if self.current_request_id:
+                self._load_test_assertions(self.current_request_id)
+            else:
+                self.test_tab.clear()
+            
             # Restore change state
             self.has_unsaved_changes = state.get('has_changes', False)
             self._update_request_title()
@@ -566,6 +582,9 @@ class MainWindow(QMainWindow):
             self.auth_type_combo.blockSignals(False)
             self.auth_token_input.blockSignals(False)
             self.description_input.blockSignals(False)
+        
+        # Update tab counts after restoration (FIX: Update counts for all inner tabs)
+        self._update_tab_counts()
         
         # Restore response if available
         response_data = state.get('response')
@@ -1202,6 +1221,11 @@ class MainWindow(QMainWindow):
         )
         self.response_tabs.addTab(self.response_headers_table, "Headers")
         
+        # Variable Extraction tab
+        self.variable_extraction_widget = VariableExtractionWidget()
+        self.variable_extraction_widget.variable_extracted.connect(self._on_variable_extracted)
+        self.response_tabs.addTab(self.variable_extraction_widget, "Extract Variables")
+        
         response_content_layout.addWidget(self.response_tabs)
         
         # Test results viewer
@@ -1222,6 +1246,13 @@ class MainWindow(QMainWindow):
         
         # Apply custom delegate to remove padding from cell editors
         table.setItemDelegate(NoPaddingDelegate())
+        
+        # Enable context menu for right-click delete
+        table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        table.customContextMenuRequested.connect(lambda pos: self._show_table_context_menu(table, pos))
+        
+        # Enable keyboard Delete key
+        table.keyPressEvent = lambda event: self._handle_table_key_press(table, event)
         
         # Remove max height constraint so table anchors to parent panel properly
         return table
@@ -2758,7 +2789,7 @@ class MainWindow(QMainWindow):
             auth_type = 'None'
             auth_token = ""
         
-        # Apply variable substitution (collection vars -> environment vars -> dynamic variables)
+        # Apply variable substitution (collection vars -> environment vars -> extracted vars -> dynamic variables)
         # Dynamic variables ($variable) work even without an active environment
         
         # Get collection variables if we have a current collection
@@ -2766,17 +2797,41 @@ class MainWindow(QMainWindow):
         if self.current_collection_id:
             collection_variables = self.db.get_collection_variables(self.current_collection_id)
         
+        # Get extracted variables (always available)
+        extracted_variables = {}
+        all_extracted = self.db.get_all_extracted_variables()
+        for var in all_extracted:
+            # Store WITHOUT "extracted." prefix - the substitution code adds it
+            extracted_variables[var['name']] = var['value']
+        
+        # Debug: Show what extracted variables are available
+        if all_extracted:
+            print(f"[DEBUG] Loaded {len(all_extracted)} extracted variables:")
+            for var in all_extracted:
+                print(f"  - {var['name']} = {var['value']}")
+            print(f"[DEBUG] Variable dict keys: {list(extracted_variables.keys())}")
+        else:
+            print("[DEBUG] No extracted variables found in database")
+        
         if self.env_manager.has_active_environment():
             # Get environment variables
             env_variables = self.env_manager.get_active_variables()
             
-            # Merge variables with collection variables taking precedence
-            merged_variables = {**env_variables, **collection_variables}
+            # Merge variables: env_variables < collection_variables < extracted_variables
+            merged_variables = {**env_variables, **collection_variables, **extracted_variables}
+            
+            print(f"[DEBUG] Using environment manager substitution")
+            print(f"[DEBUG] Merged variables count: {len(merged_variables)}")
+            print(f"[DEBUG] Merged variable keys: {list(merged_variables.keys())[:10]}")  # Show first 10
             
             # Substitute both {{env}} and $dynamic variables
             substituted, unresolved = self.env_manager.substitute_in_request(
                 url, params, headers, body, auth_token, extra_variables=merged_variables
             )
+            
+            print(f"[DEBUG] After substitution:")
+            print(f"  URL: {substituted['url']}")
+            print(f"  Headers: {substituted.get('headers')}")
             
             # Warn about unresolved variables
             if unresolved:
@@ -2801,38 +2856,49 @@ class MainWindow(QMainWindow):
             # Don't overwrite OAuth token with substituted auth_token
             if auth_type == 'Bearer Token':
                 auth_token = substituted['auth_token']
-        elif collection_variables:
-            # No active environment, but we have collection variables
+        elif collection_variables or extracted_variables:
+            # No active environment, but we have collection variables or extracted variables
             from src.features.variable_substitution import VariableSubstitution
             
+            print(f"[DEBUG] No active environment - using direct substitution")
+            print(f"[DEBUG] Collection vars: {len(collection_variables)}")
+            print(f"[DEBUG] Extracted vars: {len(extracted_variables)}")
+            
+            # Don't merge - pass separately!
+            print(f"[DEBUG] Extracted variables dict: {extracted_variables}")
+            
             # Substitute URL
-            url, _ = VariableSubstitution.substitute(url, collection_variables)
+            url, _ = VariableSubstitution.substitute(url, collection_variables, extracted_variables)
+            print(f"[DEBUG] URL after substitution: {url}")
             
             # Substitute params
             if params:
                 new_params = {}
                 for k, v in params.items():
-                    new_key, _ = VariableSubstitution.substitute(k, collection_variables)
-                    new_val, _ = VariableSubstitution.substitute(v, collection_variables)
+                    new_key, _ = VariableSubstitution.substitute(k, collection_variables, extracted_variables)
+                    new_val, _ = VariableSubstitution.substitute(v, collection_variables, extracted_variables)
                     new_params[new_key] = new_val
                 params = new_params
             
             # Substitute headers
             if headers:
+                print(f"[DEBUG] Substituting headers: {headers}")
                 new_headers = {}
                 for k, v in headers.items():
-                    new_key, _ = VariableSubstitution.substitute(k, collection_variables)
-                    new_val, _ = VariableSubstitution.substitute(v, collection_variables)
+                    new_key, _ = VariableSubstitution.substitute(k, collection_variables, extracted_variables)
+                    new_val, _ = VariableSubstitution.substitute(v, collection_variables, extracted_variables)
+                    print(f"[DEBUG]   {k}: {v} -> {new_key}: {new_val}")
                     new_headers[new_key] = new_val
                 headers = new_headers
+                print(f"[DEBUG] Headers after substitution: {headers}")
             
             # Substitute body
             if body:
-                body, _ = VariableSubstitution.substitute(body, collection_variables)
+                body, _ = VariableSubstitution.substitute(body, collection_variables, extracted_variables)
             
             # Substitute auth token
             if auth_token:
-                auth_token, _ = VariableSubstitution.substitute(auth_token, collection_variables)
+                auth_token, _ = VariableSubstitution.substitute(auth_token, collection_variables, extracted_variables)
         else:
             # No active environment, but still substitute dynamic variables
             from src.features.variable_substitution import VariableSubstitution
@@ -2888,6 +2954,30 @@ class MainWindow(QMainWindow):
         # Clean up existing thread if still running
         if self.request_thread and self.request_thread.isRunning():
             self.request_thread.wait()
+        
+        # Debug: Print what's being sent (helps verify variable substitution)
+        print(f"\n[DEBUG] Sending request:")
+        print(f"  Method: {method}")
+        print(f"  URL: {url}")
+        if params:
+            print(f"  Params: {params}")
+        if headers:
+            print(f"  Headers: {headers}")
+        if body:
+            print(f"  Body (first 200 chars): {body[:200]}")
+        
+        # Check if any variables are still unsubstituted
+        unsubstituted = []
+        if '{{' in url:
+            unsubstituted.append(f"URL contains: {url}")
+        for k, v in (headers or {}).items():
+            if '{{' in str(v) or '{{' in str(k):
+                unsubstituted.append(f"Header {k}: {v}")
+        if unsubstituted:
+            print(f"[WARNING] Unsubstituted variables detected:")
+            for u in unsubstituted:
+                print(f"  - {u}")
+        print()
         
         # Create and start request thread
         self.request_thread = RequestThread(
@@ -3211,6 +3301,10 @@ class MainWindow(QMainWindow):
         for i, (key, value) in enumerate(response.headers.items()):
             self.response_headers_table.setItem(i, 0, QTableWidgetItem(key))
             self.response_headers_table.setItem(i, 1, QTableWidgetItem(str(value)))
+        
+        # Update variable extraction widget with response
+        request_name = getattr(self, 'current_request_name', None) or "Unnamed Request"
+        self.variable_extraction_widget.set_response(response, request_name)
     
     def _clear_response_viewer(self):
         """Clear the response viewer."""
@@ -3226,6 +3320,16 @@ class MainWindow(QMainWindow):
         self.current_response_pretty = ""
         # Switch back to empty state
         self.response_stack.setCurrentWidget(self.response_empty_state)
+        
+        # Clear Extract Variables widget
+        self.variable_extraction_widget.empty_label.setText("📭 Send a request to extract variables from the response")
+        self.variable_extraction_widget.empty_label.setStyleSheet("color: #999; font-size: 14px; padding: 40px;")
+        self.variable_extraction_widget.empty_label.show()
+        self.variable_extraction_widget.findChild(QSplitter).hide()
+        
+        # Clear test results viewer
+        if hasattr(self, 'test_results_viewer') and self.test_results_viewer is not None:
+            self.test_results_viewer.clear()
     
     def _restore_response(self, response_data: Dict):
         """Restore a response from saved data."""
@@ -3291,6 +3395,10 @@ class MainWindow(QMainWindow):
         
         # Switch to response body view
         self.response_stack.setCurrentWidget(self.response_body)
+        
+        # Restore Extract Variables widget with response
+        request_name = getattr(self, 'current_request_name', None) or "Unnamed Request"
+        self.variable_extraction_widget.set_response(mock_response, request_name)
     
     def _format_size(self, size_bytes: int) -> str:
         """Format byte size to human-readable format."""
@@ -3939,6 +4047,70 @@ class MainWindow(QMainWindow):
         dialog.replay_requested.connect(self._replay_from_history)
         dialog.exec()
     
+    def _open_variable_library(self):
+        """Open the variable library dialog."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Variable Library")
+        dialog.setMinimumSize(900, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Add variable library widget
+        library = VariableLibraryWidget()
+        library.variable_deleted.connect(self._on_variable_deleted)
+        library.refresh_requested.connect(lambda: self._refresh_variable_library(library))
+        layout.addWidget(library)
+        
+        # Load variables
+        self._refresh_variable_library(library)
+        
+        dialog.exec()
+    
+    def _refresh_variable_library(self, library: VariableLibraryWidget):
+        """Refresh variable library with latest data."""
+        variables = self.db.get_all_extracted_variables()
+        library.set_variables(variables)
+    
+    def _on_variable_extracted(self, name: str, value: str, json_path: str):
+        """Handle variable extraction from response."""
+        try:
+            # Get source request info
+            request_name = getattr(self, 'current_request_name', None) or "Unnamed Request"
+            
+            # Save to database
+            self.db.create_extracted_variable(
+                name=name,
+                value=value,
+                source_request_id=self.current_request_id,
+                source_request_name=request_name,
+                json_path=json_path
+            )
+            
+            # Show success toast
+            self.toast.success(f"Variable '{name}' saved! Use {{{{extracted.{name}}}}} in requests")
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to save variable: {str(e)}"
+            )
+    
+    def _on_variable_deleted(self, variable_id: int):
+        """Handle variable deletion."""
+        try:
+            self.db.delete_extracted_variable(variable_id)
+            self.toast.success("Variable deleted")
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to delete variable: {str(e)}"
+            )
+    
     def _show_shortcuts_help(self):
         """Show keyboard shortcuts help dialog."""
         help_text = """
@@ -4213,8 +4385,10 @@ class MainWindow(QMainWindow):
     
     def _on_tests_changed(self):
         """Handle test assertions being modified."""
-        # Tests will be saved when request is saved
-        pass
+        # Update tab counts immediately when tests change
+        self._update_tab_counts()
+        # Mark as changed
+        self._mark_as_changed()
     
     def _save_test_assertions(self):
         """Save test assertions for the current request."""
@@ -4848,6 +5022,65 @@ class MainWindow(QMainWindow):
         menu.addAction(save_action)
         
         menu.exec(self.response_body.viewport().mapToGlobal(position))
+    
+    def _show_table_context_menu(self, table: QTableWidget, position):
+        """Show context menu for params/headers tables."""
+        row = table.rowAt(position.y())
+        if row < 0:
+            return
+        
+        # Check if row has any content
+        key_item = table.item(row, 0)
+        value_item = table.item(row, 1)
+        has_content = (key_item and key_item.text().strip()) or (value_item and value_item.text().strip())
+        
+        if not has_content:
+            return  # Don't show menu for empty rows
+        
+        menu = QMenu(self)
+        
+        # Delete row action
+        delete_action = QAction("🗑️ Delete Row", self)
+        delete_action.triggered.connect(lambda: self._delete_table_row(table, row))
+        menu.addAction(delete_action)
+        
+        menu.exec(table.viewport().mapToGlobal(position))
+    
+    def _handle_table_key_press(self, table: QTableWidget, event):
+        """Handle keyboard events for params/headers tables."""
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QKeyEvent
+        
+        # Handle Delete key
+        if event.key() == Qt.Key.Key_Delete:
+            row = table.currentRow()
+            if row >= 0:
+                # Check if row has content
+                key_item = table.item(row, 0)
+                value_item = table.item(row, 1)
+                has_content = (key_item and key_item.text().strip()) or (value_item and value_item.text().strip())
+                
+                if has_content:
+                    self._delete_table_row(table, row)
+                    return  # Don't propagate event
+        
+        # Call original keyPressEvent for other keys
+        QTableWidget.keyPressEvent(table, event)
+    
+    def _delete_table_row(self, table: QTableWidget, row: int):
+        """Delete a row from params/headers table."""
+        if row < 0 or row >= table.rowCount():
+            return
+        
+        # Clear the row content instead of removing it (to maintain row count)
+        table.setItem(row, 0, QTableWidgetItem(""))
+        table.setItem(row, 1, QTableWidgetItem(""))
+        
+        # Mark as changed
+        self._mark_as_changed()
+        
+        # Update tab counts
+        self._update_tab_counts()
     
     def _copy_entire_response(self):
         """Copy entire response to clipboard."""

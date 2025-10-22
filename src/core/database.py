@@ -214,6 +214,21 @@ class DatabaseManager:
             # Column already exists, ignore
             pass
         
+        # Create extracted variables table for request chaining
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS extracted_variables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                value TEXT,
+                source_request_id INTEGER,
+                source_request_name TEXT,
+                json_path TEXT,
+                extracted_at TEXT NOT NULL,
+                description TEXT,
+                FOREIGN KEY (source_request_id) REFERENCES requests(id) ON DELETE SET NULL
+            )
+        """)
+        
         self.connection.commit()
     
     # ==================== Collection Operations ====================
@@ -1461,6 +1476,114 @@ class DatabaseManager:
         """
         cursor = self.connection.cursor()
         cursor.execute("DELETE FROM collection_variables WHERE collection_id = ?", (collection_id,))
+        self.connection.commit()
+    
+    # ==================== Extracted Variables Operations (Request Chaining) ====================
+    
+    def create_extracted_variable(self, name: str, value: str, source_request_id: Optional[int] = None,
+                                 source_request_name: Optional[str] = None, json_path: Optional[str] = None,
+                                 description: Optional[str] = None) -> int:
+        """
+        Create or update an extracted variable for request chaining.
+        
+        Args:
+            name: Variable name (e.g., "authToken", "userId")
+            value: Extracted value
+            source_request_id: ID of request that extracted this variable
+            source_request_name: Name of source request (for display)
+            json_path: JSONPath expression used to extract (e.g., "response.token")
+            description: Optional description
+            
+        Returns:
+            ID of the created/updated variable
+        """
+        from datetime import datetime
+        cursor = self.connection.cursor()
+        timestamp = datetime.now().isoformat()
+        
+        # Try to update first, if exists
+        cursor.execute("SELECT id FROM extracted_variables WHERE name = ?", (name,))
+        existing = cursor.fetchone()
+        
+        if existing:
+            cursor.execute("""
+                UPDATE extracted_variables 
+                SET value = ?, source_request_id = ?, source_request_name = ?, 
+                    json_path = ?, extracted_at = ?, description = ?
+                WHERE name = ?
+            """, (value, source_request_id, source_request_name, json_path, timestamp, description, name))
+            variable_id = existing[0]
+        else:
+            cursor.execute("""
+                INSERT INTO extracted_variables 
+                (name, value, source_request_id, source_request_name, json_path, extracted_at, description)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (name, value, source_request_id, source_request_name, json_path, timestamp, description))
+            variable_id = cursor.lastrowid
+        
+        self.connection.commit()
+        return variable_id
+    
+    def get_all_extracted_variables(self) -> List[Dict]:
+        """
+        Get all extracted variables.
+        
+        Returns:
+            List of dictionaries containing variable data
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT id, name, value, source_request_id, source_request_name, 
+                   json_path, extracted_at, description
+            FROM extracted_variables
+            ORDER BY extracted_at DESC
+        """)
+        rows = cursor.fetchall()
+        
+        variables = []
+        for row in rows:
+            variables.append({
+                'id': row[0],
+                'name': row[1],
+                'value': row[2],
+                'source_request_id': row[3],
+                'source_request_name': row[4],
+                'json_path': row[5],
+                'extracted_at': row[6],
+                'description': row[7] or ''
+            })
+        return variables
+    
+    def get_extracted_variable(self, name: str) -> Optional[str]:
+        """
+        Get the value of an extracted variable by name.
+        
+        Args:
+            name: Variable name
+            
+        Returns:
+            Variable value or None if not found
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT value FROM extracted_variables WHERE name = ?", (name,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+    
+    def delete_extracted_variable(self, variable_id: int):
+        """
+        Delete an extracted variable.
+        
+        Args:
+            variable_id: ID of the variable to delete
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM extracted_variables WHERE id = ?", (variable_id,))
+        self.connection.commit()
+    
+    def delete_all_extracted_variables(self):
+        """Delete all extracted variables."""
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM extracted_variables")
         self.connection.commit()
     
     def close(self):

@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0] - 2025-10-22
+
+### ✨ Added - QA Features
+- **Request Chaining & Variable Extraction**: Extract values from API responses and use in subsequent requests
+  - "Extract Variables" tab in response section with interactive JSON tree
+  - Click any value in response to extract as variable
+  - Use `{{extracted.variableName}}` syntax in URL, headers, params, body
+  - Variable Library dialog (📚 Variables button) to view/manage all extracted variables
+  - Variables persist across sessions in database
+  - Perfect for authentication workflows (extract token → use in next request)
+  - Database schema: New `extracted_variables` table with metadata
+
+- **Advanced Test Reporting**: Export test results in multiple formats
+  - Export as HTML (styled, readable reports)
+  - Export as JUnit XML (CI/CD integration)
+  - Export as JSON (programmatic processing)
+  - Export as CSV (spreadsheet analysis)
+  - Export buttons in Collection Test Runner dialog
+  - Reports include summary statistics and detailed results
+
+### 🎨 UI Improvements
+- **Extract Variables Widget Optimization**:
+  - Compact 2×2 grid layout (was 4 rows × 1 column)
+  - 50% space savings for better JSON tree visibility
+  - Removed confusing "Quick Extract" dropdown
+  - Labels: Variable Name, JSON Path, Value, Description
+  - Cleaner, more efficient use of space
+
+- **Params/Headers Tables UX**:
+  - Delete key now works to remove rows (no more error!)
+  - Right-click → "Delete Row" context menu
+  - Rows clear on delete (maintains table structure)
+  - Immediate visual feedback
+
+- **Test Count Updates**: Test tab count updates immediately when adding/removing tests (was delayed until tab switch)
+
+- **Dark Theme Fixes**: Extract Variables input fields now use theme colors (removed hardcoded light backgrounds)
+
+### 🐛 Critical Bug Fixes
+- **Variable Substitution Fix**: Fixed `{{extracted.variableName}}` not substituting
+  - Root cause: Key mismatch between dict keys and substitution function expectations
+  - Now correctly passes extracted variables as separate parameter
+  - Works with and without active environment
+
+- **Tab State Management**: Extract Variables widget now properly cleared/restored when switching tabs
+  - Each tab's response data is isolated
+  - No more stale data from previous tab
+  - Proper empty state when switching to tab without response
+
+- **Toast Notification Error**: Fixed `AttributeError: 'MainWindow' object has no attribute 'toast_manager'`
+  - Corrected to use `self.toast` instead of `self.toast_manager`
+
+- **Invalid JSON Popup**: Removed annoying popup for non-JSON responses
+  - Now shows friendly inline message in Extract Variables tab
+  - No workflow interruption
+
+### 🔧 Technical Improvements
+- Added extensive debug logging for variable substitution troubleshooting
+- Improved error handling in variable extraction
+- Better state persistence across tab switches
+- Enhanced `_clear_response_viewer()` to handle all response UI components
+- Enhanced `_restore_response()` to restore Extract Variables widget state
+
+### 📚 Documentation
+- Added `VARIABLE_EXTRACTION_GUIDE.md` - Complete user guide for variable extraction
+- Added `QA_FEATURES_GUIDE.md` - Comprehensive guide for QA testing features
+- Added `TESTING_VARIABLE_SUBSTITUTION.md` - Testing guide with multiple verification methods
+- Added `EXTRACT_VARIABLES_UI_OPTIMIZATION.md` - UI optimization details
+- Added `FIX_TAB_STATE_EXTRACT_VARIABLES.md` - Tab state management fix documentation
+- Added `CRITICAL_FIX_VARIABLE_SUBSTITUTION.md` - Details of the substitution fix
+
+### 🧪 Testing
+- Created `setup_test_collection.py` script to quickly set up test data
+- Added `QA_Features_Test_Collection.json` sample collection
+- Comprehensive testing instructions in `TESTING_INSTRUCTIONS.md`
+
+### 🎯 User Experience
+- **For QA Engineers**: Complete toolkit for API testing and automation
+- **Request Chaining**: Extract token from login → Use in authenticated requests
+- **Test Reporting**: Share results with team or integrate with CI/CD
+- **Improved UX**: Faster, cleaner, more intuitive interface
+- **Better Feedback**: Inline messages instead of disruptive popups
+
+---
+
 ## [1.6.0] - 2025-01-21
 
 ### ✨ Added

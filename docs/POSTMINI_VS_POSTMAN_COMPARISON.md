@@ -1,7 +1,7 @@
 # PostMini vs Postman - Feature Comparison
 
-**Last Updated:** October 17, 2025  
-**PostMini Version:** 1.4.0
+**Last Updated:** October 22, 2025  
+**PostMini Version:** 1.7.0
 
 This document provides a detailed comparison between PostMini, Postman Free, and Postman Enterprise to help you choose the right API testing tool for your needs.
 
@@ -17,6 +17,8 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **💾 Data Storage** | Local only | Cloud + Local | Cloud + Local |
 | **🔒 Privacy** | **100% Local** | Cloud-based | Cloud-based (Private) |
 | **👥 Team Size** | Unlimited (via Git) | Up to 3 users | Unlimited |
+| **🔗 Request Chaining** | ✅ **NEW!** Variable extraction | ❌ | ✅ (Pro+) |
+| **📊 Test Reports** | ✅ **NEW!** HTML, JUnit, JSON, CSV | ❌ | ✅ |
 
 ---
 
@@ -28,17 +30,18 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 |---------|----------|--------------|-------------------|
 | **HTTP Methods** | ✅ All (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS) | ✅ All | ✅ All |
 | **Request Builder** | ✅ Full-featured | ✅ Full-featured | ✅ Full-featured |
-| **Request Documentation** | ✅ **NEW! Built-in description field** | ✅ (Pro/Enterprise) | ✅ Full |
+| **Multi-Request Tabs** | ✅ **Unlimited tabs** | ✅ Limited tabs | ✅ Unlimited tabs |
+| **Request Documentation** | ✅ Built-in description field | ✅ (Pro/Enterprise) | ✅ Full |
 | **Response Viewer** | ✅ JSON formatting, headers, status | ✅ Advanced (cookies, visualize) | ✅ Advanced |
-| **Query Parameters** | ✅ Table editor | ✅ Table editor | ✅ Table editor |
-| **Headers Management** | ✅ Custom headers | ✅ Custom + presets | ✅ Custom + presets |
+| **Query Parameters** | ✅ Table editor with delete key | ✅ Table editor | ✅ Table editor |
+| **Headers Management** | ✅ Custom headers with delete key | ✅ Custom + presets | ✅ Custom + presets |
 | **Request Body** | ✅ JSON, XML, text, form-data | ✅ All formats + GraphQL | ✅ All formats + GraphQL |
 | **Response Time** | ✅ Displayed | ✅ Displayed + graphs | ✅ Displayed + analytics |
-| **Status Codes** | ✅ Color-coded | ✅ Color-coded | ✅ Color-coded |
-| **Timeout Configuration** | ✅ **NEW! Per-request (1-300s)** | ✅ Global only | ✅ Global only |
-| **SSL Verification** | ✅ **NEW! Per-request toggle** | ✅ Global only | ✅ Global + per-request |
+| **Status Codes** | ✅ Color-coded badges | ✅ Color-coded | ✅ Color-coded |
+| **Timeout Configuration** | ✅ Per-request (1-300s) | ✅ Global only | ✅ Global only |
+| **SSL Verification** | ✅ Per-request toggle | ✅ Global only | ✅ Global + per-request |
 
-**Winner:** 🥇 **PostMini v1.3.0** - Now includes request documentation and flexible per-request settings!
+**Winner:** 🥇 **PostMini v1.7.0** - Request documentation, flexible settings, and better table UX!
 
 ---
 
@@ -66,11 +69,15 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Environment Variables** | ✅ Unlimited environments | ✅ Unlimited | ✅ Unlimited |
 | **Variable Syntax** | ✅ `{{variable}}` | ✅ `{{variable}}` | ✅ `{{variable}}` |
 | **Global Variables** | ✅ Supported | ✅ Supported | ✅ Supported |
-| **Dynamic Variables** | ✅ **NEW! 38+ variables** | ✅ 40+ variables | ✅ 40+ variables |
-| **Variable Scopes** | ✅ Environment-level | ✅ Global, Collection, Environment | ✅ All scopes |
-| **Secrets Management** | ✅ **Git-ignored secrets** | ❌ Cloud-stored | ✅ Vault integration |
+| **Collection Variables** | ✅ **Built-in** | ✅ Supported | ✅ Supported |
+| **Dynamic Variables** | ✅ 38+ variables | ✅ 40+ variables | ✅ 40+ variables |
+| **Request Chaining** | ✅ **NEW! Extract from responses** | ❌ (Pro+ only) | ✅ Full support |
+| **Variable Extraction** | ✅ **Interactive JSON tree** | ❌ | ✅ (scripts) |
+| **Variable Library** | ✅ **Built-in management UI** | ❌ | ✅ |
+| **Variable Scopes** | ✅ Environment, Collection, Extracted | ✅ Global, Collection, Environment | ✅ All scopes |
+| **Secrets Management** | ✅ **Git-ignored secrets** | ⚠️ Cloud-stored | ✅ Vault integration |
 
-**Winner:** 🥇 **PostMini** - Best secrets management with Git-ignored local storage + dynamic variables!
+**Winner:** 🥇 **PostMini v1.7.0** - Best variable extraction UX + local secrets + request chaining!
 
 ---
 
@@ -119,18 +126,23 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | Feature | PostMini | Postman Free | Postman Enterprise |
 |---------|----------|--------------|-------------------|
 | **Assertions** | ✅ **8 types** | ✅ JavaScript-based | ✅ JavaScript-based |
-| **Status Code Tests** | ✅ | ✅ | ✅ |
-| **Response Time Tests** | ✅ | ✅ | ✅ |
-| **JSON Path Tests** | ✅ | ✅ | ✅ |
-| **Header Tests** | ✅ | ✅ | ✅ |
-| **Test Scripts** | ✅ Visual builder | ✅ JavaScript code | ✅ JavaScript code |
-| **Pre-request Scripts** | ❌ | ✅ JavaScript | ✅ JavaScript |
+| **Status Code Tests** | ✅ Visual builder | ✅ Code-based | ✅ Code-based |
+| **Response Time Tests** | ✅ Visual builder | ✅ Code-based | ✅ Code-based |
+| **JSON Path Tests** | ✅ Visual builder | ✅ Code-based | ✅ Code-based |
+| **Header Tests** | ✅ Visual builder | ✅ Code-based | ✅ Code-based |
+| **Test Scripts** | ✅ **No coding required!** | ✅ JavaScript code | ✅ JavaScript code |
+| **Pre-request Scripts** | ❌ (coming soon) | ✅ JavaScript | ✅ JavaScript |
 | **Test Runner** | ✅ Collection-level | ✅ Full runner | ✅ Full runner + CLI |
-| **CI/CD Integration** | ⚠️ Via command line | ✅ Newman CLI | ✅ Newman + native |
+| **Test Count Display** | ✅ **Real-time updates** | ✅ | ✅ |
+| **Test Reports** | ✅ **NEW! HTML, JUnit, JSON, CSV** | ❌ (Pro+ only) | ✅ Advanced analytics |
+| **HTML Reports** | ✅ **Styled & readable** | ❌ | ✅ |
+| **JUnit XML Export** | ✅ **CI/CD ready** | ❌ | ✅ |
+| **JSON Export** | ✅ **Programmatic** | ❌ | ✅ |
+| **CSV Export** | ✅ **Spreadsheet-friendly** | ❌ | ✅ |
+| **CI/CD Integration** | ✅ **JUnit XML support** | ✅ Newman CLI | ✅ Newman + native |
 | **Scheduled Tests** | ❌ | ❌ | ✅ Cloud monitors |
-| **Test Reports** | ✅ Built-in viewer | ✅ Basic reports | ✅ Advanced analytics |
 
-**Winner:** 🥈 **Postman Enterprise** - More advanced automation features
+**Winner:** 🥇 **PostMini v1.7.0** - Best test reporting! No coding required + multiple export formats!
 
 ---
 
