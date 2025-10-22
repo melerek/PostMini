@@ -1087,19 +1087,23 @@ class MainWindow(QMainWindow):
         viewer = QWidget()
         layout = QVBoxLayout(viewer)
         
-        # Title row with collapse button
+        # Title row with collapse icon
         title_layout = QHBoxLayout()
+        
+        # Collapse icon (clickable)
+        self.response_collapse_icon = QLabel("▼")
+        self.response_collapse_icon.setFont(QFont("Arial", 12))
+        self.response_collapse_icon.setFixedWidth(20)
+        self.response_collapse_icon.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.response_collapse_icon.setToolTip("Collapse/Expand response panel")
+        self.response_collapse_icon.mousePressEvent = lambda event: self._toggle_response_panel()
+        title_layout.addWidget(self.response_collapse_icon)
+        
         title = QLabel("Response")
         title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         title_layout.addWidget(title)
         
         title_layout.addStretch()
-        
-        self.response_collapse_btn = QPushButton("▼ Collapse")
-        self.response_collapse_btn.setMaximumWidth(100)
-        self.response_collapse_btn.clicked.connect(self._toggle_response_panel)
-        self.response_collapse_btn.setToolTip("Collapse/Expand response panel")
-        title_layout.addWidget(self.response_collapse_btn)
         
         layout.addLayout(title_layout)
         
@@ -3482,14 +3486,14 @@ class MainWindow(QMainWindow):
             
             # Hide content and adjust splitter to minimal response panel size
             self.response_content_widget.hide()
-            self.response_collapse_btn.setText("▶ Expand")
+            self.response_collapse_icon.setText("▶")
             
             # Get total height and set response panel to minimal height (60px for header)
             total_height = sum(self.main_splitter.sizes())
             self.main_splitter.setSizes([total_height - 60, 60])
         else:
             self.response_content_widget.show()
-            self.response_collapse_btn.setText("▼ Collapse")
+            self.response_collapse_icon.setText("▼")
             
             # Restore previous sizes or use default proportions
             if hasattr(self, 'splitter_sizes_before_collapse'):
