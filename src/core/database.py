@@ -292,24 +292,26 @@ class DatabaseManager:
     
     # ==================== Request Operations ====================
     
-    def create_request(self, collection_id: int, name: str, method: str, url: str,
+    def create_request(self, name: str, url: str, method: str, collection_id: int,
                       params: Optional[Dict] = None, headers: Optional[Dict] = None,
                       body: Optional[str] = None, auth_type: str = 'None',
-                      auth_token: Optional[str] = None, description: Optional[str] = None) -> int:
+                      auth_token: Optional[str] = None, description: Optional[str] = None,
+                      folder_id: Optional[int] = None) -> int:
         """
         Create a new request in a collection.
         
         Args:
-            collection_id: ID of the parent collection
             name: Name of the request
-            method: HTTP method (GET, POST, etc.)
             url: Request URL
+            method: HTTP method (GET, POST, etc.)
+            collection_id: ID of the parent collection
             params: Query parameters as dictionary
             headers: Request headers as dictionary
             body: Request body (usually JSON string)
             auth_type: Type of authentication ('None', 'Bearer Token')
             auth_token: Authentication token
             description: Optional description/notes for the request
+            folder_id: Optional ID of the parent folder
             
         Returns:
             ID of the newly created request
@@ -322,10 +324,10 @@ class DatabaseManager:
         
         cursor.execute("""
             INSERT INTO requests 
-            (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description, folder_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (collection_id, name, method, url, params_json, headers_json, 
-              body, auth_type, auth_token, description))
+              body, auth_type, auth_token, description, folder_id))
         
         self.connection.commit()
         return cursor.lastrowid

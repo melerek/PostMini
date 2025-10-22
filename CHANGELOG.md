@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] - 2025-01-21
+
+### ✨ Added
+- **Hierarchical Request Folders**: Organize requests with unlimited nested folders
+  - Create folders and subfolders within collections
+  - Move requests between folders via context menu
+  - Folder counts show total subfolders and requests: `Folder [2] [5]`
+  - Dynamic folder icons (open/closed) with document papers in open state
+  - Full context menu support (Add Folder, Add Request, Rename, Delete, Move)
+  - Cascade deletion - removing folder deletes all contents
+  - Database schema: New `folders` table with `parent_id` for nesting
+  - `folder_id` column added to `requests` table
+  
+- **Collection Variables**: Manage variables at collection scope
+  - Collection-scoped key-value pairs with descriptions
+  - Variable resolution hierarchy: Collection > Environment > Dynamic
+  - Dedicated "Manage Variables" dialog per collection
+  - Database schema: New `collection_variables` table with UNIQUE constraint
+  - Automatic variable substitution in requests
+  - Collection variables override environment variables
+  - UI integration with DatabaseManager CRUD operations
+  
+- **Visual Enhancements**:
+  - Colored method badges in tree view (`[GET]` in teal, `[POST]` in orange, etc.)
+  - Request names now in consistent gray color for clean appearance
+  - Improved open folder icon showing document papers inside
+  - Theme-aware icons for folders (light/dark variants)
+  - Custom `RequestTreeItemDelegate` for colored method badges
+  - → Arrow icon for active request (current tab)
+  - • Dot icon for other open requests
+  - • Dot after collection/folder names containing open requests
+
+### 🔧 API Changes
+- `DatabaseManager.create_request()` - Added `folder_id` parameter
+- `DatabaseManager` - Added 12 new methods for folder/variable management
+- `EnvironmentManager.substitute_in_request()` - Added `extra_variables` parameter
+
+### 🐛 Bug Fixes
+- Fixed dropdown icons to use flat SVG design without 3D borders
+- Fixed folder icon persistence across theme switches
+- Fixed request highlighting in nested folder structures
+- Fixed variable resolution order to respect collection > environment hierarchy
+- Fixed empty open folder icon to be distinguishable from closed state
+
+### 🧪 Testing
+- Added comprehensive test suite: `test_folders_and_collection_variables.py`
+- 365/391 tests passing (93.4% pass rate)
+- Tests cover folder CRUD, nesting, variables, and UI integration
+
+### 📚 Documentation
+- Added `V1.6.0_RELEASE_NOTES.md` with detailed feature guide
+- Added `V1.6.0_IMPLEMENTATION_SUMMARY.md` for developers
+- Updated README.md with folder and collection variable features
+
+---
+
 ## [1.5.0] - 2025-10-21
 
 ### ✨ Added
