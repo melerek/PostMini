@@ -20,6 +20,7 @@ datas = [
     ('styles_dark.qss', '.'),         # Dark theme stylesheet
     ('postmini_logo.png', '.'),       # Application icon (PNG)
     ('postmini_logo.ico', '.'),       # Application icon (ICO for Windows)
+    ('assets', 'assets'),             # Assets folder (icons, etc.)
 ]
 
 # Hidden imports (modules that PyInstaller might miss)
