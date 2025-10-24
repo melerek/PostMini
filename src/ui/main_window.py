@@ -11,10 +11,10 @@ from PyQt6.QtWidgets import (
     QPushButton, QTreeWidget, QTreeWidgetItem, QComboBox, QLineEdit,
     QTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QLabel,
     QMessageBox, QInputDialog, QHeaderView, QToolBar, QFileDialog, QApplication,
-    QSizePolicy, QDialog, QStyledItemDelegate, QMenu
+    QSizePolicy, QDialog, QStyledItemDelegate, QMenu, QGroupBox, QTabBar
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QAction, QKeySequence, QShortcut, QBrush, QColor
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QAction, QKeySequence, QShortcut, QBrush, QColor, QPalette, QPainter, QPen
 import json
 from typing import Dict, Optional
 
@@ -35,6 +35,7 @@ from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
 from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
 from src.ui.widgets.method_badge import MethodBadge, StatusBadge
 from src.ui.widgets.variable_extraction_widget import VariableExtractionWidget
+from src.ui.widgets.variable_inspector_widget import VariableInspectorDialog
 from src.ui.widgets.variable_library_widget import VariableLibraryWidget
 from src.ui.widgets.empty_state import NoRequestEmptyState, NoResponseEmptyState, NoCollectionsEmptyState
 from src.features.test_engine import TestEngine, TestAssertion
@@ -53,7 +54,7 @@ class RequestTreeItemDelegate(QStyledItemDelegate):
     """Custom delegate to render request items with colored method badges."""
     
     def paint(self, painter, option, index):
-        """Custom paint method to color only the method badge."""
+        """Custom paint method to color the method name and make it bold."""
         from PyQt6.QtGui import QPen, QFontMetrics, QIcon, QFont
         from PyQt6.QtCore import QRect, QSize
         
@@ -63,15 +64,20 @@ class RequestTreeItemDelegate(QStyledItemDelegate):
             super().paint(painter, option, index)
             return
         
-        # Check if this is a request item (has method badge like [GET], [POST], etc.)
-        if text.startswith('[') and ']' in text:
+        # Check if this is a request item (has method like "GET ", "POST ", etc.)
+        # Valid HTTP methods followed by a space
+        http_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+        method = None
+        request_name = text
+        
+        for m in http_methods:
+            if text.startswith(m + ' '):
+                method = m
+                request_name = text[len(m) + 1:]  # Everything after "METHOD "
+                break
+        
+        if method:
             painter.save()
-            
-            # Extract method badge and request name
-            end_bracket = text.index(']')
-            method_badge = text[:end_bracket + 1]  # e.g., "[GET]"
-            request_name = text[end_bracket + 1:]  # e.g., " Request Name"
-            method = method_badge[1:-1]  # Extract method name without brackets
             
             # Get method color
             method_colors = {
@@ -91,6 +97,13 @@ class RequestTreeItemDelegate(QStyledItemDelegate):
                 font = item_font
             else:
                 font = option.font
+            
+            # Create bold font for method
+            bold_font = QFont(font)
+            bold_font.setBold(True)
+            
+            painter.setFont(bold_font)
+            fm_bold = QFontMetrics(bold_font)
             
             painter.setFont(font)
             fm = QFontMetrics(font)
@@ -114,15 +127,17 @@ class RequestTreeItemDelegate(QStyledItemDelegate):
             # Calculate y position for text
             y = text_rect.y() + text_rect.height() // 2 + fm.ascent() // 2 - 1
             
-            # Draw the method badge in color
+            # Draw the method in bold and colored
+            painter.setFont(bold_font)
             painter.setPen(QPen(QColor(method_color)))
-            painter.drawText(x, y, method_badge)
+            painter.drawText(x, y, method)
             
             # Move x position for request name
-            badge_width = fm.horizontalAdvance(method_badge)
-            x += badge_width
+            method_width = fm_bold.horizontalAdvance(method + ' ')
+            x += method_width
             
-            # Draw the request name in gray
+            # Draw the request name in normal font and gray
+            painter.setFont(font)
             painter.setPen(QPen(QColor('#CCCCCC')))
             painter.drawText(x, y, request_name)
             
@@ -184,6 +199,178 @@ class NoPaddingDelegate(QStyledItemDelegate):
                 }
             """)
         return editor
+
+
+
+
+class ColoredTabBar(QTabBar):
+    """Custom tab bar that renders method names with colors."""
+    
+    METHOD_COLORS = {
+        'GET': '#4EC9B0',      # Teal
+        'POST': '#FF9800',     # Orange
+        'PUT': '#2196F3',      # Blue
+        'PATCH': '#FFC107',    # Yellow
+        'DELETE': '#F44336',   # Red
+        'HEAD': '#9E9E9E',     # Gray
+        'OPTIONS': '#9C27B0'   # Purple
+    }
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.tab_data = {}  # Store method/name for each tab index
+        self.setDrawBase(False)  # Don't draw the base line
+        self.setMouseTracking(True)  # Enable mouse tracking for hover effects
+        self.hovered_tab = -1  # Track which tab is hovered
+    
+    def set_tab_data(self, index: int, method: str, name: str, has_changes: bool = False):
+        """Store tab data for custom rendering."""
+        self.tab_data[index] = {
+            'method': method,
+            'name': name,
+            'has_changes': has_changes
+        }
+        self.update()
+    
+    def tabSizeHint(self, index: int):
+        """Calculate tab size based on content."""
+        if index not in self.tab_data:
+            return super().tabSizeHint(index)
+        
+        data = self.tab_data[index]
+        method = data['method']
+        name = data['name']
+        has_changes = data['has_changes']
+        
+        # Calculate text width with proper font metrics
+        fm = self.fontMetrics()
+        
+        # Bold font for method (uppercase)
+        method_upper = method.upper()
+        method_width = fm.horizontalAdvance(method_upper) + 8  # Add extra for bold approximation
+        
+        bullet_width = fm.horizontalAdvance(" • ")
+        name_width = fm.horizontalAdvance(name)
+        changes_width = fm.horizontalAdvance(" •") if has_changes else 0
+        close_btn_width = 24  # Space for close button
+        
+        # Add padding
+        total_width = 24 + method_width + bullet_width + name_width + changes_width + close_btn_width
+        
+        return QSize(min(max(total_width, 120), 250), 38)  # Reduced height from 42 to 38
+    
+    def mouseMoveEvent(self, event):
+        """Track which tab is being hovered."""
+        old_hovered = self.hovered_tab
+        self.hovered_tab = self.tabAt(event.pos())
+        
+        # Update close button visibility when hover changes
+        if old_hovered != self.hovered_tab:
+            self._update_close_button_visibility()
+        
+        super().mouseMoveEvent(event)
+        self.update()  # Trigger repaint for hover effects
+    
+    def leaveEvent(self, event):
+        """Clear hover state when mouse leaves the tab bar."""
+        if self.hovered_tab != -1:
+            self.hovered_tab = -1
+            self._update_close_button_visibility()
+            self.update()
+        super().leaveEvent(event)
+    
+    def _update_close_button_visibility(self):
+        """Update close button visibility based on hover state."""
+        for index in range(self.count()):
+            button = self.tabButton(index, QTabBar.ButtonPosition.RightSide)
+            if button:
+                # Show close button only for hovered tab
+                button.setVisible(index == self.hovered_tab)
+    
+    def paintEvent(self, event):
+        """Custom paint event to draw colored method names."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        for index in range(self.count()):
+            if index not in self.tab_data:
+                continue
+            
+            data = self.tab_data[index]
+            method = data['method']
+            name = data['name']
+            has_changes = data['has_changes']
+            
+            # Get tab rect
+            rect = self.tabRect(index)
+            is_selected = (index == self.currentIndex())
+            is_dark_theme = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+            
+            # Draw background
+            if is_selected:
+                painter.fillRect(rect, QColor('#1e1e1e' if is_dark_theme else '#FFFFFF'))
+            elif rect.contains(self.mapFromGlobal(self.cursor().pos())):
+                # Hover state
+                painter.fillRect(rect, QColor('#1a3a52' if is_dark_theme else '#E3F2FD'))
+            
+            # Draw vertical separator (right border)
+            separator_color = QColor('#3e3e42' if is_dark_theme else '#E0E0E0')
+            painter.setPen(QPen(separator_color, 1))
+            painter.drawLine(rect.topRight().x(), rect.top(), rect.bottomRight().x(), rect.bottom())
+            
+            # Draw bottom border (underline) for selected tab
+            if is_selected:
+                painter.setPen(QPen(QColor('#007acc' if is_dark_theme else '#2196F3'), 3))
+                painter.drawLine(rect.bottomLeft().x(), rect.bottom() - 1, 
+                               rect.bottomRight().x(), rect.bottom() - 1)
+            
+            # Start position for text (with some padding)
+            x = rect.x() + 12
+            y = rect.center().y() + 5  # Center vertically
+            
+            # Draw method with color (uppercase)
+            method_upper = method.upper()
+            method_color = QColor(self.METHOD_COLORS.get(method, '#FFFFFF'))
+            painter.setPen(QPen(method_color))
+            font = painter.font()
+            font.setBold(True)
+            font.setPointSize(9)
+            painter.setFont(font)
+            painter.drawText(x, y, method_upper)
+            
+            # Calculate width of method text
+            method_width = painter.fontMetrics().horizontalAdvance(method_upper)
+            x += method_width + 8
+            
+            # Draw bullet separator
+            if is_selected:
+                painter.setPen(QPen(QColor('#007acc' if is_dark_theme else '#2196F3')))
+            else:
+                painter.setPen(QPen(QColor('#9E9E9E' if is_dark_theme else '#757575')))
+            font.setBold(False)
+            font.setPointSize(9)
+            painter.setFont(font)
+            painter.drawText(x, y, "•")
+            x += painter.fontMetrics().horizontalAdvance("•") + 8
+            
+            # Draw name (truncate if needed)
+            max_name_width = rect.width() - (x - rect.x()) - 30  # Reserve space for close button
+            name_display = name
+            name_width = painter.fontMetrics().horizontalAdvance(name)
+            
+            if name_width > max_name_width:
+                # Truncate with ellipsis
+                while name_width > max_name_width - painter.fontMetrics().horizontalAdvance("...") and len(name_display) > 0:
+                    name_display = name_display[:-1]
+                    name_width = painter.fontMetrics().horizontalAdvance(name_display)
+                name_display += "..."
+            
+            painter.drawText(x, y, name_display)
+            x += painter.fontMetrics().horizontalAdvance(name_display) + 6
+            
+            # Draw unsaved indicator
+            if has_changes:
+                painter.drawText(x, y, "•")
 
 
 class MainWindow(QMainWindow):
@@ -284,7 +471,62 @@ class MainWindow(QMainWindow):
         main_splitter.addWidget(left_pane)
         
         # ==================== CENTER PANE: Request Editor & Response ====================
-        # Use stacked widget to show empty state or workspace
+        # Create a container for the entire center area
+        center_container = QWidget()
+        center_container_layout = QVBoxLayout(center_container)
+        center_container_layout.setContentsMargins(0, 0, 0, 0)
+        center_container_layout.setSpacing(0)
+        
+        # Create horizontal container for tab bar + recent button (always visible)
+        tab_bar_container = QWidget()
+        tab_bar_layout = QHBoxLayout(tab_bar_container)
+        tab_bar_layout.setContentsMargins(0, 0, 0, 0)
+        tab_bar_layout.setSpacing(0)
+        
+        # Tab bar for multiple requests
+        self.request_tabs = QTabWidget()
+        self.request_tabs.setTabBar(ColoredTabBar())  # Use custom tab bar
+        self.request_tabs.setTabsClosable(True)
+        self.request_tabs.setMovable(True)
+        self.request_tabs.setDocumentMode(True)
+        self.request_tabs.tabCloseRequested.connect(self._close_tab)
+        self.request_tabs.currentChanged.connect(self._on_tab_changed)
+        self.request_tabs.setMaximumHeight(38)  # Only show the tab bar (reduced from 42)
+        self.request_tabs.setObjectName("requestTabs")  # For specific styling
+        tab_bar_layout.addWidget(self.request_tabs)
+        
+        # Add Recent button - independent of tabs, always visible
+        self.recent_requests_btn = QPushButton("🕐")
+        self.recent_requests_btn.setToolTip("Toggle recent requests panel")
+        self.recent_requests_btn.setCheckable(True)
+        self.recent_requests_btn.setFixedSize(38, 38)  # Match tab bar height (reduced from 42)
+        self.recent_requests_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                font-size: 18px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+            QPushButton:checked {
+                background: rgba(33, 150, 243, 0.2);
+                border: 1px solid #2196F3;
+            }
+        """)
+        self.recent_requests_btn.clicked.connect(self._toggle_recent_requests)
+        tab_bar_layout.addWidget(self.recent_requests_btn)
+        
+        # Add tab bar container to the top of center area (always visible)
+        center_container_layout.addWidget(tab_bar_container)
+        
+        # Install event filter on tab bar for middle-click detection
+        self.request_tabs.tabBar().installEventFilter(self)
+        
+        # Use stacked widget to show empty state or workspace (below the tab bar)
         from PyQt6.QtWidgets import QStackedWidget
         self.center_stack = QStackedWidget()
         
@@ -292,24 +534,11 @@ class MainWindow(QMainWindow):
         self.no_request_empty_state = NoRequestEmptyState()
         self.center_stack.addWidget(self.no_request_empty_state)
         
-        # Create container for tabs + workspace
+        # Create container for workspace only
         tabs_container = QWidget()
         tabs_layout = QVBoxLayout(tabs_container)
         tabs_layout.setContentsMargins(0, 0, 0, 0)
         tabs_layout.setSpacing(0)
-        
-        # Tab bar for multiple requests (custom simplified approach)
-        self.request_tabs = QTabWidget()
-        self.request_tabs.setTabsClosable(True)
-        self.request_tabs.setMovable(True)
-        self.request_tabs.setDocumentMode(True)
-        self.request_tabs.tabCloseRequested.connect(self._close_tab)
-        self.request_tabs.currentChanged.connect(self._on_tab_changed)
-        self.request_tabs.setMaximumHeight(42)  # Only show the tab bar
-        self.request_tabs.setObjectName("requestTabs")  # For specific styling
-        
-        # Install event filter on tab bar for middle-click detection
-        self.request_tabs.tabBar().installEventFilter(self)
         
         # Hide the tab widget content area (we'll show workspace below)
         # No inline style - will use stylesheet
@@ -327,18 +556,21 @@ class MainWindow(QMainWindow):
         # Actual workspace pane (shared, state is captured/restored)
         self.workspace_pane = self._create_workspace_pane()
         
-        # Add tabs and workspace to container
-        tabs_layout.addWidget(self.request_tabs)
+        # Add workspace to tabs container (not the tab bar)
         tabs_layout.addWidget(self.workspace_pane)
         
         # Store reference for easy access
         self.tabs_container = tabs_container
         self.center_stack.addWidget(tabs_container)
         
+        # Add the stacked widget to the center container (below the tab bar)
+        center_container_layout.addWidget(self.center_stack)
+        
         # Show empty state by default
         self.center_stack.setCurrentWidget(self.no_request_empty_state)
         
-        main_splitter.addWidget(self.center_stack)
+        # Add center container to main splitter
+        main_splitter.addWidget(center_container)
         
         # ==================== RIGHT PANE: Recent Requests ====================
         self.recent_requests_widget = RecentRequestsWidget(self.db)
@@ -385,10 +617,22 @@ class MainWindow(QMainWindow):
         
         toolbar.addSeparator()
         
-        # Variable Library button
-        variables_btn = QPushButton("📚 Variables")
-        variables_btn.setToolTip("View and manage extracted variables")
-        variables_btn.clicked.connect(self._open_variable_library)
+        # Variables dropdown button (with inspector and library options)
+        variables_btn = QPushButton("📊 Variables")
+        variables_btn.setToolTip("Access variables tools")
+        
+        # Create menu for dropdown
+        variables_menu = QMenu(self)
+        
+        inspector_action = variables_menu.addAction("🔍 Variable Inspector")
+        inspector_action.setToolTip("View all available variables in current context")
+        inspector_action.triggered.connect(self._show_variable_inspector)
+        
+        library_action = variables_menu.addAction("📚 Extracted Variables Manager")
+        library_action.setToolTip("Manage extracted variables library")
+        library_action.triggered.connect(self._open_variable_library)
+        
+        variables_btn.setMenu(variables_menu)
         toolbar.addWidget(variables_btn)
         
         toolbar.addSeparator()
@@ -403,22 +647,6 @@ class MainWindow(QMainWindow):
         self.git_sync_status_label = QLabel("Git: Not Enabled")
         self.git_sync_status_label.setStyleSheet("color: #999; font-size: 11px; padding: 0 10px;")
         toolbar.addWidget(self.git_sync_status_label)
-        
-        toolbar.addSeparator()
-        
-        # Recent Requests toggle button
-        self.recent_requests_btn = QPushButton("🕐 Recent")
-        self.recent_requests_btn.setToolTip("Toggle recent requests panel")
-        self.recent_requests_btn.setCheckable(True)
-        self.recent_requests_btn.clicked.connect(self._toggle_recent_requests)
-        toolbar.addWidget(self.recent_requests_btn)
-        
-        toolbar.addSeparator()
-        
-        # Info label for showing active variables
-        self.env_info_label = QLabel("No active environment variables")
-        self.env_info_label.setStyleSheet("color: #666; font-style: italic;")
-        toolbar.addWidget(self.env_info_label)
         
         # Add spacer to push theme toggle to the right
         spacer = QWidget()
@@ -651,10 +879,10 @@ class MainWindow(QMainWindow):
                 # Update highlight after restore
                 self._update_current_request_highlight()
             elif tab_state.get('request_id'):
-                # No UI state but has request_id - load from database
-                print(f"[DEBUG] Loading request from DB for tab {index}")
-                self._load_request(tab_state['request_id'])
-                # _load_request will call _update_current_request_highlight() at its end
+                # No UI state but has request_id - load from database directly
+                print(f"[DEBUG] Loading request data from DB for tab {index}")
+                self._load_request_data(tab_state['request_id'])  # Use _load_request_data instead of _load_request
+                # _load_request_data will call _update_current_request_highlight() at its end
             else:
                 # Empty tab - clear editor
                 print(f"[DEBUG] Clearing editor for empty tab {index}")
@@ -731,7 +959,12 @@ class MainWindow(QMainWindow):
             method = 'GET'
         
         # Add new tab with empty widget (tabs are just for visual representation)
-        tab_index = self.request_tabs.addTab(QWidget(), f"{method} {name}")
+        tab_index = self.request_tabs.addTab(QWidget(), "")  # Empty text initially
+        
+        # Set tab data for custom rendering
+        tab_bar = self.request_tabs.tabBar()
+        if isinstance(tab_bar, ColoredTabBar):
+            tab_bar.set_tab_data(tab_index, method, name, has_changes=False)
         
         # Store tab state
         self.tab_states[tab_index] = {
@@ -742,8 +975,14 @@ class MainWindow(QMainWindow):
             'ui_state': request_data or {}
         }
         
+        # Set tooltip
+        self.request_tabs.setTabToolTip(tab_index, f"{method} • {name}")
+        
         # Switch to new tab (this will trigger _on_tab_changed)
         self.request_tabs.setCurrentIndex(tab_index)
+        
+        # Return the tab index
+        return tab_index
         
         # Show tabs view
         self.center_stack.setCurrentWidget(self.tabs_container)
@@ -783,7 +1022,7 @@ class MainWindow(QMainWindow):
         self.request_tabs.blockSignals(True)
         
         # Add new tab
-        tab_index = self.request_tabs.addTab(QWidget(), f"{method} {name}")
+        tab_index = self.request_tabs.addTab(QWidget(), f"{method} • {name}")  # Added bullet separator
         print(f"[DEBUG] Added tab at index: {tab_index}, total tabs: {self.request_tabs.count()}")
         
         # Store tab state with request data BEFORE unblocking signals
@@ -824,11 +1063,16 @@ class MainWindow(QMainWindow):
         name = state.get('name', 'Untitled')
         has_changes = state.get('has_changes', False)
         
-        # Add unsaved indicator
-        indicator = " •" if has_changes else ""
-        title = f"{method} {name}{indicator}"
+        # Update tab data for custom rendering
+        tab_bar = self.request_tabs.tabBar()
+        if isinstance(tab_bar, ColoredTabBar):
+            tab_bar.set_tab_data(index, method, name, has_changes)
         
-        self.request_tabs.setTabText(index, title)
+        # Set tooltip to show full request name
+        tooltip = f"{method} • {name}"
+        if has_changes:
+            tooltip += " (unsaved changes)"
+        self.request_tabs.setTabToolTip(index, tooltip)
     
     def _setup_shortcuts(self):
         """Setup keyboard shortcuts for common actions."""
@@ -1628,22 +1872,29 @@ class MainWindow(QMainWindow):
                 if child_type == 'request':
                     request_id = child_data.get('id')
                     
+                    # Get original text without any indicators
+                    original_text = child.text(0)
+                    if ' •' in original_text:
+                        original_text = original_text.replace(' •', '')
+                    
                     if request_id == current_request_id:
-                        # Active request - bold + arrow icon
+                        # Active request - bold + dot on the right
                         font = child.font(0)
                         font.setBold(True)
                         font.setUnderline(False)
                         child.setFont(0, font)
-                        child.setIcon(0, QIcon(arrow_icon_path))
+                        child.setText(0, f"{original_text} •")
+                        child.setIcon(0, QIcon())  # Remove left icon
                         has_current = True
                         has_open = True
                     elif request_id in open_request_ids:
-                        # Open in another tab - small dot icon
+                        # Open in another tab - small dot on the right
                         font = child.font(0)
                         font.setBold(False)
                         font.setUnderline(False)
                         child.setFont(0, font)
-                        child.setIcon(0, QIcon(dot_icon_path))
+                        child.setText(0, f"{original_text} •")
+                        child.setIcon(0, QIcon())  # Remove left icon
                         has_open = True
                     else:
                         # Not open - remove all styling
@@ -1651,6 +1902,7 @@ class MainWindow(QMainWindow):
                         font.setBold(False)
                         font.setUnderline(False)
                         child.setFont(0, font)
+                        child.setText(0, original_text)
                         child.setIcon(0, QIcon())
                         
                 elif child_type == 'folder':
@@ -2366,9 +2618,44 @@ class MainWindow(QMainWindow):
     
     def _load_request(self, request_id: int):
         """Load a request's details into the editor.
-        Note: With the new tab model, this is only called when loading a request into a NEW tab.
-        Existing tabs are permanently bound to their request."""
+        If the request is already open in a tab, switch to that tab.
+        Otherwise, create a new tab or load into the current tab."""
         try:
+            # Check if this request is already open in any tab
+            for tab_index, state in self.tab_states.items():
+                if state.get('request_id') == request_id:
+                    # Request is already open - switch to that tab
+                    self.request_tabs.setCurrentIndex(tab_index)
+                    # Make sure we're showing the tabs view
+                    self.center_stack.setCurrentWidget(self.tabs_container)
+                    # Track in recent requests
+                    self.recent_requests_widget.add_request(request_id)
+                    return
+            
+            # Request not open - check if current tab is empty or create new tab
+            current_tab_index = self.request_tabs.currentIndex()
+            current_state = self.tab_states.get(current_tab_index, {})
+            
+            # If no tabs exist (currentIndex = -1) or current tab has a request_id, create a new tab
+            if current_tab_index < 0 or current_state.get('request_id'):
+                tab_index = self._create_new_tab()
+                self.request_tabs.setCurrentIndex(tab_index)
+            # Otherwise, load into the current empty tab
+            
+            # Make sure we're showing the tabs view
+            self.center_stack.setCurrentWidget(self.tabs_container)
+            
+            # Load the request data into the current tab
+            self._load_request_data(request_id)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load request: {str(e)}")
+    
+    def _load_request_data(self, request_id: int):
+        """Internal method to load request data into the current tab.
+        This should only be called when we're sure we want to load into the current tab."""
+        try:
+            # Now load the request data
             request = self.db.get_request(request_id)
             if not request:
                 QMessageBox.warning(self, "Warning", "Request not found!")
@@ -2505,7 +2792,7 @@ class MainWindow(QMainWindow):
     
     def _get_method_icon(self, method: str) -> str:
         """Get text badge for HTTP method."""
-        return f"[{method}]"
+        return method  # Return method without brackets
     
     def _get_method_color(self, method: str) -> str:
         """Get color hex code for HTTP method."""
@@ -2644,12 +2931,19 @@ class MainWindow(QMainWindow):
     def _update_request_title(self):
         """Update the request title label to show current state with breadcrumb."""
         if self.current_request_id and self.current_request_name:
-            # Saved request - show breadcrumb with method badge
+            # Saved request - show breadcrumb with colored method
             method = self.method_combo.currentText()
-            title = f"{self.current_collection_name} › {method} {self.current_request_name}"
+            method_color = self._get_method_color(method)
+            
+            # Build HTML title with colored method
+            title_html = f"{self.current_collection_name} › "
+            title_html += f"<span style='color: {method_color}; font-weight: bold;'>{method}</span> "
+            title_html += f"{self.current_request_name}"
+            
             if self.has_unsaved_changes:
-                title += " •"  # Use bullet instead of asterisk for cleaner look
-            self.request_title_label.setText(title)
+                title_html += " •"  # Use bullet instead of asterisk for cleaner look
+            
+            self.request_title_label.setText(title_html)
             self.request_title_label.setProperty("saved", "true")
         else:
             # New unsaved request
@@ -3325,11 +3619,14 @@ class MainWindow(QMainWindow):
         # Switch back to empty state
         self.response_stack.setCurrentWidget(self.response_empty_state)
         
-        # Clear Extract Variables widget
+        # Clear Extract Variables widget - hide tree and form groups
         self.variable_extraction_widget.empty_label.setText("📭 Send a request to extract variables from the response")
         self.variable_extraction_widget.empty_label.setStyleSheet("color: #999; font-size: 14px; padding: 40px;")
         self.variable_extraction_widget.empty_label.show()
-        self.variable_extraction_widget.findChild(QSplitter).hide()
+        # Hide the header (hint) and tree/form groups
+        self.variable_extraction_widget.header.hide()
+        for widget in self.variable_extraction_widget.findChildren(QGroupBox):
+            widget.hide()
         
         # Clear test results viewer
         if hasattr(self, 'test_results_viewer') and self.test_results_viewer is not None:
@@ -3582,16 +3879,11 @@ class MainWindow(QMainWindow):
         if env_id is None:
             # No environment selected
             self.env_manager.clear_active_environment()
-            self.env_info_label.setText("No active environment variables")
         else:
             # Load environment
             env = self.db.get_environment(env_id)
             if env:
                 self.env_manager.set_active_environment(env)
-                var_count = len(env.get('variables', {}))
-                self.env_info_label.setText(
-                    f"Active: {env['name']} ({var_count} variable{'s' if var_count != 1 else ''})"
-                )
     
     def _open_environment_dialog(self):
         """Open the environment management dialog."""
@@ -4051,6 +4343,50 @@ class MainWindow(QMainWindow):
         dialog.replay_requested.connect(self._replay_from_history)
         dialog.exec()
     
+    def _show_variable_inspector(self):
+        """Show the variable inspector dialog."""
+        dialog = VariableInspectorDialog(self)
+        
+        # Load current variables
+        self._load_inspector_variables(dialog)
+        
+        # Show dialog
+        dialog.exec()
+    
+    def _load_inspector_variables(self, dialog: VariableInspectorDialog):
+        """Load variables into the inspector."""
+        # Get environment variables
+        environment_vars = {}
+        environment_name = None
+        if hasattr(self, 'env_manager') and self.env_manager:
+            if self.env_manager.has_active_environment():
+                environment_name = self.env_manager.get_active_environment_name()
+                environment_vars = self.env_manager.get_active_variables()
+        
+        # Get collection variables
+        collection_vars = {}
+        if hasattr(self, 'current_collection_id') and self.current_collection_id:
+            # Use the correct database method to get collection variables
+            collection_vars = self.db.get_collection_variables(self.current_collection_id)
+        
+        # Get extracted variables
+        extracted_vars = self.db.get_all_extracted_variables()
+        
+        # Load into dialog
+        dialog.load_variables(
+            environment_vars=environment_vars,
+            collection_vars=collection_vars,
+            extracted_vars=extracted_vars,
+            environment_name=environment_name
+        )
+    
+    def refresh_variable_inspector(self):
+        """Refresh the variable inspector (called by inspector dialog)."""
+        # Find the inspector dialog if it's open
+        for widget in self.findChildren(VariableInspectorDialog):
+            if widget.isVisible():
+                self._load_inspector_variables(widget)
+    
     def _open_variable_library(self):
         """Open the variable library dialog."""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout
@@ -4170,7 +4506,26 @@ class MainWindow(QMainWindow):
     def _replay_from_history(self, history_entry: Dict):
         """Replay a request from history."""
         try:
-            # Load request data into UI
+            # Get or create a tab for this request
+            current_tab_index = self.request_tabs.currentIndex()
+            
+            # Check if current tab is empty (no request loaded)
+            if current_tab_index >= 0 and current_tab_index in self.tab_states:
+                tab_state = self.tab_states[current_tab_index]
+                if tab_state['request_id'] is None:
+                    # Use current empty tab
+                    tab_index = current_tab_index
+                else:
+                    # Create a new tab
+                    tab_index = self._create_new_tab()
+            else:
+                # Create a new tab
+                tab_index = self._create_new_tab()
+            
+            # Switch to the tab
+            self.request_tabs.setCurrentIndex(tab_index)
+            
+            # Load request data into the global widgets (they show content for current tab)
             self.method_combo.setCurrentText(history_entry['method'])
             self.url_input.setText(history_entry['url'])
             
@@ -4201,11 +4556,17 @@ class MainWindow(QMainWindow):
             auth_token = history_entry.get('request_auth_token') or ''
             self.auth_token_input.setText(auth_token)
             
+            # Mark tab as having unsaved changes
+            self.tab_states[tab_index]['has_changes'] = True
+            self.tab_states[tab_index]['name'] = f"{history_entry['method']} (from history)"
+            self._update_tab_title(tab_index)
+            
+            # Show the request editor (switch from empty state if needed)
+            self.center_stack.setCurrentWidget(self.tabs_container)
+            
             # Show success message
-            QMessageBox.information(
-                self, "Request Loaded",
-                f"Request loaded from history:\n{history_entry['method']} {history_entry['url']}\n\n"
-                "Click 'Send' to execute it."
+            self.toast.success(
+                f"Request loaded from history: {history_entry['method']} {history_entry['url']}"
             )
             
         except Exception as e:

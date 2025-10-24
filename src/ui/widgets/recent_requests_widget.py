@@ -16,23 +16,36 @@ from datetime import datetime
 class RecentRequestItem(QWidget):
     """Custom widget for recent request list items."""
     
-    clicked = pyqtSignal(int)  # request_id
+    double_clicked = pyqtSignal(int)  # request_id - only emit on double click
     pin_toggled = pyqtSignal(int, bool)  # request_id, is_pinned
     
     def __init__(self, request_id: int, name: str, method: str, url: str, is_pinned: bool = False):
         super().__init__()
         self.request_id = request_id
         self.is_pinned = is_pinned
+        self.click_count = 0
         
         layout = QHBoxLayout()
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(8)
+        layout.setContentsMargins(4, 2, 4, 2)  # Reduced padding
+        layout.setSpacing(6)
         
-        # Pin button
+        # Pin button - smaller and more compact
         self.pin_btn = QPushButton("📌" if is_pinned else "📍")
-        self.pin_btn.setMaximumWidth(30)
-        self.pin_btn.setMinimumWidth(30)
-        self.pin_btn.setMaximumHeight(24)
+        self.pin_btn.setMaximumWidth(24)  # Reduced from 30
+        self.pin_btn.setMinimumWidth(24)
+        self.pin_btn.setMaximumHeight(20)  # Reduced from 24
+        self.pin_btn.setStyleSheet("""
+            QPushButton {
+                padding: 0px;
+                font-size: 12px;
+                border: none;
+                background: transparent;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 3px;
+            }
+        """)
         self.pin_btn.clicked.connect(self._toggle_pin)
         self.pin_btn.setToolTip("Pin/Unpin request")
         layout.addWidget(self.pin_btn)
@@ -64,13 +77,13 @@ class RecentRequestItem(QWidget):
         self.pin_btn.setText("📌" if self.is_pinned else "📍")
         self.pin_toggled.emit(self.request_id, self.is_pinned)
     
-    def mousePressEvent(self, event):
-        """Handle mouse press to open request."""
+    def mouseDoubleClickEvent(self, event):
+        """Handle double click to open request."""
         if event.button() == Qt.MouseButton.LeftButton:
             # Don't emit if clicking the pin button
             if not self.pin_btn.geometry().contains(event.pos()):
-                self.clicked.emit(self.request_id)
-        super().mousePressEvent(event)
+                self.double_clicked.emit(self.request_id)
+        super().mouseDoubleClickEvent(event)
 
 
 class RecentRequestsWidget(QWidget):
@@ -129,6 +142,7 @@ class RecentRequestsWidget(QWidget):
         # List widget
         self.list_widget = QListWidget()
         self.list_widget.setSpacing(4)
+        # No longer connect itemClicked - we handle double clicks in RecentRequestItem
         layout.addWidget(self.list_widget)
         
         self.setLayout(layout)
@@ -179,10 +193,16 @@ class RecentRequestsWidget(QWidget):
         """Refresh the list widget with current recent requests."""
         self.list_widget.clear()
         
+        # Track valid requests (filter out deleted ones)
+        valid_requests = []
+        
         for request_id, timestamp, is_pinned in self.recent_requests:
             request = self.db.get_request(request_id)
             if not request:
+                # Request was deleted, skip it
                 continue
+            
+            valid_requests.append((request_id, timestamp, is_pinned))
             
             # Create custom item
             item_widget = RecentRequestItem(
@@ -192,14 +212,33 @@ class RecentRequestsWidget(QWidget):
                 request['url'],
                 bool(is_pinned)
             )
-            item_widget.clicked.connect(self.request_selected.emit)
+            item_widget.double_clicked.connect(self.request_selected.emit)  # Changed from clicked to double_clicked
             item_widget.pin_toggled.connect(self._toggle_pin)
             
             # Add to list
             list_item = QListWidgetItem(self.list_widget)
             list_item.setSizeHint(item_widget.sizeHint())
+            # Store request_id in item data for easy retrieval
+            list_item.setData(Qt.ItemDataRole.UserRole, request_id)
             self.list_widget.addItem(list_item)
             self.list_widget.setItemWidget(list_item, item_widget)
+        
+        # Clean up deleted requests from database if any were filtered out
+        if len(valid_requests) < len(self.recent_requests):
+            self._cleanup_deleted_requests()
+    
+    def _cleanup_deleted_requests(self):
+        """Remove entries for requests that no longer exist in the database."""
+        try:
+            cursor = self.db.connection.cursor()
+            # Delete recent_requests entries where the request_id doesn't exist in requests table
+            cursor.execute("""
+                DELETE FROM recent_requests 
+                WHERE request_id NOT IN (SELECT id FROM requests)
+            """)
+            self.db.connection.commit()
+        except Exception as e:
+            print(f"Failed to cleanup deleted requests: {e}")
     
     def add_request(self, request_id: int):
         """Add a request to recent requests."""

@@ -326,8 +326,24 @@ QTableWidget::item:selected {
 }
 
 QTableWidget::item:focus {
-    outline: none;
-    border: 1px solid #007acc;
+    outline: 1px solid #007acc;
+    border: none;
+    background-color: transparent;  /* No background when editing */
+}
+
+QTableWidget::item:selected:focus {
+    background-color: transparent;  /* No background when editing selected cell */
+}
+
+/* Table cell editor (when editing text in a cell) */
+QTableWidget QLineEdit {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    border: 2px solid #007acc;  /* Thicker border for visibility */
+    border-radius: 0px;
+    padding: 2px 4px;
+    selection-background-color: #094771;
+    selection-color: #ffffff;
 }
 
 QHeaderView {
@@ -605,39 +621,55 @@ QTabWidget#requestTabs::pane {
 
 QTabWidget#requestTabs QTabBar::tab {
     background-color: transparent;
-    color: #9E9E9E;
+    color: transparent;  /* Hide default text, we draw custom */
     border: none;
-    border-bottom: 3px solid transparent;
-    padding: 10px 20px;
+    border-radius: 0px;  /* No rounded corners */
+    padding: 6px 12px;  /* Reduced padding (was 8px) */
     min-width: 120px;
-    max-width: 220px;
-    font-size: 13px;
-    font-weight: 500;
-    margin-right: 4px;
-}
-
-QTabWidget#requestTabs QTabBar::tab:hover {
-    background-color: #1a3a52;
-    color: #e0e0e0;
-}
-
-QTabWidget#requestTabs QTabBar::tab:selected {
-    background-color: #1e1e1e;
-    color: #007acc;
-    font-weight: 600;
-    border-bottom: 3px solid #007acc;
+    max-width: 250px;
+    height: 38px;  /* Reduced from 42px */
 }
 
 QTabWidget#requestTabs QTabBar::close-button {
     subcontrol-position: right;
     margin-right: 8px;
-    image: url(assets/icons/close-tab-dark.svg);
+    image: url(assets/icons/close-tab-grey.svg);
     width: 14px;
     height: 14px;
+    background: transparent;
 }
 
 QTabWidget#requestTabs QTabBar::close-button:hover {
-    image: url(assets/icons/close-tab-hover.svg);
+    image: url(assets/icons/close-tab-hover.svg);  /* Red on close button hover */
+}
+
+/* Scroll buttons - flat modern style */
+QTabWidget#requestTabs QTabBar::scroller {
+    width: 24px;
+}
+
+QTabWidget#requestTabs QTabBar QToolButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+    padding: 4px;
+    margin: 0px;
+}
+
+QTabWidget#requestTabs QTabBar QToolButton:hover {
+    background-color: #2d2d30;
+}
+
+QTabWidget#requestTabs QTabBar QToolButton::right-arrow {
+    image: url(assets/icons/arrow-right-grey.svg);
+    width: 12px;
+    height: 12px;
+}
+
+QTabWidget#requestTabs QTabBar QToolButton::left-arrow {
+    image: url(assets/icons/arrow-left-grey.svg);
+    width: 12px;
+    height: 12px;
 }
 
 /* Recent requests close button */

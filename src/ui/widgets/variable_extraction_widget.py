@@ -32,31 +32,18 @@ class VariableExtractionWidget(QWidget):
         """Set up the user interface."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-        # Header with instructions
-        header = QLabel("💡 Click any value in the response below to extract it as a variable")
-        header.setStyleSheet("padding: 8px; background: #E3F2FD; border-radius: 4px; color: #1976D2;")
-        layout.addWidget(header)
+        # Compact header with instructions (hidden initially)
+        self.header = QLabel("💡 Click any value in the response below to extract it as a variable")
+        self.header.setStyleSheet("padding: 6px 8px; background: #E3F2FD; border-radius: 4px; color: #1976D2; font-size: 12px;")
+        self.header.hide()  # Hidden until we have JSON data
+        layout.addWidget(self.header)
         
-        # Splitter for response tree and extraction form
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        
-        # === Top Section: Response JSON Tree ===
+        # === Top Section: Response JSON Tree (takes all available space) ===
         tree_group = QGroupBox("Response JSON Structure")
         tree_layout = QVBoxLayout(tree_group)
-        
-        # Quick suggestions - Hidden by default (rarely useful)
-        # Can be shown if needed, but takes up space and confuses users
-        # suggestions_layout = QHBoxLayout()
-        # suggestions_label = QLabel("Quick Extract:")
-        # suggestions_layout.addWidget(suggestions_label)
-        # 
-        # self.suggestions_combo = QComboBox()
-        # self.suggestions_combo.setPlaceholderText("Select a suggested variable...")
-        # self.suggestions_combo.currentIndexChanged.connect(self._on_suggestion_selected)
-        # suggestions_layout.addWidget(self.suggestions_combo, 1)
-        # 
-        # tree_layout.addLayout(suggestions_layout)
+        tree_layout.setContentsMargins(8, 8, 8, 8)
         
         # JSON tree viewer
         self.json_tree = QTreeWidget()
@@ -67,16 +54,20 @@ class VariableExtractionWidget(QWidget):
         self.json_tree.setAlternatingRowColors(True)
         tree_layout.addWidget(self.json_tree)
         
-        splitter.addWidget(tree_group)
+        layout.addWidget(tree_group)
         
-        # === Bottom Section: Extraction Form ===
+        # === Bottom Section: Fixed Compact Extraction Form (minimal height) ===
         form_group = QGroupBox("Extract Variable")
+        form_group.setMaximumHeight(150)  # Fixed height for compact form
         form_layout = QVBoxLayout(form_group)
+        form_layout.setContentsMargins(8, 6, 8, 6)
+        form_layout.setSpacing(4)
         
         # Create 2×2 grid layout for better space efficiency
         from PyQt6.QtWidgets import QGridLayout
         grid_layout = QGridLayout()
-        grid_layout.setSpacing(8)
+        grid_layout.setSpacing(6)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
         
         # Row 1: Variable Name | JSON Path
         grid_layout.addWidget(QLabel("Variable Name:"), 0, 0)
@@ -108,7 +99,7 @@ class VariableExtractionWidget(QWidget):
         
         form_layout.addLayout(grid_layout)
         
-        # Buttons
+        # Compact buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
@@ -120,7 +111,7 @@ class VariableExtractionWidget(QWidget):
                 background: #4CAF50;
                 color: white;
                 border: none;
-                padding: 8px 16px;
+                padding: 4px 12px;
                 border-radius: 4px;
                 font-weight: bold;
             }
@@ -140,11 +131,7 @@ class VariableExtractionWidget(QWidget):
         
         form_layout.addLayout(button_layout)
         
-        splitter.addWidget(form_group)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 1)
-        
-        layout.addWidget(splitter)
+        layout.addWidget(form_group)
         
         # Empty state message
         self.empty_label = QLabel("📭 Send a request to extract variables from the response")
@@ -153,7 +140,8 @@ class VariableExtractionWidget(QWidget):
         layout.addWidget(self.empty_label)
         
         # Hide tree/form initially
-        splitter.hide()
+        tree_group.hide()
+        form_group.hide()
     
     def set_response(self, response: ApiResponse, request_name: str = ""):
         """
@@ -171,8 +159,11 @@ class VariableExtractionWidget(QWidget):
             self._populate_json_tree(data)
             # self._populate_suggestions()  # Quick Extract disabled
             
-            # Show tree/form, hide empty state
-            self.findChild(QSplitter).show()
+            # Show tree/form and header, hide empty state
+            self.header.show()
+            # Show the tree and form groups (find by class)
+            for widget in self.findChildren(QGroupBox):
+                widget.show()
             self.empty_label.hide()
         except json.JSONDecodeError:
             # Not JSON, show friendly message in the widget (no popup)
@@ -183,7 +174,10 @@ class VariableExtractionWidget(QWidget):
             )
             self.empty_label.setStyleSheet("color: #FF9800; font-size: 14px; padding: 40px;")
             self.empty_label.show()
-            self.findChild(QSplitter).hide()
+            self.header.hide()
+            # Hide the tree and form groups
+            for widget in self.findChildren(QGroupBox):
+                widget.hide()
     
     def _populate_json_tree(self, data: Any, parent: Optional[QTreeWidgetItem] = None, path: str = ""):
         """
