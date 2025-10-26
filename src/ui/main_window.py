@@ -195,8 +195,8 @@ class NoPaddingDelegate(QStyledItemDelegate):
         self.var_highlighter_delegate = VariableHighlightDelegate(parent, theme)
     
     def createEditor(self, parent, option, index):
-        """Create editor with no padding and variable highlighting."""
-        editor = HighlightedLineEdit(parent, self.theme)
+        """Create editor with no padding."""
+        editor = QLineEdit(parent)
         
         # Remove all padding and margins from the editor
         editor.setStyleSheet("""
