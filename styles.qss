@@ -82,8 +82,10 @@ QComboBox:hover {
 
 QComboBox::drop-down {
     border: none;
-    background: transparent;
+    background-color: #FFFFFF;  /* LIGHT background, not transparent */
     width: 20px;
+    subcontrol-origin: padding;
+    subcontrol-position: right center;
 }
 
 QComboBox::down-arrow {
@@ -229,6 +231,10 @@ QTreeWidget::item:selected {
     border-left: 2px solid #3a79d0;
 }
 
+QTreeWidget::item:!selected {
+    color: #757575;  /* Secondary text for inactive */
+}
+
 QTreeWidget::item:selected:active {
     background-color: #E8E8E8;
 }
@@ -278,8 +284,9 @@ QTabBar::tab:hover {
 
 QTabBar::tab:selected {
     background-color: #FFFFFF;
-    color: #212121;  /* Primary text when active */
-    border-bottom: 2px solid #3a79d0;
+    color: #212121;  /* Primary text for active */
+    border-bottom: 2px solid #3a79d0;  /* CLEAR active indicator */
+    font-weight: 500;  /* Semi-bold for active tabs */
 }
 
 QTabBar::tab:!selected {
@@ -474,6 +481,36 @@ QDialog {
 
 QDialog QLabel {
     color: #212121;
+}
+
+QDialog QLabel[class="secondary"] {
+    color: #757575;
+}
+
+QDialog QLabel[class="tertiary"] {
+    color: #9E9E9E;
+}
+
+/* List widgets in dialogs - consistent selection style */
+QDialog QListWidget {
+    background-color: #FFFFFF;
+    color: #212121;
+    border: 1px solid #E0E0E0;
+}
+
+QDialog QListWidget::item {
+    padding: 4px 8px;  /* 4-point grid */
+    border-left: 2px solid transparent;
+}
+
+QDialog QListWidget::item:hover {
+    background-color: #F5F5F5;
+}
+
+QDialog QListWidget::item:selected {
+    background-color: #F9F9F9;  /* Subtle active */
+    color: #212121;
+    border-left: 2px solid #3A79D0;  /* Active accent - consistent with sidebar */
 }
 
 QDialog QPushButton {

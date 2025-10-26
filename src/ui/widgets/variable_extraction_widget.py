@@ -125,6 +125,9 @@ class VariableExtractionWidget(QWidget):
         """)
         button_layout.addWidget(self.save_button)
         
+        # Add 8px spacing between buttons (4-point grid)
+        button_layout.addSpacing(8)
+        
         clear_btn = QPushButton("Clear")
         clear_btn.clicked.connect(self._clear_form)
         button_layout.addWidget(clear_btn)

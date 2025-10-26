@@ -389,6 +389,12 @@ class ColoredTabBar(QTabBar):
                     name_width = painter.fontMetrics().horizontalAdvance(name_display)
                 name_display += "..."
             
+            # Apply text hierarchy: active = primary, inactive = secondary
+            if is_selected:
+                painter.setPen(QPen(QColor('#E0E0E0' if is_dark_theme else '#212121')))  # Primary text
+            else:
+                painter.setPen(QPen(QColor('#9E9E9E' if is_dark_theme else '#757575')))  # Secondary text
+            
             painter.drawText(x, y, name_display)
             x += painter.fontMetrics().horizontalAdvance(name_display) + 6
             
@@ -1316,6 +1322,9 @@ class MainWindow(QMainWindow):
         self.send_btn.setFont(send_font)
         url_layout.addWidget(self.send_btn)
         
+        # Add 8px spacing between buttons (4-point grid)
+        url_layout.addSpacing(8)
+        
         self.save_btn = QPushButton("Save")
         self.save_btn.setMinimumWidth(80)
         self.save_btn.setMinimumHeight(38)  # Match Send button height
@@ -1323,6 +1332,9 @@ class MainWindow(QMainWindow):
         self.save_btn.setToolTip("Save request (Ctrl+S)")
         self.save_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         url_layout.addWidget(self.save_btn)
+        
+        # Add 8px spacing between buttons (4-point grid)
+        url_layout.addSpacing(8)
         
         self.code_btn = QPushButton("💻 Code")
         self.code_btn.setMinimumWidth(80)
@@ -1426,13 +1438,17 @@ class MainWindow(QMainWindow):
         self.status_badge.setVisible(False)  # Hidden until we have a response
         status_layout.addWidget(self.status_badge)
         
+        # Metadata labels - use tertiary color for less prominence
         self.status_label = QLabel("Status: -")
+        self.status_label.setProperty("class", "tertiary")  # Tertiary text for metadata
         status_layout.addWidget(self.status_label)
         
         self.time_label = QLabel("Time: -")
+        self.time_label.setProperty("class", "tertiary")  # Tertiary text for metadata
         status_layout.addWidget(self.time_label)
         
         self.size_label = QLabel("Size: -")
+        self.size_label.setProperty("class", "tertiary")  # Tertiary text for metadata
         status_layout.addWidget(self.size_label)
         
         status_layout.addStretch()
@@ -1590,7 +1606,8 @@ class MainWindow(QMainWindow):
                 padding: 4px 8px;
                 border: none;
                 background: transparent;
-                font-weight: bold;
+                color: #9E9E9E;  /* Secondary text for form labels */
+                font-weight: normal;
             }
             QPushButton:hover {
                 background-color: rgba(100, 100, 100, 0.2);
@@ -1631,7 +1648,9 @@ class MainWindow(QMainWindow):
         
         # Auth type dropdown
         type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("Type:"))
+        type_label = QLabel("Type:")
+        type_label.setProperty("class", "secondary")  # Secondary text for form labels
+        type_layout.addWidget(type_label)
         self.auth_type_combo = QComboBox()
         self.auth_type_combo.addItems(['None', 'Bearer Token', 'OAuth 2.0'])
         self.auth_type_combo.currentTextChanged.connect(self._on_auth_type_changed)
@@ -1645,7 +1664,9 @@ class MainWindow(QMainWindow):
         bearer_layout.setContentsMargins(0, 0, 0, 0)
         
         token_layout = QHBoxLayout()
-        token_layout.addWidget(QLabel("Token:"))
+        token_label = QLabel("Token:")
+        token_label.setProperty("class", "secondary")  # Secondary text for form labels
+        token_layout.addWidget(token_label)
         self.auth_token_input = QLineEdit()
         self.auth_token_input.setPlaceholderText("Enter bearer token or use {{variable}}")
         self.auth_token_input.textChanged.connect(self._update_tab_counts)
@@ -1662,7 +1683,7 @@ class MainWindow(QMainWindow):
         
         oauth_status_layout = QHBoxLayout()
         self.oauth_status_label = QLabel("No OAuth token configured")
-        self.oauth_status_label.setStyleSheet("color: #999; font-style: italic;")
+        self.oauth_status_label.setProperty("class", "tertiary")  # Tertiary text for helper/status messages
         oauth_status_layout.addWidget(self.oauth_status_label)
         oauth_status_layout.addStretch()
         oauth_layout.addLayout(oauth_status_layout)

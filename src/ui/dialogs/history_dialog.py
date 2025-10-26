@@ -121,6 +121,9 @@ class HistoryDialog(QDialog):
         self.replay_btn.clicked.connect(self._replay_request)
         button_layout.addWidget(self.replay_btn)
         
+        # Add 8px spacing between buttons (4-point grid)
+        button_layout.addSpacing(8)
+        
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         button_layout.addWidget(close_btn)

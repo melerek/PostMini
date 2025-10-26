@@ -83,10 +83,16 @@ class CurlImportDialog(QDialog):
         preview_btn.clicked.connect(self._preview_curl)
         button_layout.addWidget(preview_btn)
         
+        # Add 8px spacing between buttons (4-point grid)
+        button_layout.addSpacing(8)
+        
         import_btn = QPushButton("📥 Import")
         import_btn.setDefault(True)
         import_btn.clicked.connect(self._import_curl)
         button_layout.addWidget(import_btn)
+        
+        # Add 8px spacing between buttons (4-point grid)
+        button_layout.addSpacing(8)
         
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)

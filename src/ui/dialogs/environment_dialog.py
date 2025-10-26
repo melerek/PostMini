@@ -132,6 +132,9 @@ class EnvironmentDialog(QDialog):
         add_btn.clicked.connect(self._add_environment)
         button_layout.addWidget(add_btn)
         
+        # Add 8px spacing between buttons (4-point grid)
+        button_layout.addSpacing(8)
+        
         delete_btn = QPushButton("Delete")
         delete_btn.clicked.connect(self._delete_environment)
         button_layout.addWidget(delete_btn)

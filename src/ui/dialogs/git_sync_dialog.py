@@ -97,6 +97,7 @@ class GitSyncDialog(QDialog):
         path_layout.addWidget(self.path_input)
         
         browse_button = QPushButton("Browse...")
+        browse_button.setProperty("class", "secondary")  # Secondary button, not primary CTA
         browse_button.clicked.connect(self._browse_directory)
         path_layout.addWidget(browse_button)
         
@@ -120,6 +121,9 @@ class GitSyncDialog(QDialog):
         self.enable_button = QPushButton("🚀 Enable Git Sync")
         self.enable_button.clicked.connect(self._enable_git_sync)
         action_layout.addWidget(self.enable_button)
+        
+        # Add 8px spacing between buttons (4-point grid)
+        action_layout.addSpacing(8)
         
         self.disable_button = QPushButton("❌ Disable Git Sync")
         self.disable_button.clicked.connect(self._disable_git_sync)
@@ -622,6 +626,9 @@ git pull
         copy_button = QPushButton("📋 Copy All Commands")
         copy_button.clicked.connect(lambda: QApplication.clipboard().setText(commands))
         button_layout.addWidget(copy_button)
+        
+        # Add 8px spacing between buttons (4-point grid)
+        button_layout.addSpacing(8)
         
         close_button = QPushButton("Close")
         close_button.clicked.connect(dialog.accept)
