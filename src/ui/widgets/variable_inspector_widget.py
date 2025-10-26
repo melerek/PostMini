@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QGroupBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QColor, QCursor
+from PyQt6.QtGui import QColor, QCursor, QFont
 from typing import Dict, List, Optional
 
 
@@ -28,13 +28,15 @@ class VariableInspectorDialog(QDialog):
     def _init_ui(self):
         """Initialize the user interface."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(12)  # 4-point grid
+        layout.setContentsMargins(12, 12, 12, 12)  # 4-point grid
         
         # Header
         header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)  # 4-point grid
         
         title = QLabel("📊 Variable Inspector")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("font-size: 14px; font-weight: 600;")  # Use Inter from global
         header_layout.addWidget(title)
         
         header_layout.addStretch()
@@ -52,11 +54,12 @@ class VariableInspectorDialog(QDialog):
             "Click on a variable to copy its syntax ({{variableName}})."
         )
         info_label.setWordWrap(True)
-        info_label.setProperty("class", "secondary-text")
+        info_label.setProperty("class", "secondary")  # Secondary text color
         layout.addWidget(info_label)
         
         # Search box
         search_layout = QHBoxLayout()
+        search_layout.setSpacing(8)  # 4-point grid
         search_label = QLabel("🔍 Search:")
         search_layout.addWidget(search_label)
         
@@ -69,7 +72,7 @@ class VariableInspectorDialog(QDialog):
         
         # Tree widget for variables
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Variable", "Value", "Source"])
+        self.tree.setHeaderLabels(["VARIABLE", "VALUE", "SOURCE"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setColumnWidth(0, 200)
         self.tree.setColumnWidth(1, 300)
@@ -79,11 +82,12 @@ class VariableInspectorDialog(QDialog):
         
         # Status label
         self.status_label = QLabel("No variables loaded")
-        self.status_label.setProperty("class", "secondary-text")
+        self.status_label.setProperty("class", "tertiary")  # Tertiary text
         layout.addWidget(self.status_label)
         
         # Buttons
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)  # 4-point grid
         button_layout.addStretch()
         
         close_btn = QPushButton("Close")

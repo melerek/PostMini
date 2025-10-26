@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import (
     QHeaderView, QWidget, QSplitter, QStyledItemDelegate
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 from typing import Dict, Optional
 
 from src.core.database import DatabaseManager
@@ -55,24 +54,25 @@ class EnvironmentDialog(QDialog):
     def _init_ui(self):
         """Initialize the user interface."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)  # Reduced spacing
-        layout.setContentsMargins(12, 12, 12, 12)  # Reduced margins
+        layout.setSpacing(12)  # 4-point grid
+        layout.setContentsMargins(12, 12, 12, 12)  # 4-point grid
         
-        # Compact header with title and description on same line - FIXED HEIGHT
+        # Compact header with title and description
         from PyQt6.QtWidgets import QSizePolicy
         header_widget = QWidget()
-        header_widget.setFixedHeight(32)  # Fixed height to prevent expansion
+        header_widget.setFixedHeight(32)  # Fixed height
         header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(8)  # 4-point grid
         
         title = QLabel("Environments")
-        title.setFont(QFont("Arial", 12, QFont.Weight.Bold))  # Smaller font
+        title.setStyleSheet("font-size: 14px; font-weight: 600;")  # Primary text, slightly larger
         header_layout.addWidget(title)
         
         # Compact description with lighter styling
         description = QLabel("Store variables like {{baseUrl}}, {{apiKey}} for automatic substitution")
-        description.setStyleSheet("color: #757575; font-size: 11px;")
+        description.setProperty("class", "tertiary")  # Use tertiary text style
         header_layout.addWidget(description)
         header_layout.addStretch()
         
@@ -98,6 +98,7 @@ class EnvironmentDialog(QDialog):
         button_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         button_layout = QHBoxLayout(button_widget)
         button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(8)  # 4-point grid
         button_layout.addStretch()
         
         close_btn = QPushButton("Close")
@@ -110,10 +111,12 @@ class EnvironmentDialog(QDialog):
         """Create the left panel with environments list."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setSpacing(8)  # 4-point grid
+        layout.setContentsMargins(0, 0, 0, 0)
         
         # Title
         title = QLabel("Environments")
-        title.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        title.setStyleSheet("font-size: 12px; font-weight: 600;")
         layout.addWidget(title)
         
         # List widget
@@ -123,6 +126,7 @@ class EnvironmentDialog(QDialog):
         
         # Buttons
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)  # 4-point grid
         
         add_btn = QPushButton("Add")
         add_btn.clicked.connect(self._add_environment)
@@ -140,10 +144,15 @@ class EnvironmentDialog(QDialog):
         """Create the right panel for editing environment variables."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setSpacing(8)  # 4-point grid
+        layout.setContentsMargins(0, 0, 0, 0)
         
         # Environment name
         name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("Name:"))
+        name_layout.setSpacing(8)  # 4-point grid
+        name_label = QLabel("Name:")
+        name_label.setProperty("class", "secondary")
+        name_layout.addWidget(name_label)
         self.env_name_input = QLineEdit()
         self.env_name_input.setPlaceholderText("e.g., Development, Production")
         self.env_name_input.textChanged.connect(self._on_name_changed)
@@ -152,13 +161,13 @@ class EnvironmentDialog(QDialog):
         
         # Variables title
         var_title = QLabel("Variables")
-        var_title.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        var_title.setStyleSheet("font-size: 12px; font-weight: 600; margin-top: 8px;")
         layout.addWidget(var_title)
         
         # Variables table
         self.variables_table = QTableWidget()
         self.variables_table.setColumnCount(2)
-        self.variables_table.setHorizontalHeaderLabels(['Variable', 'Value'])
+        self.variables_table.setHorizontalHeaderLabels(['VARIABLE', 'VALUE'])
         self.variables_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.variables_table.setRowCount(10)  # Start with 10 empty rows
         
@@ -172,10 +181,25 @@ class EnvironmentDialog(QDialog):
         add_row_btn.clicked.connect(self._add_variable_row)
         layout.addWidget(add_row_btn)
         
-        # Save button
+        # Save button - PRIMARY CTA
         save_btn = QPushButton("Save Environment")
+        save_btn.setObjectName("primaryButton")  # Will be styled by global CSS
+        save_btn.setStyleSheet("""
+            QPushButton#primaryButton {
+                background-color: #3a79d0;
+                color: #FFFFFF;
+                border: none;
+                padding: 8px 16px;
+                font-weight: 500;
+            }
+            QPushButton#primaryButton:hover {
+                background-color: #4a89e0;
+            }
+            QPushButton#primaryButton:pressed {
+                background-color: #2a69c0;
+            }
+        """)
         save_btn.clicked.connect(self._save_environment)
-        save_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 8px; }")
         layout.addWidget(save_btn)
         
         # Initially disable editor

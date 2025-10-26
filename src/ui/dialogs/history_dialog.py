@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QSplitter, QWidget, QTabWidget
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QColor
 from typing import Dict, Optional
 from datetime import datetime
 
@@ -39,26 +39,32 @@ class HistoryDialog(QDialog):
     def _init_ui(self):
         """Initialize the user interface."""
         layout = QVBoxLayout(self)
+        layout.setSpacing(12)  # 4-point grid
+        layout.setContentsMargins(12, 12, 12, 12)  # 4-point grid
         
         # Title and stats
         header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)  # 4-point grid
         
         title = QLabel("Request History")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("font-size: 14px; font-weight: 600;")  # Use Inter from global
         header_layout.addWidget(title)
         
         header_layout.addStretch()
         
         self.stats_label = QLabel()
-        self.stats_label.setProperty("class", "secondary-text")
+        self.stats_label.setProperty("class", "secondary")  # Secondary text color
         header_layout.addWidget(self.stats_label)
         
         layout.addLayout(header_layout)
         
         # Filter controls
         filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(8)  # 4-point grid
         
-        filter_layout.addWidget(QLabel("Filter:"))
+        filter_label = QLabel("Filter:")
+        filter_label.setProperty("class", "secondary")
+        filter_layout.addWidget(filter_label)
         
         self.filter_combo = QComboBox()
         self.filter_combo.addItems([
@@ -90,7 +96,7 @@ class HistoryDialog(QDialog):
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(7)
         self.history_table.setHorizontalHeaderLabels([
-            'Time', 'Method', 'URL', 'Status', 'Time (s)', 'Size', 'Collection'
+            'TIME', 'METHOD', 'URL', 'STATUS', 'TIME (S)', 'SIZE', 'COLLECTION'
         ])
         self.history_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -125,9 +131,10 @@ class HistoryDialog(QDialog):
         """Create the details panel for showing request/response details."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setSpacing(8)  # 4-point grid
         
         details_label = QLabel("Request Details")
-        details_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        details_label.setStyleSheet("font-size: 12px; font-weight: 600;")  # Use Inter from global
         layout.addWidget(details_label)
         
         # Tabs for request and response

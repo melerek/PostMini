@@ -1129,6 +1129,7 @@ class MainWindow(QMainWindow):
         # Collections tree
         self.collections_tree = QTreeWidget()
         self.collections_tree.setHeaderHidden(True)  # Hide "Name" header
+        self.collections_tree.setIconSize(QSize(16, 16))  # Standardize icon size to 16px
         # Set custom delegate for colored method badges
         self.collections_tree.setItemDelegate(RequestTreeItemDelegate())
         # Single-click on collections to expand/collapse
