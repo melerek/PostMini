@@ -98,9 +98,10 @@ class RequestTreeItemDelegate(QStyledItemDelegate):
             else:
                 font = option.font
             
-            # Create bold font for method
+            # Create bold font for method (slightly smaller)
             bold_font = QFont(font)
             bold_font.setBold(True)
+            bold_font.setPointSizeF(font.pointSizeF() * 0.92)  # 92% of normal size
             
             painter.setFont(bold_font)
             fm_bold = QFontMetrics(bold_font)
@@ -124,17 +125,18 @@ class RequestTreeItemDelegate(QStyledItemDelegate):
                 icon_width = icon_size + 3  # Icon width + spacing
                 x += icon_width
             
-            # Calculate y position for text
+            # Calculate y position for text (adjust slightly for smaller method font)
             y = text_rect.y() + text_rect.height() // 2 + fm.ascent() // 2 - 1
             
-            # Draw the method in bold and colored
+            # Draw the method in bold, smaller, and colored
             painter.setFont(bold_font)
             painter.setPen(QPen(QColor(method_color)))
             painter.drawText(x, y, method)
             
-            # Move x position for request name
-            method_width = fm_bold.horizontalAdvance(method + ' ')
-            x += method_width
+            # Move x position for request name (method width + spacing)
+            method_width = fm_bold.horizontalAdvance(method)
+            # Add fixed spacing (6 pixels) - reduced since method is now smaller
+            x += method_width + 6
             
             # Draw the request name in normal font and gray
             painter.setFont(font)

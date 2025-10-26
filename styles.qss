@@ -1,12 +1,14 @@
 /* ==========================================
    API Client - Professional Stylesheet
    Based on modern design principles
+   Typography: Inter for UI, JetBrains Mono for code
    ========================================== */
 
 /* ==================== GLOBAL STYLES ==================== */
 
 * {
-    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 400;
     font-size: 13px;
 }
 
@@ -181,6 +183,8 @@ QLineEdit {
     min-height: 28px;
     max-height: 38px;
     font-size: 13px;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-weight: 400;
 }
 
 QLineEdit:hover {
@@ -213,6 +217,8 @@ QTextEdit {
     background-color: white;
     color: #212121;
     selection-background-color: #BBDEFB;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-weight: 400;
 }
 
 QTextEdit:hover {
@@ -363,6 +369,8 @@ QTableWidget {
     border-radius: 4px;
     selection-background-color: #BBDEFB;
     outline: none;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-weight: 400;
 }
 
 QTableWidget::item {
@@ -370,6 +378,8 @@ QTableWidget::item {
     border-bottom: 1px solid #E0E0E0;
     color: #212121;
     background-color: white;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-weight: 400;
 }
 
 QTableWidget::item:selected {

@@ -1,11 +1,14 @@
 /* =====================================================
    PostMini - Dark Theme Stylesheet
    Professional dark mode with excellent contrast
+   Typography: Inter for UI, JetBrains Mono for code
    ===================================================== */
 
 /* ==================== Global Styles ==================== */
 * {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 400;
+    font-size: 13px;
 }
 
 QMainWindow {
@@ -151,6 +154,8 @@ QLineEdit, QTextEdit, QPlainTextEdit {
     selection-background-color: #264f78;
     selection-color: #ffffff;
     font-size: 13px;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-weight: 400;
 }
 
 QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {
@@ -170,8 +175,9 @@ QLineEdit:disabled, QTextEdit:disabled {
 
 /* Special styling for URL input field */
 QLineEdit#urlInput {
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
     font-size: 13px;
+    font-weight: 400;
 }
 
 /* ==================== ComboBox ==================== */
@@ -341,11 +347,15 @@ QTableWidget {
     selection-background-color: #094771;
     selection-color: #ffffff;
     alternate-background-color: #252526;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-weight: 400;
 }
 
 QTableWidget::item {
     padding: 8px 10px;
     border: none;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-weight: 400;
 }
 
 QTableWidget::item:hover {

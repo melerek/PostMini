@@ -13,10 +13,60 @@ import sys
 import os
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QFontDatabase
 
 from src.ui.main_window import MainWindow
 from src.core.app_paths import get_app_paths
+
+
+def load_custom_fonts():
+    """
+    Load custom fonts (Inter and JetBrains Mono) for the application.
+    These fonts are bundled with the application for consistent typography.
+    """
+    try:
+        from src.core.app_paths import AppPaths
+        resources_dir = AppPaths.get_resources_dir()
+        fonts_dir = resources_dir / "assets" / "fonts"
+        
+        # Define font files to load - using static TTF files for better weight control
+        font_files = [
+            # Inter font (UI font) - load specific weights
+            fonts_dir / "Inter" / "extras" / "ttf" / "Inter-Regular.ttf",
+            fonts_dir / "Inter" / "extras" / "ttf" / "Inter-Medium.ttf",
+            fonts_dir / "Inter" / "extras" / "ttf" / "Inter-SemiBold.ttf",
+            fonts_dir / "Inter" / "extras" / "ttf" / "Inter-Bold.ttf",
+            fonts_dir / "Inter" / "extras" / "ttf" / "Inter-Italic.ttf",
+            # JetBrains Mono (Code font) - load specific weights
+            fonts_dir / "JetBrainsMono" / "fonts" / "ttf" / "JetBrainsMono-Regular.ttf",
+            fonts_dir / "JetBrainsMono" / "fonts" / "ttf" / "JetBrainsMono-Medium.ttf",
+            fonts_dir / "JetBrainsMono" / "fonts" / "ttf" / "JetBrainsMono-SemiBold.ttf",
+            fonts_dir / "JetBrainsMono" / "fonts" / "ttf" / "JetBrainsMono-Bold.ttf",
+            fonts_dir / "JetBrainsMono" / "fonts" / "ttf" / "JetBrainsMono-Italic.ttf",
+        ]
+        
+        loaded_fonts = []
+        for font_path in font_files:
+            if font_path.exists():
+                font_id = QFontDatabase.addApplicationFont(str(font_path))
+                if font_id != -1:
+                    font_families = QFontDatabase.applicationFontFamilies(font_id)
+                    loaded_fonts.extend(font_families)
+                    print(f"[OK] Loaded font: {font_path.name}")
+                else:
+                    print(f"[Warning] Failed to load font: {font_path}")
+            else:
+                print(f"[Warning] Font file not found: {font_path}")
+        
+        if loaded_fonts:
+            print(f"[OK] Successfully loaded {len(set(loaded_fonts))} custom font families")
+            print(f"[OK] Font families available: {', '.join(set(loaded_fonts))}")
+        else:
+            print("[Warning] No custom fonts were loaded. Using system defaults.")
+            
+    except Exception as e:
+        print(f"[Warning] Error loading custom fonts: {e}")
+        print("[Info] Application will use system default fonts")
 
 
 def load_stylesheet(filename: str = "styles.qss") -> str:
@@ -126,6 +176,9 @@ def main():
     app.setApplicationName("PostMini")
     app.setOrganizationName("PostMini")
     app.setApplicationVersion("1.1.2")
+    
+    # Load custom fonts BEFORE loading stylesheets
+    load_custom_fonts()
     
     # Set application icon (try ICO first for better Windows support, fallback to PNG)
     icon_path_ico = app_paths.get_resources_dir() / "postmini_logo.ico"
