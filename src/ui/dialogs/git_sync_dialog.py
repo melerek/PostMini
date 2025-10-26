@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QHeaderView
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
 
 from src.core.database import DatabaseManager
 from src.features.git_sync_manager import GitSyncManager, GitSyncConfig, SyncStatus
@@ -162,10 +161,7 @@ class GitSyncDialog(QDialog):
         status_layout = QVBoxLayout()
         
         self.sync_status_label = QLabel("No workspace active")
-        font = QFont()
-        font.setPointSize(11)
-        font.setBold(True)
-        self.sync_status_label.setFont(font)
+        self.sync_status_label.setStyleSheet("font-size: 12px; font-weight: 600;")  # Use Inter from global
         status_layout.addWidget(self.sync_status_label)
         
         self.sync_message_label = QLabel("")
@@ -550,7 +546,6 @@ class GitSyncDialog(QDialog):
     def _show_git_commands(self):
         """Show Git commands dialog with copy functionality."""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton, QHBoxLayout
-        from PyQt6.QtGui import QFont
         
         dialog = QDialog(self)
         dialog.setWindowTitle("Git Commands Reference")
@@ -564,8 +559,10 @@ class GitSyncDialog(QDialog):
         # Commands text
         commands_text = QTextEdit()
         commands_text.setReadOnly(True)
-        font = QFont("Courier New", 10)
-        commands_text.setFont(font)
+        commands_text.setStyleSheet("""
+            font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+            font-size: 11px;
+        """)  # Use monospace for code
         
         commands = """# After exporting collections (clicking Export button):
 # ================================================

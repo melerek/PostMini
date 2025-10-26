@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QMenu
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtGui import QAction
 from datetime import datetime
 
 
@@ -26,14 +26,14 @@ class RecentRequestItem(QWidget):
         self.click_count = 0
         
         layout = QHBoxLayout()
-        layout.setContentsMargins(4, 2, 4, 2)  # Reduced padding
-        layout.setSpacing(6)
+        layout.setContentsMargins(8, 4, 8, 4)  # 4-point grid
+        layout.setSpacing(8)  # 4-point grid
         
-        # Pin button - smaller and more compact
+        # Pin button - compact and modern
         self.pin_btn = QPushButton("📌" if is_pinned else "📍")
-        self.pin_btn.setMaximumWidth(24)  # Reduced from 30
+        self.pin_btn.setMaximumWidth(24)
         self.pin_btn.setMinimumWidth(24)
-        self.pin_btn.setMaximumHeight(20)  # Reduced from 24
+        self.pin_btn.setMaximumHeight(20)
         self.pin_btn.setStyleSheet("""
             QPushButton {
                 padding: 0px;
@@ -54,16 +54,19 @@ class RecentRequestItem(QWidget):
         content_layout = QVBoxLayout()
         content_layout.setSpacing(2)
         
-        # Request name
+        # Request name - use Inter (inherits from global)
         name_label = QLabel(name)
-        name_font = QFont()
-        name_font.setBold(self.is_pinned)
-        name_label.setFont(name_font)
+        if self.is_pinned:
+            name_label.setStyleSheet("font-weight: 600;")  # Bold for pinned
         content_layout.addWidget(name_label)
         
-        # Method and URL
+        # Method and URL - use JetBrains Mono for URL
         method_url_label = QLabel(f"{method} • {url[:40]}{'...' if len(url) > 40 else ''}")
-        method_url_label.setStyleSheet("color: #888;")
+        method_url_label.setStyleSheet("""
+            color: #9E9E9E;
+            font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+            font-size: 11px;
+        """)
         content_layout.addWidget(method_url_label)
         
         layout.addLayout(content_layout, stretch=1)
@@ -110,11 +113,13 @@ class RecentRequestsWidget(QWidget):
         header_widget = QWidget()
         header_widget.setObjectName("recentRequestsHeader")
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(16, 12, 12, 12)
-        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(12, 12, 12, 12)  # 4-point grid
+        header_layout.setSpacing(8)  # 4-point grid
         
+        # Title - use Inter from global stylesheet
         header_label = QLabel("Recent Requests")
         header_label.setObjectName("recentRequestsTitle")
+        header_label.setStyleSheet("font-size: 13px; font-weight: 600;")
         header_layout.addWidget(header_label)
         
         header_layout.addStretch()  # Push buttons to the right
@@ -132,6 +137,7 @@ class RecentRequestsWidget(QWidget):
         # Close button with custom SVG icon
         self.close_btn = QPushButton()
         self.close_btn.setObjectName("recentRequestsCloseButton")
+        self.close_btn.setText("✕")  # Close icon
         self.close_btn.setMaximumWidth(28)
         self.close_btn.setMaximumHeight(28)
         self.close_btn.setToolTip("Close recent requests panel")
@@ -141,7 +147,7 @@ class RecentRequestsWidget(QWidget):
         
         # List widget
         self.list_widget = QListWidget()
-        self.list_widget.setSpacing(4)
+        self.list_widget.setSpacing(4)  # 4-point grid
         # No longer connect itemClicked - we handle double clicks in RecentRequestItem
         layout.addWidget(self.list_widget)
         
@@ -307,4 +313,3 @@ class RecentRequestsWidget(QWidget):
             self._load_recent_requests()
         except Exception as e:
             print(f"Failed to clear recent requests: {e}")
-

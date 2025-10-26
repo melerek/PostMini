@@ -37,6 +37,7 @@ from src.ui.widgets.method_badge import MethodBadge, StatusBadge
 from src.ui.widgets.variable_extraction_widget import VariableExtractionWidget
 from src.ui.widgets.variable_inspector_widget import VariableInspectorDialog
 from src.ui.widgets.variable_library_widget import VariableLibraryWidget
+from src.ui.widgets.variable_highlight_delegate import VariableSyntaxHighlighter, VariableHighlightDelegate, HighlightedLineEdit
 from src.ui.widgets.empty_state import NoRequestEmptyState, NoResponseEmptyState, NoCollectionsEmptyState
 from src.features.test_engine import TestEngine, TestAssertion
 from src.ui.dialogs.collection_test_runner import CollectionTestRunnerDialog
@@ -186,21 +187,36 @@ class RequestThread(QThread):
 
 
 class NoPaddingDelegate(QStyledItemDelegate):
-    """Custom delegate to remove padding from table cell editors."""
+    """Custom delegate to remove padding from table cell editors and highlight variables."""
+    
+    def __init__(self, parent=None, theme='dark'):
+        super().__init__(parent)
+        self.theme = theme
+        self.var_highlighter_delegate = VariableHighlightDelegate(parent, theme)
     
     def createEditor(self, parent, option, index):
-        """Create editor with no padding."""
-        editor = super().createEditor(parent, option, index)
-        if isinstance(editor, QLineEdit):
-            # Remove all padding and margins from the editor
-            editor.setStyleSheet("""
-                QLineEdit {
-                    padding: 0px;
-                    margin: 0px;
-                    border: none;
-                }
-            """)
+        """Create editor with no padding and variable highlighting."""
+        editor = HighlightedLineEdit(parent, self.theme)
+        
+        # Remove all padding and margins from the editor
+        editor.setStyleSheet("""
+            QLineEdit {
+                padding: 0px;
+                margin: 0px;
+                border: none;
+            }
+        """)
+        
         return editor
+    
+    def paint(self, painter, option, index):
+        """Use variable highlighting delegate's paint method."""
+        self.var_highlighter_delegate.paint(painter, option, index)
+    
+    def set_theme(self, theme):
+        """Update theme."""
+        self.theme = theme
+        self.var_highlighter_delegate.set_theme(theme)
 
 
 
@@ -1275,11 +1291,12 @@ class MainWindow(QMainWindow):
         self.method_combo.currentTextChanged.connect(self._update_method_style)
         url_layout.addWidget(self.method_combo)
         
-        self.url_input = QLineEdit()
+        self.url_input = HighlightedLineEdit(theme=self.current_theme)
         self.url_input.setPlaceholderText("Enter request URL or paste text")
         self.url_input.returnPressed.connect(self._send_request)  # Enter key sends request
         self.url_input.setMinimumHeight(38)  # Make URL input taller
         self.url_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
         url_layout.addWidget(self.url_input)
         
         # IMPROVED: Larger, more prominent Send button
@@ -1352,6 +1369,10 @@ class MainWindow(QMainWindow):
         self.body_input = QTextEdit()
         self.body_input.setPlaceholderText("Enter request body (e.g., JSON)")
         self.body_input.textChanged.connect(self._mark_as_changed)
+        
+        # Add variable syntax highlighting to body
+        self.body_highlighter = VariableSyntaxHighlighter(self.body_input.document(), self.current_theme)
+        
         body_layout.addWidget(self.body_input)
         self.inner_tabs.addTab(body_widget, "Body")
         
@@ -1533,8 +1554,11 @@ class MainWindow(QMainWindow):
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         table.setRowCount(3)  # Start with 3 empty rows (reduced for better space)
         
-        # Apply custom delegate to remove padding from cell editors
-        table.setItemDelegate(NoPaddingDelegate())
+        # Apply custom delegate with variable highlighting
+        delegate = NoPaddingDelegate(table, self.current_theme)
+        table.setItemDelegate(delegate)
+        # Store delegate reference to update theme later
+        table._custom_delegate = delegate
         
         # Enable context menu for right-click delete
         table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -5169,6 +5193,18 @@ class MainWindow(QMainWindow):
             
             # Refresh request title to use theme-aware colors
             self._update_request_title()
+            
+            # Update variable highlighters for new theme
+            if hasattr(self, 'url_input') and hasattr(self.url_input, 'set_theme'):
+                self.url_input.set_theme(new_theme)
+            if hasattr(self, 'body_highlighter'):
+                self.body_highlighter.set_theme(new_theme)
+            
+            # Update table delegates
+            for table in [self.params_table, self.headers_table]:
+                if hasattr(table, '_custom_delegate'):
+                    table._custom_delegate.set_theme(new_theme)
+                    table.viewport().update()  # Force repaint
             
             # Show confirmation message
             theme_name = "Dark" if new_theme == "dark" else "Light"

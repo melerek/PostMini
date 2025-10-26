@@ -660,4 +660,40 @@ QPushButton#renameRequestBtn:pressed {
     background-color: rgba(33, 33, 33, 0.1);
 }
 
+/* ==================== RECENT REQUESTS WIDGET ==================== */
+QPushButton#recentRequestsCloseButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 3px;
+    padding: 4px;
+    color: #757575;
+    font-size: 16px;
+}
+
+QPushButton#recentRequestsCloseButton:hover {
+    background-color: rgba(33, 33, 33, 0.08);
+    color: #212121;
+}
+
+QPushButton#recentRequestsCloseButton:pressed {
+    background-color: rgba(33, 33, 33, 0.12);
+}
+
+QPushButton#recentRequestsClearButton {
+    background-color: transparent;
+    border: 1px solid #BDBDBD;
+    border-radius: 3px;
+    padding: 4px 8px;
+    color: #212121;
+}
+
+QPushButton#recentRequestsClearButton:hover {
+    background-color: rgba(33, 33, 33, 0.08);
+    border-color: #9E9E9E;
+}
+
+QPushButton#recentRequestsClearButton:pressed {
+    background-color: rgba(33, 33, 33, 0.12);
+}
+
 /* ==================== END OF STYLESHEET ==================== */
