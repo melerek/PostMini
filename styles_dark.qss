@@ -17,19 +17,50 @@ QWidget {
     color: #e0e0e0;
 }
 
-/* ==================== Toolbar ==================== */
+/* ==================== Toolbar - Professional Modern Style ==================== */
 QToolBar {
-    background-color: #252526;
+    background-color: #2D2D30;
     border: none;
-    border-bottom: 1px solid #3e3e42;
-    padding: 8px;
-    spacing: 8px;
+    border-bottom: 1px solid #3E3E42;
+    padding: 4px 12px;
+    spacing: 4px;
 }
 
 QToolBar::separator {
-    background-color: #3e3e42;
-    width: 1px;
-    margin: 4px 8px;
+    background-color: transparent;
+    width: 8px;
+    margin: 0px;
+}
+
+QToolBar QLabel {
+    color: #CCCCCC;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 0px 4px;
+}
+
+QToolBar QPushButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+    padding: 8px 16px;
+    color: #E0E0E0;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+QToolBar QPushButton:hover {
+    background-color: #3E3E42;
+}
+
+QToolBar QPushButton:pressed {
+    background-color: #505050;
+}
+
+QToolBar QPushButton:focus {
+    outline: none;
+    background-color: transparent;
+    border: none;
 }
 
 /* ==================== Buttons ==================== */
@@ -55,15 +86,15 @@ QPushButton:pressed {
     padding-bottom: 5px;
 }
 
-QPushButton:focus {
-    border: 2px solid #007acc;
-    outline: none;
-}
-
 QPushButton:disabled {
     background-color: #2d2d30;
     color: #656565;
     border-color: #3e3e42;
+}
+
+QPushButton:focus {
+    outline: none;
+    border: 1px solid #3e3e42;  /* Keep normal border on focus, no blue highlight */
 }
 
 /* Primary action button - ENHANCED FOR PROFESSIONAL LOOK */

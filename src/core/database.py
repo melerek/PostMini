@@ -1253,6 +1253,31 @@ class DatabaseManager:
             }
         return None
     
+    def get_folder_path(self, folder_id: Optional[int]) -> List[str]:
+        """
+        Get the full path of folder names from root to the specified folder.
+        
+        Args:
+            folder_id: ID of the folder, or None for no folder
+            
+        Returns:
+            List of folder names from root to specified folder (empty if None)
+        """
+        if folder_id is None:
+            return []
+        
+        path = []
+        current_id = folder_id
+        
+        while current_id is not None:
+            folder = self.get_folder(current_id)
+            if folder is None:
+                break
+            path.insert(0, folder['name'])
+            current_id = folder.get('parent_id')
+        
+        return path
+    
     def update_folder(self, folder_id: int, name: Optional[str] = None, parent_id: Optional[int] = None):
         """
         Update a folder's name or parent.

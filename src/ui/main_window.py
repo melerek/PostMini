@@ -287,6 +287,12 @@ class ColoredTabBar(QTabBar):
                 # Show close button only for hovered tab
                 button.setVisible(index == self.hovered_tab)
     
+    def tabInserted(self, index: int):
+        """Called when a tab is inserted - hide close button initially."""
+        super().tabInserted(index)
+        # Hide close button by default for newly inserted tabs
+        self._update_close_button_visibility()
+    
     def paintEvent(self, event):
         """Custom paint event to draw colored method names."""
         painter = QPainter(self)
@@ -411,6 +417,7 @@ class MainWindow(QMainWindow):
         self.current_request_id = None
         self.current_request_name = None
         self.current_collection_name = None
+        self.current_folder_id = None  # Track current folder
         
         # Track unsaved changes
         self.has_unsaved_changes = False
@@ -479,6 +486,9 @@ class MainWindow(QMainWindow):
         
         # Create horizontal container for tab bar + recent button (always visible)
         tab_bar_container = QWidget()
+        tab_bar_container.setMaximumHeight(38)  # Fixed height to prevent extension
+        tab_bar_container.setMinimumHeight(38)
+        tab_bar_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         tab_bar_layout = QHBoxLayout(tab_bar_container)
         tab_bar_layout.setContentsMargins(0, 0, 0, 0)
         tab_bar_layout.setSpacing(0)
@@ -520,8 +530,8 @@ class MainWindow(QMainWindow):
         self.recent_requests_btn.clicked.connect(self._toggle_recent_requests)
         tab_bar_layout.addWidget(self.recent_requests_btn)
         
-        # Add tab bar container to the top of center area (always visible)
-        center_container_layout.addWidget(tab_bar_container)
+        # Add tab bar container to the top of center area (always visible, fixed height)
+        center_container_layout.addWidget(tab_bar_container, 0)  # Stretch factor 0 = fixed height
         
         # Install event filter on tab bar for middle-click detection
         self.request_tabs.tabBar().installEventFilter(self)
@@ -604,14 +614,14 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.env_combo)
         
         # Manage environments button
-        manage_env_btn = QPushButton("Manage Environments")
+        manage_env_btn = QPushButton("⚙️ Manage Environments")
         manage_env_btn.clicked.connect(self._open_environment_dialog)
         toolbar.addWidget(manage_env_btn)
         
         toolbar.addSeparator()
         
         # History button
-        history_btn = QPushButton("📋 History")
+        history_btn = QPushButton("📋 Requests history")
         history_btn.clicked.connect(self._open_history_dialog)
         toolbar.addWidget(history_btn)
         
@@ -1178,6 +1188,7 @@ class MainWindow(QMainWindow):
         
         # Create vertical splitter (request editor | response viewer)
         self.main_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.main_splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing
         
         # Top section: Request Editor
         request_editor = self._create_request_editor()
@@ -1187,13 +1198,15 @@ class MainWindow(QMainWindow):
         response_viewer = self._create_response_viewer()
         self.main_splitter.addWidget(response_viewer)
         
-        # Set splitter sizes (70% request editor, 30% response viewer initially)
-        # Response panel will auto-expand when a response is received
-        self.main_splitter.setStretchFactor(0, 70)  # Request editor - more space initially
-        self.main_splitter.setStretchFactor(1, 30)  # Response viewer - smaller initially
-        self.main_splitter.setSizes([600, 300])  # Default sizes favor editing
+        # Set splitter sizes to 50/50 split (equal space for request and response)
+        # This will maintain proper proportions when window is maximized
+        self.main_splitter.setStretchFactor(0, 1)  # Request editor - 50%
+        self.main_splitter.setStretchFactor(1, 1)  # Response viewer - 50%
         
         layout.addWidget(self.main_splitter)
+        
+        # Set initial sizes to 50/50 split after window is shown
+        # This will be calculated based on actual available height
         
         return pane
     
@@ -1204,14 +1217,39 @@ class MainWindow(QMainWindow):
         layout.setSpacing(8)
         
         # Dynamic request title header (fixed height, no stretch) - ENHANCED
+        # Create a container for the title label and rename button
+        title_container = QWidget()
+        title_container.setMaximumHeight(40)
+        title_container.setMinimumHeight(40)
+        title_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        title_layout = QHBoxLayout(title_container)
+        title_layout.setContentsMargins(10, 5, 10, 5)
+        title_layout.setSpacing(6)  # Smaller spacing for inline appearance
+        title_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)  # Vertical center alignment
+        
         self.request_title_label = QLabel("New Request (not saved)")
         self.request_title_label.setObjectName("requestTitleLabel")
-        self.request_title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))  # Increased from 12 to 16
-        self.request_title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.request_title_label.setMaximumHeight(40)  # Increased from 30 to 40
-        self.request_title_label.setMinimumHeight(40)  # Increased from 30 to 40
-        self.request_title_label.setStyleSheet("padding: 5px 10px;")  # Add padding for better appearance
-        layout.addWidget(self.request_title_label, 0)  # Stretch factor 0 = fixed
+        self.request_title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        self.request_title_label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)  # Changed to Minimum so it doesn't expand
+        self.request_title_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Vertical center
+        title_layout.addWidget(self.request_title_label)
+        
+        # Add rename button with pencil icon - inline with text
+        self.rename_request_btn = QPushButton("✏️")
+        self.rename_request_btn.setObjectName("renameRequestBtn")
+        self.rename_request_btn.setFixedSize(22, 22)  # Smaller, more delicate
+        self.rename_request_btn.setToolTip("Rename request")
+        self.rename_request_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.rename_request_btn.setVisible(False)  # Hidden by default, shown when request is loaded
+        self.rename_request_btn.clicked.connect(self._rename_current_request)
+        # Theme-aware styling will be applied via method
+        self._update_rename_button_style()
+        title_layout.addWidget(self.rename_request_btn, 0, Qt.AlignmentFlag.AlignVCenter)  # Add with vertical center alignment
+        
+        # Add stretch to push everything to the left
+        title_layout.addStretch()
+        
+        layout.addWidget(title_container, 0)  # Stretch factor 0 = fixed
         
         # Method and URL row (fixed height, no stretch)
         # Wrap in a container widget to enforce fixed height
@@ -1745,8 +1783,8 @@ class MainWindow(QMainWindow):
                 
                 folder_count, request_count = count_items(folder_data['id'])
                 
-                # Format folder name with counts
-                folder_name = f"{folder_data['name']} [{folder_count}] [{request_count}]"
+                # Format folder name with request count only
+                folder_name = f"{folder_data['name']} [{request_count}]"
                 folder_item = QTreeWidgetItem([folder_name])
                 folder_item.setData(0, Qt.ItemDataRole.UserRole,
                                    {'type': 'folder', 'id': folder_data['id'],
@@ -2665,6 +2703,7 @@ class MainWindow(QMainWindow):
             self.current_request_id = request_id
             self.current_collection_id = request.get('collection_id')
             self.current_request_name = request.get('name', 'Unnamed Request')
+            self.current_folder_id = request.get('folder_id')  # Track folder
             collection = self.db.get_collection(request.get('collection_id'))
             self.current_collection_name = collection.get('name', 'Unknown Collection') if collection else 'Unknown Collection'
             
@@ -2768,6 +2807,7 @@ class MainWindow(QMainWindow):
         self.current_request_id = None
         self.current_request_name = None
         self.current_collection_name = None
+        self.current_folder_id = None  # Reset folder
         self.has_unsaved_changes = False
         self.original_request_data = {}
         self._update_request_title()
@@ -2929,26 +2969,57 @@ class MainWindow(QMainWindow):
         self.inner_tabs.setTabText(4, tests_label)
     
     def _update_request_title(self):
-        """Update the request title label to show current state with breadcrumb."""
+        """Update the request title label to show current state with breadcrumb (Postman-style)."""
         if self.current_request_id and self.current_request_name:
-            # Saved request - show breadcrumb with colored method
+            # Saved request - show full breadcrumb with colored method
             method = self.method_combo.currentText()
             method_color = self._get_method_color(method)
             
-            # Build HTML title with colored method
-            title_html = f"{self.current_collection_name} › "
-            title_html += f"<span style='color: {method_color}; font-weight: bold;'>{method}</span> "
-            title_html += f"{self.current_request_name}"
+            # Theme-aware colors
+            muted_color = "#757575" if self.current_theme == 'light' else "#AAAAAA"
+            text_color = "#212121" if self.current_theme == 'light' else "#E0E0E0"
+            new_request_color = "#9E9E9E" if self.current_theme == 'light' else "#999999"
             
+            # Build breadcrumb path: Collection > Folder1 > Folder2 > METHOD RequestName
+            breadcrumb_parts = []
+            
+            # Add collection name (muted, not bold)
+            breadcrumb_parts.append(f"<span style='color: {muted_color}; font-weight: normal;'>{self.current_collection_name}</span>")
+            
+            # Add folder path if exists (muted, not bold)
+            if self.current_folder_id:
+                folder_path = self.db.get_folder_path(self.current_folder_id)
+                for folder_name in folder_path:
+                    breadcrumb_parts.append(f"<span style='color: {muted_color}; font-weight: normal;'>{folder_name}</span>")
+            
+            # Build the HTML breadcrumb
+            title_html = " › ".join(breadcrumb_parts)
+            
+            # Add separator before method and request name
+            if breadcrumb_parts:
+                title_html += " › "
+            
+            # Add highlighted method and request name
+            title_html += f"<span style='color: {method_color}; font-weight: bold;'>{method}</span> "
+            title_html += f"<span style='font-weight: 600; color: {text_color};'>{self.current_request_name}</span>"
+            
+            # Add unsaved indicator
             if self.has_unsaved_changes:
-                title_html += " •"  # Use bullet instead of asterisk for cleaner look
+                title_html += " <span style='color: #FF6B6B;'>•</span>"  # Red dot for unsaved
             
             self.request_title_label.setText(title_html)
             self.request_title_label.setProperty("saved", "true")
+            
+            # Show rename button for saved requests
+            self.rename_request_btn.setVisible(True)
         else:
             # New unsaved request
-            self.request_title_label.setText("New Request (not saved)")
+            new_request_color = "#9E9E9E" if self.current_theme == 'light' else "#999999"
+            self.request_title_label.setText(f"<span style='color: {new_request_color}; font-style: italic;'>New Request (not saved)</span>")
             self.request_title_label.setProperty("saved", "false")
+            
+            # Hide rename button for unsaved requests
+            self.rename_request_btn.setVisible(False)
         
         # Force style refresh
         self.request_title_label.style().unpolish(self.request_title_label)
@@ -5090,6 +5161,12 @@ class MainWindow(QMainWindow):
             self.current_theme = new_theme
             self._update_theme_button()
             
+            # Update rename button style for new theme
+            self._update_rename_button_style()
+            
+            # Refresh request title to use theme-aware colors
+            self._update_request_title()
+            
             # Show confirmation message
             theme_name = "Dark" if new_theme == "dark" else "Light"
             self.statusBar().showMessage(f"✨ {theme_name} theme activated", 3000)
@@ -5231,6 +5308,60 @@ class MainWindow(QMainWindow):
             self.toast.success("cURL command copied to clipboard")
         except Exception as e:
             self.toast.error(f"Failed to copy: {str(e)[:30]}...")
+    
+    def _rename_current_request(self):
+        """Rename the currently active request using the breadcrumb button."""
+        if self.current_request_id:
+            self._rename_request(self.current_request_id)
+    
+    def _update_rename_button_style(self):
+        """Update rename button style based on current theme - delicate hover effect."""
+        if self.current_theme == 'dark':
+            self.rename_request_btn.setStyleSheet("""
+                QPushButton#renameRequestBtn {
+                    background-color: transparent;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 2px;
+                    font-size: 12px;
+                    color: rgba(255, 255, 255, 0.5);
+                }
+                QPushButton#renameRequestBtn:hover {
+                    background-color: rgba(255, 255, 255, 0.25);
+                    color: rgba(255, 255, 255, 0.95);
+                }
+                QPushButton#renameRequestBtn:pressed {
+                    background-color: rgba(255, 255, 255, 0.3);
+                    color: white;
+                }
+                QPushButton#renameRequestBtn:focus {
+                    outline: none;
+                    border: none;
+                }
+            """)
+        else:
+            self.rename_request_btn.setStyleSheet("""
+                QPushButton#renameRequestBtn {
+                    background-color: transparent;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 2px;
+                    font-size: 12px;
+                    color: rgba(0, 0, 0, 0.4);
+                }
+                QPushButton#renameRequestBtn:hover {
+                    background-color: rgba(0, 0, 0, 0.12);
+                    color: rgba(0, 0, 0, 0.85);
+                }
+                QPushButton#renameRequestBtn:pressed {
+                    background-color: rgba(0, 0, 0, 0.18);
+                    color: rgba(0, 0, 0, 0.95);
+                }
+                QPushButton#renameRequestBtn:focus {
+                    outline: none;
+                    border: none;
+                }
+            """)
     
     def _rename_request(self, request_id: int):
         """Rename a request."""
