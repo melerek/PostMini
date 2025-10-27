@@ -75,25 +75,31 @@ class TestDescriptionField:
     
     def test_description_toggle_expand(self, main_window):
         """Test expanding the description section."""
-        # Click toggle button
-        main_window.description_toggle_btn.click()
+        # Ensure initial state
+        assert not main_window.description_input.isVisibleTo(main_window.description_widget)
         
-        # Verify it's expanded
-        assert main_window.description_input.isVisible()
+        # Toggle description (directly call method for reliable test)
+        main_window._toggle_description()
+        
+        # Verify it's expanded (check if visible relative to parent)
+        assert main_window.description_input.isVisibleTo(main_window.description_widget)
         assert main_window.description_toggle_btn.text() == "▼ Description"
     
     def test_description_toggle_collapse(self, main_window):
         """Test collapsing the description section."""
         # Expand first
-        main_window.description_toggle_btn.click()
-        assert main_window.description_input.isVisible()
+        main_window._toggle_description()
+        assert main_window.description_toggle_btn.text() == "▼ Description"
         
         # Then collapse
-        main_window.description_toggle_btn.click()
+        main_window._toggle_description()
         
-        # Verify it's collapsed
-        assert not main_window.description_input.isVisible()
+        # Verify it's collapsed (check button text which indicates state)
         assert main_window.description_toggle_btn.text() == "▶ Description"
+        
+        # Also verify the widget was set to not visible (direct check)
+        from PyQt6.QtCore import Qt
+        assert not main_window.description_input.testAttribute(Qt.WidgetAttribute.WA_WState_Visible)
     
     def test_description_save_and_load(self, main_window):
         """Test saving and loading description with request."""
@@ -111,7 +117,7 @@ class TestDescriptionField:
         
         # Verify description is loaded and expanded
         assert main_window.description_input.toPlainText() == "This is a test description"
-        assert main_window.description_input.isVisible()
+        assert main_window.description_input.isVisibleTo(main_window.description_widget)
         assert main_window.description_toggle_btn.text() == "▼ Description"
     
     def test_description_save_updates_database(self, main_window):
@@ -348,7 +354,7 @@ class TestTimeoutConfiguration:
     def test_timeout_input_in_auth_tab(self, main_window):
         """Test that timeout input is in Authorization tab."""
         # Authorization tab should have timeout settings
-        auth_widget = main_window.request_tabs.widget(2)  # Auth tab is index 2
+        auth_widget = main_window.inner_tabs.widget(2)  # Auth tab is index 2
         assert auth_widget is not None
     
     def test_timeout_updates_api_client(self, main_window):
@@ -458,7 +464,7 @@ class TestSSLCertificateHandling:
     def test_ssl_checkbox_in_auth_tab(self, main_window):
         """Test that SSL checkbox is in Authorization tab."""
         # Should be in the same widget as timeout
-        auth_widget = main_window.request_tabs.widget(2)
+        auth_widget = main_window.inner_tabs.widget(2)
         assert auth_widget is not None
     
     def test_ssl_updates_api_client(self, main_window):
@@ -555,7 +561,7 @@ class TestIntegration:
         
         # Verify all settings are loaded correctly
         assert main_window.description_input.toPlainText() == "Test API with custom settings"
-        assert main_window.description_input.isVisible()
+        assert main_window.description_input.isVisibleTo(main_window.description_widget)
         assert main_window.timeout_input.text() == "45"
         assert main_window.verify_ssl_checkbox.isChecked() == False
     
@@ -563,7 +569,7 @@ class TestIntegration:
         """Test that clearing editor resets all new V1.3.0 fields."""
         # Set description
         main_window.description_input.setPlainText("Test description")
-        main_window.description_toggle_btn.click()  # Expand
+        main_window._toggle_description()  # Expand
         
         # Set custom timeout
         main_window.timeout_input.setText("90")

@@ -244,19 +244,19 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 
 | Category | Winner |
 |----------|--------|
-| **Core API Testing** | 🥇 PostMini v1.3.0 (description, timeout, SSL) |
+| **Core API Testing** | 🥇 PostMini v1.7.0 (description, timeout, SSL) |
 | **Collections & Organization** | 🥈 Postman |
-| **Environment & Variables** | 🥇 PostMini |
+| **Environment & Variables** | 🥇 PostMini v1.7.0 (request chaining, variable extraction) |
 | **Authentication & Security** | 🥇 PostMini |
 | **Code Generation** | 🥈 Postman |
-| **Testing & Automation** | 🥈 Postman Enterprise |
+| **Testing & Automation** | 🥇 PostMini v1.7.0 (advanced test reporting) |
 | **Collaboration** | 🥇 PostMini (for Git users) |
 | **Data & Privacy** | 🥇 PostMini |
 | **Import/Export** | 🥈 Postman Enterprise |
 | **Platform & Compatibility** | 🥇 PostMini |
-| **Developer Experience** | 🥇 PostMini v1.3.0 (smart error messages) |
+| **Developer Experience** | 🥇 PostMini v1.7.0 (smart error messages) |
 
-**🎉 PostMini wins 7 out of 11 categories!**
+**🎉 PostMini wins 8 out of 11 categories!**
 
 ---
 
@@ -357,18 +357,21 @@ Many teams use **both** tools:
 
 ## 🎁 Unique PostMini Features
 
-These features are **only in PostMini**, not in Postman:
+These features are **only in PostMini**, not in Postman Free:
 
-1. ✨ **Git-Native Collaboration** - Version control built on Git
-2. ✨ **Pull Request Workflows** - Review API changes like code
-3. ✨ **Git-Ignored Secrets** - Auto-separation of secrets from repos
-4. ✨ **100% Offline** - No internet required at all
-5. ✨ **100% Local Data** - Zero cloud storage
-6. ✨ **Open Source** - MIT License, full transparency
-7. ✨ **Conflict Resolution Helper** - Visual merge tool for collections
-8. ✨ **React Code Generation** - Generate React API hooks
-9. ✨ **Lightweight Installer** - 30MB vs 200MB
-10. ✨ **One-Click Dark Mode** - Instant theme switching with persistence
+1. ✨ **Interactive Variable Extraction** - Click-to-extract from JSON responses (Free in PostMini, Pro+ in Postman)
+2. ✨ **Variable Library UI** - Built-in variable management dialog (Free in PostMini, Enterprise in Postman)
+3. ✨ **Multi-Format Test Reports** - Export as HTML, JUnit, JSON, CSV (Free in PostMini, Pro+ in Postman)
+4. ✨ **Git-Native Collaboration** - Version control built on Git
+5. ✨ **Pull Request Workflows** - Review API changes like code
+6. ✨ **Git-Ignored Secrets** - Auto-separation of secrets from repos
+7. ✨ **100% Offline** - No internet required at all
+8. ✨ **100% Local Data** - Zero cloud storage
+9. ✨ **Open Source** - MIT License, full transparency
+10. ✨ **Conflict Resolution Helper** - Visual merge tool for collections
+11. ✨ **React Code Generation** - Generate React API hooks
+12. ✨ **Lightweight Installer** - 30MB vs 200MB
+13. ✨ **One-Click Dark Mode** - Instant theme switching with persistence
 
 ---
 
@@ -381,34 +384,33 @@ These features are **only in Postman**, not in PostMini:
 3. ✨ **Scheduled Monitors** - Cloud-based monitoring
 4. ✨ **Published Docs** - Shareable documentation
 5. ✨ **HAR Import** - HTTP Archive import
-6. ✨ **GraphQL Support** - Native GraphQL client (coming in PostMini v1.5.0)
-7. ✨ **Pre-request Scripts** - JavaScript automation (coming in PostMini v1.6.0)
+6. ✨ **GraphQL Support** - Native GraphQL client (planned for PostMini v1.8.0+)
+7. ✨ **Pre-request Scripts** - JavaScript automation (planned for PostMini v1.8.0+)
 8. ✨ **Postbot AI** - AI-powered assistant
 
 ---
 
 ## 📈 Feature Roadmap
 
-### PostMini Recent Additions (v1.1.2):
+### PostMini v1.7.0 - Latest Release (October 2025):
 
-- ✅ **Dark Mode** - One-click theme toggle with persistence
-- ✅ **Application Icon** - Professional branding in taskbar and window
-- ✅ **cURL Import** - Paste cURL commands, instant requests
-- ✅ **Windows Installer** - 30MB standalone installer with proper icon
-- ✅ **%APPDATA% Storage** - Safe, permission-free data storage
-- ✅ **UI Improvements** - Refined dark mode styling, better cell editors
-
-### PostMini v1.4.0 Recent Additions:
-
+- ✅ **Request Chaining** - Extract values from API responses
+- ✅ **Variable Extraction** - Interactive JSON tree with click-to-extract
+- ✅ **Variable Library** - Centralized variable management UI
+- ✅ **Advanced Test Reports** - Export as HTML, JUnit, JSON, CSV
+- ✅ **Multi-Request Tabs** - Work on unlimited requests simultaneously
+- ✅ **Professional UI Polish** - Gradient buttons, color-coded badges
 - ✅ **Dynamic Variables** - 38+ auto-generated test data variables
 - ✅ **OpenAPI/Swagger Import** - Import API specs (OpenAPI 3.x, Swagger 2.0)
+- ✅ **Dark Mode** - One-click theme toggle with persistence
+- ✅ **cURL Import/Export** - Paste cURL commands, instant requests
 
-### PostMini Planned Features (v1.5.0+):
+### PostMini Planned Features (v1.8.0+):
 
-- 🔜 GraphQL support (v1.5.0)
-- 🔜 Pre-request scripts (v1.6.0)
+- 🔜 GraphQL support
+- 🔜 Pre-request scripts
 - 🔜 API mocking
-- 🔜 Collection folders/nesting
+- 🔜 Multi-level folder nesting
 - 🔜 More code generation languages
 
 ### Postman Recent Additions:
@@ -433,7 +435,7 @@ Both tools are excellent for API testing, but they serve different audiences:
 ---
 
 **Updated:** October 2025  
-**PostMini Version:** 1.4.0  
+**PostMini Version:** 1.7.0  
 **Postman Version:** Latest (as of October 2025)
 
 *This comparison is maintained independently and aims to be fair and accurate. If you notice any errors, please submit an issue or pull request.*

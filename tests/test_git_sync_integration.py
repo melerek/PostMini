@@ -95,7 +95,7 @@ class TestGitSyncCollaboration(unittest.TestCase):
         # User 1 sets up the project
         self.user1_manager.initialize_workspace()
         coll_id = self.user1_db.create_collection("Shared API")
-        self.user1_db.create_request(coll_id, "Get Data", "GET", "https://api.example.com/data")
+        self.user1_db.create_request("Get Data", "https://api.example.com/data", "GET", coll_id)
         self.user1_manager.sync_to_filesystem()
         
         # User 2 detects workspace (simulating Git clone + opening PostMini)
@@ -127,7 +127,7 @@ class TestGitSyncCollaboration(unittest.TestCase):
         
         # User 1 adds "User API" collection
         coll1 = self.user1_db.create_collection("User API")
-        self.user1_db.create_request(coll1, "List Users", "GET", "https://api.example.com/users")
+        self.user1_db.create_request("List Users", "https://api.example.com/users", "GET", coll1)
         self.user1_manager.sync_to_filesystem()
         
         # User 2 imports User 1's work
@@ -135,7 +135,7 @@ class TestGitSyncCollaboration(unittest.TestCase):
         
         # User 2 adds "Product API" collection
         coll2 = self.user2_db.create_collection("Product API")
-        self.user2_db.create_request(coll2, "List Products", "GET", "https://api.example.com/products")
+        self.user2_db.create_request("List Products", "https://api.example.com/products", "GET", coll2)
         self.user2_manager.sync_to_filesystem()
         
         # User 1 pulls User 2's changes
@@ -163,13 +163,13 @@ class TestGitSyncCollaboration(unittest.TestCase):
         # Setup: Both users have the same collection
         self.user1_manager.initialize_workspace()
         coll_id = self.user1_db.create_collection("Shared Collection")
-        self.user1_db.create_request(coll_id, "Request 1", "GET", "https://api.example.com/1")
+        self.user1_db.create_request("Request 1", "https://api.example.com/1", "GET", coll_id)
         self.user1_manager.sync_to_filesystem()
         
         success, message, imported = self.user2_manager.import_all_collections()
         
         # User 1 adds a new request to the collection
-        self.user1_db.create_request(coll_id, "Request 2", "POST", "https://api.example.com/2")
+        self.user1_db.create_request("Request 2", "https://api.example.com/2", "POST", coll_id)
         self.user1_manager.sync_to_filesystem()
         
         # User 2 pulls updates
@@ -194,7 +194,10 @@ class TestGitSyncCollaboration(unittest.TestCase):
         # User 1 creates collection with tests
         coll_id = self.user1_db.create_collection("Tested API")
         req_id = self.user1_db.create_request(
-            coll_id, "Get Data", "GET", "https://api.example.com/data"
+            name="Get Data",
+            url="https://api.example.com/data",
+            method="GET",
+            collection_id=coll_id
         )
         
         # Add test assertions
@@ -308,7 +311,10 @@ class TestGitSyncCollaboration(unittest.TestCase):
         coll_id = self.user1_db.create_collection("Complete API")
         
         req1 = self.user1_db.create_request(
-            coll_id, "Request 1", "GET", "https://api.example.com/1",
+            name="Request 1",
+            url="https://api.example.com/1",
+            method="GET",
+            collection_id=coll_id,
             params={"page": "1"},
             headers={"Authorization": "Bearer {{token}}"},
             body='{"test": true}',
@@ -317,7 +323,10 @@ class TestGitSyncCollaboration(unittest.TestCase):
         )
         
         req2 = self.user1_db.create_request(
-            coll_id, "Request 2", "POST", "https://api.example.com/2",
+            name="Request 2",
+            url="https://api.example.com/2",
+            method="POST",
+            collection_id=coll_id,
             params={"action": "create"},
             headers={"Content-Type": "application/json"}
         )
@@ -486,7 +495,7 @@ class TestConflictScenarios(unittest.TestCase):
         
         # Add to database
         coll_id = self.db.create_collection("API Collection")
-        self.db.create_request(coll_id, "DB Request", "GET", "http://db.example.com")
+        self.db.create_request("DB Request", "http://db.example.com", "GET", coll_id)
         
         # Add to filesystem (simulating external change)
         fs_collection = {

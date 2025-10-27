@@ -1632,7 +1632,10 @@ class MainWindow(QMainWindow):
     
     def _toggle_description(self):
         """Toggle the visibility of the description section."""
-        is_visible = self.description_input.isVisible()
+        # Use testAttribute to check explicit visibility state (works even when parent is hidden)
+        from PyQt6.QtCore import Qt
+        is_visible = self.description_input.testAttribute(Qt.WidgetAttribute.WA_WState_ExplicitShowHide) and \
+                    not self.description_input.testAttribute(Qt.WidgetAttribute.WA_WState_Hidden)
         self.description_input.setVisible(not is_visible)
         
         # Update button text

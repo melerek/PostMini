@@ -56,30 +56,30 @@ class TestCollapsibleResponsePanel:
         """Test that response panel starts expanded."""
         assert main_window.response_panel_collapsed == False
         # Note: response_content_widget may not be visible until workspace_pane is shown
-        assert main_window.response_collapse_btn.text() == "▼ Collapse"
+        assert main_window.response_collapse_icon.text() == "▼"
     
     def test_collapse_response_panel(self, main_window):
         """Test collapsing the response panel."""
-        # Click collapse button
-        main_window.response_collapse_btn.click()
+        # Toggle collapse (simulate click on icon)
+        main_window._toggle_response_panel()
         
         # Verify panel is collapsed
         assert main_window.response_panel_collapsed == True
         assert not main_window.response_content_widget.isVisible()
-        assert main_window.response_collapse_btn.text() == "▶ Expand"
+        assert main_window.response_collapse_icon.text() == "▶"
     
     def test_expand_response_panel(self, main_window):
         """Test expanding a collapsed response panel."""
         # Collapse first
-        main_window.response_collapse_btn.click()
+        main_window._toggle_response_panel()
         assert main_window.response_panel_collapsed == True
         
-        # Click expand button
-        main_window.response_collapse_btn.click()
+        # Toggle to expand
+        main_window._toggle_response_panel()
         
         # Verify panel is expanded
         assert main_window.response_panel_collapsed == False
-        assert main_window.response_collapse_btn.text() == "▼ Collapse"
+        assert main_window.response_collapse_icon.text() == "▼"
     
     def test_toggle_response_panel_method(self, main_window):
         """Test _toggle_response_panel method directly."""
@@ -139,19 +139,19 @@ class TestTabBadges:
     def test_initial_tab_labels(self, main_window):
         """Test that tabs have correct initial labels."""
         # Params tab should be index 0
-        params_label = main_window.request_tabs.tabText(0)
+        params_label = main_window.inner_tabs.tabText(0)
         assert "Params" in params_label
         
         # Headers tab should be index 1
-        headers_label = main_window.request_tabs.tabText(1)
+        headers_label = main_window.inner_tabs.tabText(1)
         assert "Headers" in headers_label
         
         # Auth tab should be index 2
-        auth_label = main_window.request_tabs.tabText(2)
+        auth_label = main_window.inner_tabs.tabText(2)
         assert "Authorization" in auth_label
         
         # Tests tab should be index 4 (Body is 3)
-        tests_label = main_window.request_tabs.tabText(4)
+        tests_label = main_window.inner_tabs.tabText(4)
         assert "Tests" in tests_label
     
     def test_params_count_badge(self, main_window):
@@ -168,7 +168,7 @@ class TestTabBadges:
         main_window._update_tab_counts()
         
         # Check params tab label
-        params_label = main_window.request_tabs.tabText(0)
+        params_label = main_window.inner_tabs.tabText(0)
         assert "Params (2)" in params_label
     
     def test_headers_count_badge(self, main_window):
@@ -183,7 +183,7 @@ class TestTabBadges:
         main_window._update_tab_counts()
         
         # Check headers tab label
-        headers_label = main_window.request_tabs.tabText(1)
+        headers_label = main_window.inner_tabs.tabText(1)
         assert "Headers (1)" in headers_label
     
     def test_auth_configured_indicator(self, main_window):
@@ -196,7 +196,7 @@ class TestTabBadges:
         main_window._update_tab_counts()
         
         # Check auth tab label
-        auth_label = main_window.request_tabs.tabText(2)
+        auth_label = main_window.inner_tabs.tabText(2)
         assert "✓" in auth_label
     
     def test_auth_not_configured_indicator(self, main_window):
@@ -208,7 +208,7 @@ class TestTabBadges:
         main_window._update_tab_counts()
         
         # Check auth tab label
-        auth_label = main_window.request_tabs.tabText(2)
+        auth_label = main_window.inner_tabs.tabText(2)
         assert "✓" not in auth_label
         assert auth_label == "Authorization"
     
@@ -217,7 +217,7 @@ class TestTabBadges:
         # Tests tab count is based on existing assertions
         # Just verify the tab text updates properly
         main_window._update_tab_counts()
-        tests_label = main_window.request_tabs.tabText(4)
+        tests_label = main_window.inner_tabs.tabText(4)
         # Should show "Tests" (and possibly a count)
         assert "Tests" in tests_label
     
@@ -230,7 +230,7 @@ class TestTabBadges:
         main_window._update_tab_counts()
         
         # Check params tab label
-        params_label = main_window.request_tabs.tabText(0)
+        params_label = main_window.inner_tabs.tabText(0)
         assert params_label == "Params"
         assert "(" not in params_label
     
@@ -238,7 +238,7 @@ class TestTabBadges:
         """Test that tab counts update when data changes."""
         # Initially empty
         main_window._update_tab_counts()
-        params_label = main_window.request_tabs.tabText(0)
+        params_label = main_window.inner_tabs.tabText(0)
         assert params_label == "Params"
         
         # Add a param (this should trigger update due to itemChanged signal)
@@ -249,7 +249,7 @@ class TestTabBadges:
         
         # itemChanged signal should trigger _update_tab_counts
         # Check params tab label
-        params_label = main_window.request_tabs.tabText(0)
+        params_label = main_window.inner_tabs.tabText(0)
         # Badge should appear
         assert "Params" in params_label
 
@@ -376,7 +376,7 @@ class TestIntegration:
         """Test that tab counts update when auth type changes."""
         # Initial state
         main_window._update_tab_counts()
-        auth_label = main_window.request_tabs.tabText(2)
+        auth_label = main_window.inner_tabs.tabText(2)
         assert "✓" not in auth_label
         
         # Change auth type
@@ -385,7 +385,7 @@ class TestIntegration:
         
         # This should trigger _update_tab_counts via signal
         # Check auth tab label
-        auth_label = main_window.request_tabs.tabText(2)
+        auth_label = main_window.inner_tabs.tabText(2)
         # Should now have checkmark
         assert "✓" in auth_label or "Authorization" in auth_label
     
@@ -422,9 +422,9 @@ class TestIntegration:
         main_window._update_tab_counts()
         
         # Verify all tabs are updated
-        params_label = main_window.request_tabs.tabText(0)
-        headers_label = main_window.request_tabs.tabText(1)
-        auth_label = main_window.request_tabs.tabText(2)
+        params_label = main_window.inner_tabs.tabText(0)
+        headers_label = main_window.inner_tabs.tabText(1)
+        auth_label = main_window.inner_tabs.tabText(2)
         
         assert "Params (1)" in params_label
         assert "Headers (1)" in headers_label

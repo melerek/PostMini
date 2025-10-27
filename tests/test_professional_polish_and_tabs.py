@@ -327,37 +327,50 @@ class TestCollectionsTreeHighlighting:
         # Update highlighting
         main_window._update_current_request_highlight()
         
-        # Verify font styling
+        # Verify font styling (active request should be bold with bullet dot, no underline)
         font = request_item.font(0)
         assert font.bold() == True
-        assert font.underline() == True
+        assert font.underline() == False
+        # Active request should have bullet dot indicator
+        assert ' •' in request_item.text(0)
     
     def test_open_requests_underlined(self, main_window):
-        """Test that all open requests are underlined."""
+        """Test that all open requests have bullet dot indicator."""
         # Create mock requests
         collection_item = QTreeWidgetItem()
         collection_item.setData(0, Qt.ItemDataRole.UserRole, {'type': 'collection', 'id': 1})
         
         request1 = QTreeWidgetItem()
         request1.setData(0, Qt.ItemDataRole.UserRole, {'type': 'request', 'id': 1})
+        request1.setText(0, "Request 1")
         
         request2 = QTreeWidgetItem()
         request2.setData(0, Qt.ItemDataRole.UserRole, {'type': 'request', 'id': 2})
+        request2.setText(0, "Request 2")
         
         collection_item.addChild(request1)
         collection_item.addChild(request2)
         main_window.collections_tree.addTopLevelItem(collection_item)
         
-        # Setup multiple tabs
+        # Setup multiple tabs (request 1 is active in tab 0)
         main_window.tab_states[0] = {'request_id': 1}
         main_window.tab_states[1] = {'request_id': 2}
+        main_window.request_tabs.addTab(QWidget(), "Tab 1")
+        main_window.request_tabs.addTab(QWidget(), "Tab 2")
+        main_window.request_tabs.setCurrentIndex(0)
         
         # Update highlighting
         main_window._update_current_request_highlight()
         
-        # Both should be underlined
-        assert request1.font(0).underline() == True
-        assert request2.font(0).underline() == True
+        # Both should have bullet dot indicator (no underline)
+        assert request1.font(0).underline() == False
+        assert request2.font(0).underline() == False
+        # Both should have bullet dots
+        assert ' •' in request1.text(0)
+        assert ' •' in request2.text(0)
+        # Only active request should be bold
+        assert request1.font(0).bold() == True
+        assert request2.font(0).bold() == False
 
 
 class TestMiddleClickTabClosing:

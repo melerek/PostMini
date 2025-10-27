@@ -1301,13 +1301,33 @@ class DatabaseManager:
     
     def delete_folder(self, folder_id: int):
         """
-        Delete a folder. Child folders and requests will be handled by CASCADE.
+        Delete a folder with cascade deletion of child folders and requests.
         
         Args:
             folder_id: ID of the folder to delete
         """
         cursor = self.connection.cursor()
-        cursor.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
+        
+        # Get all child folders recursively
+        def get_all_child_folders(parent_id):
+            cursor.execute("SELECT id FROM folders WHERE parent_id = ?", (parent_id,))
+            children = [row[0] for row in cursor.fetchall()]
+            all_children = children.copy()
+            for child_id in children:
+                all_children.extend(get_all_child_folders(child_id))
+            return all_children
+        
+        # Get all folders to delete (including the parent)
+        folders_to_delete = [folder_id] + get_all_child_folders(folder_id)
+        
+        # Delete all requests in these folders
+        for fid in folders_to_delete:
+            cursor.execute("DELETE FROM requests WHERE folder_id = ?", (fid,))
+        
+        # Delete all folders
+        for fid in folders_to_delete:
+            cursor.execute("DELETE FROM folders WHERE id = ?", (fid,))
+        
         self.connection.commit()
     
     def move_request_to_folder(self, request_id: int, folder_id: Optional[int]):
@@ -1376,7 +1396,7 @@ class DatabaseManager:
     
     def create_collection_variable(self, collection_id: int, key: str, value: str, description: str = "") -> int:
         """
-        Create or update a collection variable.
+        Create a collection variable. Raises an exception if the key already exists.
         
         Args:
             collection_id: ID of the collection
@@ -1386,14 +1406,25 @@ class DatabaseManager:
             
         Returns:
             ID of the variable
+            
+        Raises:
+            Exception: If a variable with the same key already exists in the collection
         """
         cursor = self.connection.cursor()
+        
+        # Check if variable already exists
+        cursor.execute("""
+            SELECT id FROM collection_variables 
+            WHERE collection_id = ? AND key = ?
+        """, (collection_id, key))
+        
+        if cursor.fetchone() is not None:
+            raise Exception(f"Variable with key '{key}' already exists in collection {collection_id}")
+        
+        # Insert new variable
         cursor.execute("""
             INSERT INTO collection_variables (collection_id, key, value, description)
             VALUES (?, ?, ?, ?)
-            ON CONFLICT(collection_id, key) DO UPDATE SET
-                value = excluded.value,
-                description = excluded.description
         """, (collection_id, key, value, description))
         self.connection.commit()
         return cursor.lastrowid

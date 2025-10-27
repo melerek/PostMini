@@ -214,6 +214,7 @@ class GitSyncManager:
                     "body": request.get('body'),
                     "auth_type": request.get('auth_type', 'None'),
                     "auth_token": request.get('auth_token'),
+                    "description": request.get('description'),
                     "tests": [
                         {
                             "type": t['assertion_type'],
@@ -395,15 +396,16 @@ class GitSyncManager:
             # Import requests
             for request_data in collection_data.get('requests', []):
                 request_id = self.db.create_request(
-                    collection_id=collection_id,
                     name=request_data['name'],
-                    method=request_data['method'],
                     url=request_data['url'],
+                    method=request_data['method'],
+                    collection_id=collection_id,
                     params=request_data.get('params'),
                     headers=request_data.get('headers'),
                     body=request_data.get('body'),
                     auth_type=request_data.get('auth_type', 'None'),
-                    auth_token=request_data.get('auth_token')
+                    auth_token=request_data.get('auth_token'),
+                    description=request_data.get('description')
                 )
                 
                 # Import test assertions

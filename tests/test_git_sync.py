@@ -194,8 +194,8 @@ class TestGitSyncManager(unittest.TestCase):
         coll1 = self.db.create_collection("Collection 1")
         coll2 = self.db.create_collection("Collection 2")
         
-        self.db.create_request(coll1, "Request 1", "GET", "http://example.com/1")
-        self.db.create_request(coll2, "Request 2", "POST", "http://example.com/2")
+        self.db.create_request("Request 1", "http://example.com/1", "GET", coll1)
+        self.db.create_request("Request 2", "http://example.com/2", "POST", coll2)
         
         self.manager.initialize_workspace()
         
@@ -252,7 +252,7 @@ class TestGitSyncManager(unittest.TestCase):
         """Test importing a collection from file."""
         # Create and export a collection
         coll_id = self.db.create_collection("Original Collection")
-        self.db.create_request(coll_id, "Original Request", "GET", "http://example.com")
+        self.db.create_request("Original Request", "http://example.com", "GET", coll_id)
         
         self.manager.initialize_workspace()
         success, file_path = self.manager.export_collection_to_file(coll_id)
@@ -278,7 +278,7 @@ class TestGitSyncManager(unittest.TestCase):
         """Test that import updates existing collection when update_existing=True."""
         # Create original collection
         coll_id = self.db.create_collection("Test Collection")
-        self.db.create_request(coll_id, "Request 1", "GET", "http://example.com/1")
+        self.db.create_request("Request 1", "http://example.com/1", "GET", coll_id)
         
         self.manager.initialize_workspace()
         success, file_path = self.manager.export_collection_to_file(coll_id)
@@ -286,7 +286,7 @@ class TestGitSyncManager(unittest.TestCase):
         # Modify the database
         self.db.delete_collection(coll_id)
         new_coll_id = self.db.create_collection("Test Collection")
-        self.db.create_request(new_coll_id, "Request 2", "POST", "http://example.com/2")
+        self.db.create_request("Request 2", "http://example.com/2", "POST", new_coll_id)
         
         # Import with update
         success, message, imported_id = self.manager.import_collection_from_file(file_path, update_existing=True)
@@ -304,8 +304,8 @@ class TestGitSyncManager(unittest.TestCase):
         coll1 = self.db.create_collection("Collection 1")
         coll2 = self.db.create_collection("Collection 2")
         
-        self.db.create_request(coll1, "Request 1", "GET", "http://example.com/1")
-        self.db.create_request(coll2, "Request 2", "POST", "http://example.com/2")
+        self.db.create_request("Request 1", "http://example.com/1", "GET", coll1)
+        self.db.create_request("Request 2", "http://example.com/2", "POST", coll2)
         
         self.manager.initialize_workspace()
         self.manager.export_all_collections()
@@ -347,7 +347,7 @@ class TestGitSyncManager(unittest.TestCase):
         """Test syncing database to filesystem."""
         # Create test data
         coll_id = self.db.create_collection("Test Collection")
-        self.db.create_request(coll_id, "Test Request", "GET", "http://example.com")
+        self.db.create_request("Test Request", "http://example.com", "GET", coll_id)
         self.db.create_environment("Test Env", {"key": "value"})
         
         self.manager.initialize_workspace()
@@ -367,7 +367,7 @@ class TestGitSyncManager(unittest.TestCase):
         """Test syncing filesystem to database."""
         # Create and export data
         coll_id = self.db.create_collection("Test Collection")
-        self.db.create_request(coll_id, "Test Request", "GET", "http://example.com")
+        self.db.create_request("Test Request", "http://example.com", "GET", coll_id)
         
         self.manager.initialize_workspace()
         self.manager.sync_to_filesystem()
