@@ -36,7 +36,7 @@ QToolBar::separator {
 }
 
 QToolBar QLabel {
-    color: #757575;  /* Secondary text */
+    color: #9E9E9E;  /* Secondary text */
     font-weight: 500;
     font-size: 12px;
     padding: 0px 4px;
@@ -208,7 +208,7 @@ QLineEdit#urlInput {
 /* ==================== SIDEBAR / TREE VIEW - HIGH DENSITY ==================== */
 QTreeWidget {
     background-color: #FAFAFA;
-    color: #757575;  /* Secondary text */
+    color: #9E9E9E;  /* Secondary text */
     border: none;
     outline: none;
     padding: 0px;
@@ -218,7 +218,7 @@ QTreeWidget {
 QTreeWidget::item {
     padding: 4px 8px;
     border: none;
-    color: #757575;
+    color: #9E9E9E;
 }
 
 QTreeWidget::item:hover {
@@ -232,7 +232,7 @@ QTreeWidget::item:selected {
 }
 
 QTreeWidget::item:!selected {
-    color: #757575;  /* Secondary text for inactive */
+    color: #9E9E9E;  /* Secondary text for inactive */
 }
 
 QTreeWidget::item:selected:active {
@@ -269,7 +269,7 @@ QTabWidget::pane {
 
 QTabBar::tab {
     background-color: #FAFAFA;
-    color: #757575;  /* Secondary text for inactive */
+    color: #9E9E9E;  /* Secondary text for inactive */
     border: none;
     border-right: 1px solid #E0E0E0;
     padding: 6px 12px;
@@ -341,7 +341,7 @@ QTableWidget::item:selected {
 
 QHeaderView::section {
     background-color: #F5F5F5;
-    color: #757575;
+    color: #9E9E9E;
     border: none;
     border-right: 1px solid #E0E0E0;
     border-bottom: 1px solid #E0E0E0;
@@ -434,11 +434,11 @@ QLabel {
 }
 
 QLabel[class="secondary"] {
-    color: #757575;
+    color: #9E9E9E;
 }
 
 QLabel[class="tertiary"] {
-    color: #9E9E9E;
+    color: #757575;
     font-size: 11px;
 }
 
@@ -484,11 +484,11 @@ QDialog QLabel {
 }
 
 QDialog QLabel[class="secondary"] {
-    color: #757575;
+    color: #9E9E9E;
 }
 
 QDialog QLabel[class="tertiary"] {
-    color: #9E9E9E;
+    color: #757575;
 }
 
 /* List widgets in dialogs - consistent selection style */
@@ -548,7 +548,7 @@ QInputDialog QLabel {
 /* ==================== STATUS BAR ==================== */
 QStatusBar {
     background-color: #F5F5F5;
-    color: #9E9E9E;
+    color: #757575;
     border-top: 1px solid #E0E0E0;
     padding: 4px 8px;
     font-size: 11px;
@@ -644,7 +644,7 @@ QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: 0px 8px;
-    color: #757575;
+    color: #9E9E9E;
     font-weight: 500;
     font-size: 11px;
     text-transform: uppercase;
