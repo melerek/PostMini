@@ -189,7 +189,7 @@ PostMini/
 
 **The easiest way to get PostMini:**
 
-1. Download `PostMini_Setup_v1.0.0.exe` from [Releases](https://github.com/yourusername/postmini/releases)
+1. Download `PostMini_Setup_v1.7.0.exe` from [Releases](https://github.com/yourusername/postmini/releases)
 2. Run the installer and follow the wizard
 3. Launch PostMini from Start Menu or Desktop shortcut
 
@@ -197,7 +197,9 @@ PostMini/
 ✅ **All dependencies bundled**  
 ✅ **Data safely stored in %APPDATA%\PostMini\**
 
-See [INSTALLER_GUIDE.md](docs/INSTALLER_GUIDE.md) for complete installation documentation.
+⚠️ **Windows SmartScreen Warning?** If you see "Windows protected your PC", click "More info" → "Run anyway". This warning appears because the app isn't yet code-signed. PostMini is safe and open-source. See [USER_INSTALLATION_GUIDE.md](docs/USER_INSTALLATION_GUIDE.md) for detailed instructions.
+
+See [INSTALLER_GUIDE.md](docs/guides/INSTALLER_GUIDE.md) for complete installation documentation.
 
 ### For Developers (From Source)
 
