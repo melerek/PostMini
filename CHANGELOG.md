@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.1] - 2025-11-04
+
+### 🔧 Code Quality & Maintenance
+
+- **Removed duplicate class definition** in `VariableHighlightDelegate`
+  - Fixed duplicate class causing code maintenance issues
+  - Cleaned up `src/ui/widgets/variable_highlight_delegate.py`
+  - Improved code organization and readability
+
+- **Enhanced table cell editor styling**
+  - Added `margin: 0px` to table cell editors
+  - Improved visual consistency in Headers and Params tables
+  - Better alignment in both dark and light themes
+
+### ✅ Testing
+
+- **All tests passing**: 50+ unit tests verified
+- **Fixed test suite**: `test_delegate_removes_padding` now passes
+- **No network dependencies**: All tests run offline successfully
+
+### 📚 Documentation
+
+- **New Guide**: `VARIABLE_HIGHLIGHTING_GUIDE.md`
+  - Comprehensive guide to variable highlighting features
+  - Usage examples for all variable types
+  - Best practices and troubleshooting tips
+  - Theme support and technical details
+  - Quick reference card for all variable syntaxes
+
+### 🎯 Impact
+
+- **Cleaner Codebase**: Removed technical debt and duplicate code
+- **Better Maintainability**: Easier for developers to understand and modify
+- **Improved Stability**: All tests passing ensures reliability
+- **Enhanced Documentation**: Users can better understand variable highlighting
+
+---
+
 ## [1.7.0] - 2025-10-22
 
 ### ✨ Added - QA Features

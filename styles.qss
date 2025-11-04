@@ -20,6 +20,12 @@ QWidget {
     color: #212121;  /* Primary text */
 }
 
+/* ==================== LEFT ICON BAR ==================== */
+QWidget#leftIconBar {
+    background-color: #E8E8E8;
+    border-right: 1px solid #D0D0D0;
+}
+
 /* ==================== TOOLBAR - HIGH DENSITY ==================== */
 QToolBar {
     background-color: #FFFFFF;

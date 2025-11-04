@@ -11,7 +11,8 @@ from PyQt6.QtWidgets import (
     QPushButton, QTreeWidget, QTreeWidgetItem, QComboBox, QLineEdit,
     QTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QLabel,
     QMessageBox, QInputDialog, QHeaderView, QToolBar, QFileDialog, QApplication,
-    QSizePolicy, QDialog, QStyledItemDelegate, QMenu, QGroupBox, QTabBar
+    QSizePolicy, QDialog, QStyledItemDelegate, QMenu, QGroupBox, QTabBar, QTreeWidgetItemIterator,
+    QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QAction, QKeySequence, QShortcut, QBrush, QColor, QPalette, QPainter, QPen
@@ -36,6 +37,7 @@ from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
 from src.ui.widgets.method_badge import MethodBadge, StatusBadge
 from src.ui.widgets.variable_extraction_widget import VariableExtractionWidget
 from src.ui.widgets.variable_inspector_widget import VariableInspectorDialog
+from src.ui.widgets.settings_panel import SettingsPanel
 from src.ui.widgets.variable_library_widget import VariableLibraryWidget
 from src.ui.widgets.variable_highlight_delegate import VariableSyntaxHighlighter, VariableHighlightDelegate, HighlightedLineEdit
 from src.ui.widgets.empty_state import NoRequestEmptyState, NoResponseEmptyState, NoCollectionsEmptyState
@@ -194,24 +196,21 @@ class NoPaddingDelegate(QStyledItemDelegate):
         self.theme = theme
         self.var_highlighter_delegate = VariableHighlightDelegate(parent, theme)
     
+    def set_environment_manager(self, env_manager):
+        """Set the environment manager for variable resolution."""
+        self.var_highlighter_delegate.set_environment_manager(env_manager)
+    
     def createEditor(self, parent, option, index):
-        """Create editor with no padding."""
-        editor = QLineEdit(parent)
-        
-        # Remove all padding and margins from the editor
-        editor.setStyleSheet("""
-            QLineEdit {
-                padding: 0px;
-                margin: 0px;
-                border: none;
-            }
-        """)
-        
-        return editor
+        """Create editor using variable highlighting delegate."""
+        return self.var_highlighter_delegate.createEditor(parent, option, index)
     
     def paint(self, painter, option, index):
         """Use variable highlighting delegate's paint method."""
         self.var_highlighter_delegate.paint(painter, option, index)
+    
+    def helpEvent(self, event, view, option, index):
+        """Forward help events to variable highlighting delegate for tooltips."""
+        return self.var_highlighter_delegate.helpEvent(event, view, option, index)
     
     def set_theme(self, theme):
         """Update theme."""
@@ -453,11 +452,24 @@ class MainWindow(QMainWindow):
         # UI state tracking
         self.response_panel_collapsed = False
         
+        # Search tracking
+        self.search_matches = []
+        self.current_match_index = -1
+        
         # Setup UI
         self.setWindowTitle("PostMini - Desktop API Client")
         self.setGeometry(100, 100, 1400, 900)
         
         self._init_ui()
+        
+        # Connect environment manager to URL input for variable highlighting
+        self.url_input.set_environment_manager(self.env_manager)
+        
+        # Connect environment manager to table delegates for variable tooltips
+        if hasattr(self, 'params_table') and hasattr(self.params_table, '_custom_delegate'):
+            self.params_table._custom_delegate.set_environment_manager(self.env_manager)
+        if hasattr(self, 'headers_table') and hasattr(self.headers_table, '_custom_delegate'):
+            self.headers_table._custom_delegate.set_environment_manager(self.env_manager)
         
         # Initialize toast notification system (after UI is created)
         self.toast = ToastManager(self.centralWidget())
@@ -493,13 +505,86 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # ==================== VERTICAL ICON BAR (LEFT EDGE) ====================
+        icon_bar = QWidget()
+        icon_bar.setObjectName("leftIconBar")
+        icon_bar.setFixedWidth(50)
+        icon_bar_layout = QVBoxLayout(icon_bar)
+        icon_bar_layout.setContentsMargins(0, 0, 0, 0)
+        icon_bar_layout.setSpacing(0)
+        
+        # Collections toggle button
+        self.collections_toggle_btn = QPushButton("📁")
+        self.collections_toggle_btn.setToolTip("Toggle Collections Panel")
+        self.collections_toggle_btn.setCheckable(True)
+        self.collections_toggle_btn.setChecked(True)  # Visible by default
+        self.collections_toggle_btn.setFixedSize(50, 50)
+        self.collections_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+                font-size: 24px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:checked {
+                background: rgba(33, 150, 243, 0.15);
+                border-left: 3px solid #2196F3;
+            }
+        """)
+        self.collections_toggle_btn.clicked.connect(lambda: self._switch_left_panel('collections'))
+        icon_bar_layout.addWidget(self.collections_toggle_btn)
+        
+        # Settings toggle button
+        self.settings_toggle_btn = QPushButton("⚙️")
+        self.settings_toggle_btn.setToolTip("Toggle Settings Panel")
+        self.settings_toggle_btn.setCheckable(True)
+        self.settings_toggle_btn.setChecked(False)
+        self.settings_toggle_btn.setFixedSize(50, 50)
+        self.settings_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+                font-size: 24px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:checked {
+                background: rgba(33, 150, 243, 0.15);
+                border-left: 3px solid #2196F3;
+            }
+        """)
+        self.settings_toggle_btn.clicked.connect(lambda: self._switch_left_panel('settings'))
+        icon_bar_layout.addWidget(self.settings_toggle_btn)
+        
+        icon_bar_layout.addStretch()  # Push buttons to top
+        
+        main_layout.addWidget(icon_bar)
         
         # Create main splitter (left pane | center pane | right pane)
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_splitter.setHandleWidth(1)  # Thin splitter handle
         
         # ==================== LEFT PANE: Collections ====================
-        left_pane = self._create_collections_pane()
-        main_splitter.addWidget(left_pane)
+        self.collections_pane = self._create_collections_pane()
+        main_splitter.addWidget(self.collections_pane)
+        
+        # ==================== LEFT PANE: Settings ====================
+        self.settings_pane = SettingsPanel(self.db)
+        self.settings_pane.setVisible(False)  # Hidden by default
+        main_splitter.addWidget(self.settings_pane)
+        
+        # Track current left panel
+        self.current_left_panel = 'collections'
         
         # ==================== CENTER PANE: Request Editor & Response ====================
         # Create a container for the entire center area
@@ -528,6 +613,30 @@ class MainWindow(QMainWindow):
         self.request_tabs.setMaximumHeight(38)  # Only show the tab bar (reduced from 42)
         self.request_tabs.setObjectName("requestTabs")  # For specific styling
         tab_bar_layout.addWidget(self.request_tabs)
+        
+        # Add New Request button - independent of tabs, always visible
+        self.new_request_btn = QPushButton("+")
+        self.new_request_btn.setToolTip("Create new request (Ctrl+N)")
+        self.new_request_btn.setFixedSize(38, 38)  # Match tab bar height
+        self.new_request_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                font-size: 22px;
+                font-weight: bold;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+            QPushButton:pressed {
+                background: rgba(33, 150, 243, 0.3);
+            }
+        """)
+        self.new_request_btn.clicked.connect(self._create_new_request)
+        tab_bar_layout.addWidget(self.new_request_btn)
         
         # Add Recent button - independent of tabs, always visible
         self.recent_requests_btn = QPushButton("🕐")
@@ -830,6 +939,10 @@ class MainWindow(QMainWindow):
             else:
                 self.test_tab.clear()
             
+            # Clear response viewer for new requests (no response data yet)
+            if state.get('is_new_request') or not self.current_request_id:
+                self._clear_response_viewer()
+            
             # Restore change state
             self.has_unsaved_changes = state.get('has_changes', False)
             self._update_request_title()
@@ -912,11 +1025,16 @@ class MainWindow(QMainWindow):
                 self._restore_tab_state(tab_state['ui_state'])
                 # Update highlight after restore
                 self._update_current_request_highlight()
+                # Ensure request is visible in tree
+                if tab_state.get('request_id'):
+                    self._ensure_request_visible_in_tree(tab_state['request_id'])
             elif tab_state.get('request_id'):
                 # No UI state but has request_id - load from database directly
                 print(f"[DEBUG] Loading request data from DB for tab {index}")
                 self._load_request_data(tab_state['request_id'])  # Use _load_request_data instead of _load_request
                 # _load_request_data will call _update_current_request_highlight() at its end
+                # Ensure request is visible in tree
+                self._ensure_request_visible_in_tree(tab_state['request_id'])
             else:
                 # Empty tab - clear editor
                 print(f"[DEBUG] Clearing editor for empty tab {index}")
@@ -968,6 +1086,8 @@ class MainWindow(QMainWindow):
         # If no tabs left, show empty state
         if self.request_tabs.count() == 0:
             self.center_stack.setCurrentWidget(self.no_request_empty_state)
+            # Clear all editor fields to prevent stale data
+            self._clear_request_editor()
         else:
             # Switch to the current tab
             self._on_tab_changed(self.request_tabs.currentIndex())
@@ -1118,6 +1238,10 @@ class MainWindow(QMainWindow):
         save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         save_shortcut.activated.connect(self._save_request)
         
+        # New request (Ctrl+N)
+        new_request_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
+        new_request_shortcut.activated.connect(self._create_new_request)
+        
         # Focus URL bar (Ctrl+L)
         url_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
         url_shortcut.activated.connect(lambda: self.url_input.setFocus())
@@ -1154,9 +1278,9 @@ class MainWindow(QMainWindow):
         self.collections_tree.setIconSize(QSize(16, 16))  # Standardize icon size to 16px
         # Set custom delegate for colored method badges
         self.collections_tree.setItemDelegate(RequestTreeItemDelegate())
-        # Single-click on collections to expand/collapse
+        # Single-click on collections/folders to expand/collapse, single-click on requests to open
         self.collections_tree.itemClicked.connect(self._on_tree_item_clicked)
-        # Double-click on requests to open in new tab
+        # Double-click on requests also opens them (for users who prefer double-click)
         self.collections_tree.itemDoubleClicked.connect(self._on_tree_item_double_clicked)
         # Connect expand/collapse signals for folder icon updates
         self.collections_tree.itemExpanded.connect(self._on_tree_item_expanded)
@@ -1482,8 +1606,29 @@ class MainWindow(QMainWindow):
         self.response_search.setPlaceholderText("Search in response...")
         self.response_search.textChanged.connect(self._search_response)
         self.response_search.setClearButtonEnabled(True)
-        self.response_search.setMaximumWidth(250)
+        self.response_search.setMaximumWidth(200)
         toolbar_layout.addWidget(self.response_search)
+        
+        # Search navigation buttons
+        self.search_prev_btn = QPushButton("◀")
+        self.search_prev_btn.setMaximumWidth(30)
+        self.search_prev_btn.setToolTip("Previous match (Shift+Enter)")
+        self.search_prev_btn.clicked.connect(self._search_previous)
+        self.search_prev_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.search_prev_btn)
+        
+        self.search_next_btn = QPushButton("▶")
+        self.search_next_btn.setMaximumWidth(30)
+        self.search_next_btn.setToolTip("Next match (Enter)")
+        self.search_next_btn.clicked.connect(self._search_next)
+        self.search_next_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.search_next_btn)
+        
+        # Search counter label
+        self.search_counter_label = QLabel("")
+        self.search_counter_label.setStyleSheet("color: #666; font-size: 11px; padding: 0 8px;")
+        self.search_counter_label.setVisible(False)
+        toolbar_layout.addWidget(self.search_counter_label)
         
         toolbar_layout.addStretch()
         
@@ -1764,6 +1909,65 @@ class MainWindow(QMainWindow):
     
     # ==================== Collections Tree Management ====================
     
+    def _add_folder_and_parents_to_expanded(self, folder_id: int, expanded_folder_ids: set):
+        """Recursively add a folder and all its parents to the expanded set."""
+        if not folder_id:
+            return
+        
+        expanded_folder_ids.add(folder_id)
+        
+        # Get the folder to find its parent
+        folder = self.db.get_folder(folder_id)
+        if folder and folder.get('parent_id'):
+            # Recursively add parent folders
+            self._add_folder_and_parents_to_expanded(folder.get('parent_id'), expanded_folder_ids)
+    
+    def _ensure_request_visible_in_tree(self, request_id: int):
+        """Ensure a request is visible in the collections tree by expanding parent folders."""
+        if not request_id:
+            return
+        
+        request = self.db.get_request(request_id)
+        if not request:
+            return
+        
+        collection_id = request.get('collection_id')
+        folder_id = request.get('folder_id')
+        
+        # Find and expand the collection
+        for i in range(self.collections_tree.topLevelItemCount()):
+            collection_item = self.collections_tree.topLevelItem(i)
+            data = collection_item.data(0, Qt.ItemDataRole.UserRole)
+            
+            if data and data.get('type') == 'collection' and data.get('id') == collection_id:
+                collection_item.setExpanded(True)
+                
+                # If request is in a folder, expand all parent folders
+                if folder_id:
+                    self._expand_folder_hierarchy(collection_item, folder_id)
+                
+                break
+    
+    def _expand_folder_hierarchy(self, parent_item: QTreeWidgetItem, target_folder_id: int):
+        """Recursively expand folders to make a target folder visible."""
+        for i in range(parent_item.childCount()):
+            child = parent_item.child(i)
+            data = child.data(0, Qt.ItemDataRole.UserRole)
+            
+            if data and data.get('type') == 'folder':
+                if data.get('id') == target_folder_id:
+                    # Found the target folder, expand it
+                    child.setExpanded(True)
+                    return True
+                else:
+                    # Check if target is in this folder's children
+                    if self._expand_folder_hierarchy(child, target_folder_id):
+                        # Target was found in subfolder, expand this folder too
+                        child.setExpanded(True)
+                        return True
+        
+        return False
+    
     def _load_collections(self):
         """Load all collections, folders, and requests from database into the tree."""
         from PyQt6.QtGui import QIcon
@@ -1774,6 +1978,17 @@ class MainWindow(QMainWindow):
         for i in range(self.collections_tree.topLevelItemCount()):
             item = self.collections_tree.topLevelItem(i)
             self._store_expanded_state(item, expanded_collection_ids, expanded_folder_ids)
+        
+        # If there's a current request, ensure its folder will be expanded
+        if self.current_request_id:
+            request = self.db.get_request(self.current_request_id)
+            if request and request.get('folder_id'):
+                # Add the folder and all parent folders to expanded set
+                folder_id = request.get('folder_id')
+                self._add_folder_and_parents_to_expanded(folder_id, expanded_folder_ids)
+            # Also ensure the collection is expanded
+            if request and request.get('collection_id'):
+                expanded_collection_ids.add(request.get('collection_id'))
         
         self.collections_tree.clear()
         collections = self.db.get_all_collections()
@@ -2063,7 +2278,9 @@ class MainWindow(QMainWindow):
                 collection_item.setFont(0, font)
     
     def _on_tree_item_clicked(self, item: QTreeWidgetItem, column: int):
-        """Handle single-click on tree item - only for expanding/collapsing collections and folders."""
+        """Handle single-click on tree item - expand/collapse folders or open requests."""
+        import time
+        
         if not item:
             return
         
@@ -2077,7 +2294,23 @@ class MainWindow(QMainWindow):
         if item_type in ('collection', 'folder'):
             # Single-click on collection or folder - toggle expansion
             item.setExpanded(not item.isExpanded())
-        # Requests do nothing on single-click
+        elif item_type == 'request':
+            # Single-click on request - open it in new tab
+            request_id = data['id']
+            current_time = time.time()
+            
+            # Ignore if this is a duplicate click within 300ms (debounce)
+            if (current_time - self._last_double_click_time < 0.3 and 
+                request_id == self._last_double_click_request_id):
+                print(f"[DEBUG] Ignoring duplicate click on request {request_id}")
+                return
+            
+            # Update last click tracking
+            self._last_double_click_time = current_time
+            self._last_double_click_request_id = request_id
+            
+            print(f"[DEBUG] Single-click on request {request_id}, opening in new tab")
+            self._open_request_in_new_tab(request_id)
     
     def _on_tree_item_double_clicked(self, item: QTreeWidgetItem, column: int):
         """Handle double-click on tree item - open request in new tab or toggle collection/folder."""
@@ -3021,7 +3254,24 @@ class MainWindow(QMainWindow):
     
     def _update_request_title(self):
         """Update the request title label to show current state with breadcrumb (Postman-style)."""
-        if self.current_request_id and self.current_request_name:
+        # Check if this is a new unsaved request
+        current_tab_index = self.request_tabs.currentIndex()
+        is_new_request = False
+        
+        if current_tab_index >= 0 and current_tab_index in self.tab_states:
+            tab_state = self.tab_states[current_tab_index]
+            if 'ui_state' in tab_state and tab_state['ui_state'].get('is_new_request'):
+                is_new_request = True
+        
+        if is_new_request:
+            # Creating a new request
+            new_request_color = "#2196F3" if self.current_theme == 'light' else "#64B5F6"
+            self.request_title_label.setText(
+                f"<span style='color: {new_request_color}; font-weight: 600;'>✨ Creating New Request</span>"
+            )
+            self.request_title_label.setProperty("saved", "false")
+            self.rename_request_btn.setVisible(False)
+        elif self.current_request_id and self.current_request_name:
             # Saved request - show full breadcrumb with colored method
             method = self.method_combo.currentText()
             method_color = self._get_method_color(method)
@@ -3096,6 +3346,20 @@ class MainWindow(QMainWindow):
     
     def _save_request(self):
         """Save the current request to the database."""
+        # Check if this is a new unsaved request
+        current_tab_index = self.request_tabs.currentIndex()
+        is_new_request = False
+        
+        if current_tab_index >= 0 and current_tab_index in self.tab_states:
+            tab_state = self.tab_states[current_tab_index]
+            if tab_state.get('request_id') is None:
+                is_new_request = True
+        
+        if is_new_request:
+            # New request - prompt for collection selection
+            self._save_new_request()
+            return
+        
         if not self.current_request_id:
             QMessageBox.warning(self, "Warning", "No request selected to save!")
             return
@@ -3141,11 +3405,179 @@ class MainWindow(QMainWindow):
             # Auto-sync to filesystem if Git sync is enabled
             self._auto_sync_to_filesystem()
             
+            # Reload collections to show updated request, preserving folder state
             self._load_collections()
+            
+            # Ensure the request is visible in the tree (keeps folder expanded)
+            self._ensure_request_visible_in_tree(self.current_request_id)
         except Exception as e:
             self._update_save_status("✗ Failed to save request", duration=5000)
             self.toast.error(f"Failed to save: {str(e)[:40]}...")
-            QMessageBox.critical(self, "Error", f"Failed to save request: {str(e)}")
+    
+    def _save_new_request(self):
+        """Save a new unsaved request by prompting for collection."""
+        try:
+            print("[DEBUG] _save_new_request called")
+            
+            # Create dialog to select collection
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Save New Request")
+            dialog.setMinimumWidth(400)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Request name
+            layout.addWidget(QLabel("Request Name:"))
+            name_input = QLineEdit()
+            name_input.setText("New Request")
+            name_input.selectAll()
+            layout.addWidget(name_input)
+            
+            # Collection selection
+            layout.addWidget(QLabel("Save to Collection:"))
+            collection_combo = QComboBox()
+            
+            # Load collections
+            collections = self.db.get_all_collections()
+            if not collections:
+                QMessageBox.warning(self, "No Collections", "Please create a collection first!")
+                return
+            
+            for collection in collections:
+                collection_combo.addItem(collection['name'], collection['id'])
+            
+            layout.addWidget(collection_combo)
+            
+            # Folder selection (optional)
+            layout.addWidget(QLabel("Folder (optional):"))
+            folder_combo = QComboBox()
+            folder_combo.addItem("(No folder)", None)
+            
+            def update_folders():
+                folder_combo.clear()
+                folder_combo.addItem("(No folder)", None)
+                collection_id = collection_combo.currentData()
+                if collection_id:
+                    folders = self.db.get_folders_by_collection(collection_id)
+                    for folder in folders:
+                        folder_combo.addItem(folder['name'], folder['id'])
+            
+            collection_combo.currentIndexChanged.connect(update_folders)
+            update_folders()
+            
+            layout.addWidget(folder_combo)
+            
+            # Buttons
+            button_box = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+            )
+            button_box.accepted.connect(dialog.accept)
+            button_box.rejected.connect(dialog.reject)
+            layout.addWidget(button_box)
+            
+            print("[DEBUG] Showing dialog...")
+            result = dialog.exec()
+            print(f"[DEBUG] Dialog closed with result: {result}")
+            
+            if result == QDialog.DialogCode.Accepted:
+                # Save the request
+                collection_id = collection_combo.currentData()
+                folder_id = folder_combo.currentData()
+                request_name = name_input.text().strip() or "New Request"
+                
+                print(f"[DEBUG] Starting save new request: {request_name}")
+                
+                # Create the request in database
+                print(f"[DEBUG] Creating request in DB...")
+                request_id = self.db.create_request(
+                    name=request_name,
+                    url=self.url_input.text(),
+                    method=self.method_combo.currentText(),
+                    collection_id=collection_id,
+                    folder_id=folder_id,
+                    params=self._get_table_as_dict(self.params_table),
+                    headers=self._get_table_as_dict(self.headers_table),
+                    body=self.body_input.toPlainText(),
+                    auth_type=self.auth_type_combo.currentText(),
+                    auth_token=self.auth_token_input.text(),
+                    description=self.description_input.toPlainText()
+                )
+                print(f"[DEBUG] Request created with ID: {request_id}")
+                
+                # Update current tab state
+                print(f"[DEBUG] Updating tab state...")
+                current_tab_index = self.request_tabs.currentIndex()
+                if current_tab_index >= 0 and current_tab_index in self.tab_states:
+                    self.tab_states[current_tab_index]['request_id'] = request_id
+                    self.tab_states[current_tab_index]['has_changes'] = False
+                    self.tab_states[current_tab_index]['name'] = request_name
+                    if 'ui_state' in self.tab_states[current_tab_index]:
+                        self.tab_states[current_tab_index]['ui_state']['is_new_request'] = False
+                        self.tab_states[current_tab_index]['ui_state']['request_id'] = request_id
+                        self.tab_states[current_tab_index]['ui_state']['collection_id'] = collection_id
+                        self.tab_states[current_tab_index]['ui_state']['request_name'] = request_name
+                
+                # Update current_request_id and related variables
+                print(f"[DEBUG] Setting current request variables...")
+                self.current_request_id = request_id
+                self.current_collection_id = collection_id
+                self.current_request_name = request_name
+                self.current_folder_id = folder_id
+                
+                # Get collection name
+                print(f"[DEBUG] Getting collection name...")
+                collection = self.db.get_collection(collection_id)
+                if collection:
+                    self.current_collection_name = collection.get('name', 'Unknown Collection')
+                else:
+                    self.current_collection_name = 'Unknown Collection'
+                print(f"[DEBUG] Collection name: {self.current_collection_name}")
+                
+                # Reset unsaved changes flag
+                print(f"[DEBUG] Storing original request data...")
+                self._store_original_request_data()
+                self.has_unsaved_changes = False
+                
+                # Update tab title
+                print(f"[DEBUG] Updating tab title...")
+                self._update_tab_title(current_tab_index)
+                
+                print(f"[DEBUG] Updating request title...")
+                self._update_request_title()
+                
+                # Reload collections to show new request
+                print(f"[DEBUG] Reloading collections...")
+                self._load_collections()
+                
+                # Ensure the new request is visible in the tree
+                print(f"[DEBUG] Ensuring request is visible...")
+                self._ensure_request_visible_in_tree(request_id)
+                
+                # Update highlight
+                print(f"[DEBUG] Updating current request highlight...")
+                self._update_current_request_highlight()
+                
+                # Show success toast
+                print(f"[DEBUG] Showing success toast...")
+                self.toast.success(f"Request '{request_name}' saved successfully")
+                
+                # Auto-sync to filesystem if Git sync is enabled
+                print(f"[DEBUG] Auto-syncing to filesystem...")
+                self._auto_sync_to_filesystem()
+                
+                print(f"[DEBUG] Save completed successfully!")
+            
+            print("[DEBUG] _save_new_request function ending normally")
+                
+        except Exception as e:
+            print(f"[ERROR] Exception in _save_new_request: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", f"Failed to save request: {str(e)}\n\nPlease check the console for details.")
+            try:
+                self.toast.error(f"Failed to save: {str(e)[:40]}...")
+            except:
+                pass  # Toast might also fail
     
     # ==================== Request Execution ====================
     
@@ -3351,6 +3783,12 @@ class MainWindow(QMainWindow):
             # Substitute auth token
             if auth_token:
                 auth_token, _ = VariableSubstitution.substitute(auth_token, {})
+        
+        # Apply default protocol if URL doesn't have one
+        if not url.startswith(('http://', 'https://', 'ws://', 'wss://')):
+            default_protocol = self.db.get_setting('default_protocol', 'https')
+            url = f"{default_protocol}://{url}"
+            print(f"[INFO] Applied default protocol: {default_protocol}:// to URL")
         
         # Get and validate timeout setting
         try:
@@ -3933,44 +4371,284 @@ class MainWindow(QMainWindow):
         self.recent_requests_widget.setVisible(not is_visible)
         self.recent_requests_btn.setChecked(not is_visible)
     
+    def _switch_left_panel(self, panel_name: str):
+        """Switch between left panels (collections, settings, etc.)."""
+        if panel_name == self.current_left_panel:
+            # Clicking the same panel toggles it
+            is_visible = self.collections_pane.isVisible() if panel_name == 'collections' else self.settings_pane.isVisible()
+            if panel_name == 'collections':
+                self.collections_pane.setVisible(not is_visible)
+                self.collections_toggle_btn.setChecked(not is_visible)
+            elif panel_name == 'settings':
+                self.settings_pane.setVisible(not is_visible)
+                self.settings_toggle_btn.setChecked(not is_visible)
+        else:
+            # Switching to a different panel
+            # Hide current panel
+            if self.current_left_panel == 'collections':
+                self.collections_pane.setVisible(False)
+                self.collections_toggle_btn.setChecked(False)
+            elif self.current_left_panel == 'settings':
+                self.settings_pane.setVisible(False)
+                self.settings_toggle_btn.setChecked(False)
+            
+            # Show new panel
+            if panel_name == 'collections':
+                self.collections_pane.setVisible(True)
+                self.collections_toggle_btn.setChecked(True)
+            elif panel_name == 'settings':
+                self.settings_pane.setVisible(True)
+                self.settings_toggle_btn.setChecked(True)
+            
+            self.current_left_panel = panel_name
+    
+    def _create_new_request(self):
+        """Create a new unsaved request."""
+        # Save current tab state first
+        current_index = self.request_tabs.currentIndex()
+        if current_index >= 0 and current_index in self.tab_states:
+            self.tab_states[current_index]['ui_state'] = self._capture_current_tab_state()
+            self.tab_states[current_index]['has_changes'] = self.has_unsaved_changes
+        
+        # Create new unsaved request data
+        name = f'New Request'
+        method = 'GET'
+        
+        # Add new tab with empty widget
+        tab_index = self.request_tabs.addTab(QWidget(), "")
+        
+        # Set tab data for custom rendering
+        tab_bar = self.request_tabs.tabBar()
+        if isinstance(tab_bar, ColoredTabBar):
+            tab_bar.set_tab_data(tab_index, method, name, has_changes=True)
+        
+        # Store tab state - no request_id means it's unsaved
+        self.tab_states[tab_index] = {
+            'request_id': None,  # None indicates unsaved request
+            'has_changes': True,  # Always has changes until first save
+            'name': name,
+            'method': method,
+            'ui_state': {
+                'request_id': None,
+                'collection_id': None,
+                'request_name': name,
+                'method': method,
+                'url': '',
+                'params': {},
+                'headers': {},
+                'body': '',
+                'auth_type': 'None',
+                'auth_token': '',
+                'description': '',
+                'has_changes': True,
+                'is_new_request': True  # Flag to show "Creating New Request" header
+            }
+        }
+        
+        # Set tooltip
+        self.request_tabs.setTabToolTip(tab_index, f"{method} • {name} (unsaved)")
+        
+        # Clear the current request highlight (no request selected in collections)
+        self._clear_current_request_highlight()
+        
+        # Switch to new tab (this will trigger _on_tab_changed)
+        self.request_tabs.setCurrentIndex(tab_index)
+        
+        # Show tabs view
+        self.center_stack.setCurrentWidget(self.tabs_container)
+        
+        # Update the window title to show "Creating New Request"
+        self._update_request_title()
+    
+    def _clear_current_request_highlight(self):
+        """Clear the current request highlight in the collections tree."""
+        # Remove highlight from all items
+        iterator = QTreeWidgetItemIterator(self.collections_tree)
+        while iterator.value():
+            item = iterator.value()
+            item.setBackground(0, QBrush())  # Clear background
+            iterator += 1
+    
     def _reset_copy_button(self):
         """Reset the copy button to its original state."""
         self.copy_response_btn.setText("📋 Copy Response")
         self.copy_response_btn.setStyleSheet("")  # Reset to use global stylesheet
     
     def _search_response(self, search_text: str):
-        """Search for text in the response body and highlight matches."""
+        """Search for text in the response body and highlight all matches."""
+        from PyQt6.QtGui import QTextCharFormat, QColor, QTextCursor, QTextDocument
+        
+        # Clear all previous highlights first
+        cursor = self.response_body.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        default_format = QTextCharFormat()
+        cursor.setCharFormat(default_format)
+        cursor.clearSelection()
+        
         if not search_text:
-            # Clear any existing highlights
-            cursor = self.response_body.textCursor()
-            cursor.select(cursor.SelectionType.Document)
-            cursor.setCharFormat(self.response_body.currentCharFormat())
-            cursor.clearSelection()
-            self.response_body.setTextCursor(cursor)
+            # Disable navigation buttons and hide counter
+            self.search_prev_btn.setEnabled(False)
+            self.search_next_btn.setEnabled(False)
+            self.search_counter_label.setVisible(False)
+            self.search_matches = []
+            self.current_match_index = -1
             return
         
-        # Find and highlight all occurrences
-        from PyQt6.QtGui import QTextCharFormat, QColor, QTextCursor
+        # Store all match positions
+        self.search_matches = []
+        self.current_match_index = -1
         
-        # Clear previous highlights
-        cursor = self.response_body.textCursor()
-        cursor.beginEditBlock()
-        cursor.movePosition(QTextCursor.MoveOperation.Start)
-        
-        # Create highlight format
+        # Create highlight formats
         highlight_format = QTextCharFormat()
-        highlight_format.setBackground(QColor("#FFEB3B"))  # Yellow highlight
+        highlight_format.setBackground(QColor("#FFEB3B"))  # Yellow highlight for all matches
         highlight_format.setForeground(QColor("#000000"))  # Black text
         
-        # Find all matches
-        self.response_body.moveCursor(QTextCursor.MoveOperation.Start)
-        found = self.response_body.find(search_text)
+        current_highlight_format = QTextCharFormat()
+        current_highlight_format.setBackground(QColor("#FF9800"))  # Orange for current match
+        current_highlight_format.setForeground(QColor("#FFFFFF"))  # White text
         
-        if not found:
-            # Move cursor back to start
-            self.response_body.moveCursor(QTextCursor.MoveOperation.Start)
+        # Get document text for searching
+        document = self.response_body.document()
+        text = document.toPlainText()
+        
+        # Find all matches (case-insensitive, non-overlapping)
+        start = 0
+        while True:
+            index = text.lower().find(search_text.lower(), start)
+            if index == -1:
+                break
+            self.search_matches.append((index, index + len(search_text)))
+            start = index + len(search_text)  # Move past the current match to avoid overlaps
+        
+        # If no matches found
+        if not self.search_matches:
+            self.search_counter_label.setText("No matches")
+            self.search_counter_label.setVisible(True)
+            self.search_prev_btn.setEnabled(False)
+            self.search_next_btn.setEnabled(False)
+            return
+        
+        # Highlight all matches
+        cursor.beginEditBlock()
+        
+        for i, (start, end) in enumerate(self.search_matches):
+            cursor.setPosition(start)
+            cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+            
+            # First match gets current highlight, others get regular highlight
+            if i == 0:
+                cursor.setCharFormat(current_highlight_format)
+                self.current_match_index = 0
+            else:
+                cursor.setCharFormat(highlight_format)
         
         cursor.endEditBlock()
+        
+        # Update counter and enable buttons
+        total_matches = len(self.search_matches)
+        self.search_counter_label.setText(f"1 of {total_matches}")
+        self.search_counter_label.setVisible(True)
+        self.search_prev_btn.setEnabled(total_matches > 1)
+        self.search_next_btn.setEnabled(total_matches > 1)
+        
+        # Scroll to first match
+        if self.search_matches:
+            cursor = self.response_body.textCursor()
+            cursor.setPosition(self.search_matches[0][0])
+            self.response_body.setTextCursor(cursor)
+            self.response_body.ensureCursorVisible()
+    
+    def _search_next(self):
+        """Navigate to the next search match."""
+        if not self.search_matches or self.current_match_index == -1:
+            return
+        
+        from PyQt6.QtGui import QTextCharFormat, QColor, QTextCursor
+        
+        # Create highlight formats
+        highlight_format = QTextCharFormat()
+        highlight_format.setBackground(QColor("#FFEB3B"))  # Yellow
+        highlight_format.setForeground(QColor("#000000"))
+        
+        current_highlight_format = QTextCharFormat()
+        current_highlight_format.setBackground(QColor("#FF9800"))  # Orange
+        current_highlight_format.setForeground(QColor("#FFFFFF"))
+        
+        # Clear current highlight
+        cursor = self.response_body.textCursor()
+        cursor.beginEditBlock()
+        
+        # Unhighlight current match (back to yellow)
+        start, end = self.search_matches[self.current_match_index]
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        cursor.setCharFormat(highlight_format)
+        
+        # Move to next match (wrap around)
+        self.current_match_index = (self.current_match_index + 1) % len(self.search_matches)
+        
+        # Highlight new current match (orange)
+        start, end = self.search_matches[self.current_match_index]
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        cursor.setCharFormat(current_highlight_format)
+        
+        cursor.endEditBlock()
+        
+        # Update counter
+        self.search_counter_label.setText(f"{self.current_match_index + 1} of {len(self.search_matches)}")
+        
+        # Scroll to match
+        cursor = self.response_body.textCursor()
+        cursor.setPosition(start)
+        self.response_body.setTextCursor(cursor)
+        self.response_body.ensureCursorVisible()
+    
+    def _search_previous(self):
+        """Navigate to the previous search match."""
+        if not self.search_matches or self.current_match_index == -1:
+            return
+        
+        from PyQt6.QtGui import QTextCharFormat, QColor, QTextCursor
+        
+        # Create highlight formats
+        highlight_format = QTextCharFormat()
+        highlight_format.setBackground(QColor("#FFEB3B"))  # Yellow
+        highlight_format.setForeground(QColor("#000000"))
+        
+        current_highlight_format = QTextCharFormat()
+        current_highlight_format.setBackground(QColor("#FF9800"))  # Orange
+        current_highlight_format.setForeground(QColor("#FFFFFF"))
+        
+        # Clear current highlight
+        cursor = self.response_body.textCursor()
+        cursor.beginEditBlock()
+        
+        # Unhighlight current match (back to yellow)
+        start, end = self.search_matches[self.current_match_index]
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        cursor.setCharFormat(highlight_format)
+        
+        # Move to previous match (wrap around)
+        self.current_match_index = (self.current_match_index - 1) % len(self.search_matches)
+        
+        # Highlight new current match (orange)
+        start, end = self.search_matches[self.current_match_index]
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        cursor.setCharFormat(current_highlight_format)
+        
+        cursor.endEditBlock()
+        
+        # Update counter
+        self.search_counter_label.setText(f"{self.current_match_index + 1} of {len(self.search_matches)}")
+        
+        # Scroll to match
+        cursor = self.response_body.textCursor()
+        cursor.setPosition(start)
+        self.response_body.setTextCursor(cursor)
+        self.response_body.ensureCursorVisible()
     
     # ==================== Environment Management ====================
     

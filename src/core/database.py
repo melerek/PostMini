@@ -229,6 +229,15 @@ class DatabaseManager:
             )
         """)
         
+        # Create app settings table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
         self.connection.commit()
     
     # ==================== Collection Operations ====================
@@ -1641,6 +1650,55 @@ class DatabaseManager:
         cursor = self.connection.cursor()
         cursor.execute("DELETE FROM extracted_variables")
         self.connection.commit()
+    
+    # ==================== App Settings Operations ====================
+    
+    def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """
+        Get an app setting value.
+        
+        Args:
+            key: Setting key
+            default: Default value if setting doesn't exist
+            
+        Returns:
+            Setting value or default
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else default
+    
+    def set_setting(self, key: str, value: str):
+        """
+        Set an app setting value.
+        
+        Args:
+            key: Setting key
+            value: Setting value
+        """
+        from datetime import datetime
+        cursor = self.connection.cursor()
+        updated_at = datetime.now().isoformat()
+        cursor.execute("""
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+        """, (key, value, updated_at))
+        self.connection.commit()
+    
+    def get_all_settings(self) -> Dict[str, str]:
+        """
+        Get all app settings.
+        
+        Returns:
+            Dictionary of all settings
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT key, value FROM app_settings")
+        return {row[0]: row[1] for row in cursor.fetchall()}
     
     def close(self):
         """Close the database connection."""

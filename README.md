@@ -1,12 +1,12 @@
 # PostMini - Desktop API Client
 
-**Version 1.7.0** | Professional API Testing Tool | MIT License
+**Version 1.7.1** | Professional API Testing Tool | MIT License
 
 A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, **request chaining**, **variable extraction**, OAuth 2.0, API testing with advanced reporting, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.7.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.7.1-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Tests](https://img.shields.io/badge/tests-365%2B%20passing-success)
 
@@ -37,6 +37,18 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 ---
 
 ## Features
+
+### ✨ What's New in V1.7.1
+- **🔧 Code Quality Improvements**: Cleaned up duplicate code and enhanced maintainability
+  - Removed duplicate `VariableHighlightDelegate` class definition
+  - Enhanced table cell editor styling with proper margins
+  - All 50+ unit tests passing successfully
+  - Improved code organization in variable highlighting module
+- **📚 Enhanced Documentation**: New comprehensive Variable Highlighting Guide
+  - Complete guide to all variable highlighting features
+  - Usage examples for environment, collection, extracted, and dynamic variables
+  - Best practices and troubleshooting tips
+  - Quick reference card with all variable syntaxes
 
 ### ✨ What's New in V1.7.0
 - **🔗 Request Chaining & Variable Extraction**: Extract values from API responses and use in subsequent requests
@@ -189,7 +201,7 @@ PostMini/
 
 **The easiest way to get PostMini:**
 
-1. Download `PostMini_Setup_v1.7.0.exe` from [Releases](https://github.com/yourusername/postmini/releases)
+1. Download `PostMini_Setup_v1.7.1.exe` from [Releases](https://github.com/yourusername/postmini/releases)
 2. Run the installer and follow the wizard
 3. Launch PostMini from Start Menu or Desktop shortcut
 

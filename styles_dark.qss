@@ -24,6 +24,12 @@ QWidget {
     color: #E0E0E0;  /* Primary text */
 }
 
+/* ==================== LEFT ICON BAR ==================== */
+QWidget#leftIconBar {
+    background-color: #252525;
+    border-right: 1px solid #2D2D2D;
+}
+
 /* ==================== TEXT HIERARCHY ==================== */
 /* Primary: #E0E0E0 - Main content, active items, user input */
 /* Secondary: #9E9E9E - Labels, inactive items, headers */
