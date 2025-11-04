@@ -28,19 +28,22 @@ class SettingsPanel(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Header
+        # Header - unified style
         header_widget = QWidget()
-        header_widget.setObjectName("settingsPanelHeader")
+        header_widget.setStyleSheet("""
+            QWidget {
+                background: transparent;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+        """)
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(12, 12, 12, 12)
         header_layout.setSpacing(8)
         
         # Title
-        header_label = QLabel("Settings")
-        header_label.setObjectName("settingsPanelTitle")
-        header_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+        header_label = QLabel("⚙️ Settings")
+        header_label.setStyleSheet("font-size: 13px; font-weight: 600; border: none;")
         header_layout.addWidget(header_label)
-        
         header_layout.addStretch()
         
         main_layout.addWidget(header_widget)

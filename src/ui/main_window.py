@@ -22,7 +22,6 @@ from typing import Dict, Optional
 from src.core.database import DatabaseManager
 from src.core.api_client import ApiClient, ApiResponse
 from src.core.app_paths import AppPaths
-from src.ui.dialogs.environment_dialog import EnvironmentDialog
 from src.features.variable_substitution import EnvironmentManager
 from src.features.collection_io import CollectionExporter, CollectionImporter, get_safe_filename
 from src.ui.dialogs.history_dialog import HistoryDialog
@@ -38,6 +37,9 @@ from src.ui.widgets.method_badge import MethodBadge, StatusBadge
 from src.ui.widgets.variable_extraction_widget import VariableExtractionWidget
 from src.ui.widgets.variable_inspector_widget import VariableInspectorDialog
 from src.ui.widgets.settings_panel import SettingsPanel
+from src.ui.widgets.git_sync_panel import GitSyncPanel
+from src.ui.widgets.variable_inspector_panel import VariableInspectorPanel
+from src.ui.widgets.environments_panel import EnvironmentsPanel
 from src.ui.widgets.variable_library_widget import VariableLibraryWidget
 from src.ui.widgets.variable_highlight_delegate import VariableSyntaxHighlighter, VariableHighlightDelegate, HighlightedLineEdit
 from src.ui.widgets.empty_state import NoRequestEmptyState, NoResponseEmptyState, NoCollectionsEmptyState
@@ -456,6 +458,11 @@ class MainWindow(QMainWindow):
         self.search_matches = []
         self.current_match_index = -1
         
+        # Initialize toast notification system EARLY (before UI setup)
+        # Create a temporary widget for toast until centralWidget is ready
+        temp_widget = QWidget()
+        self.toast = ToastManager(temp_widget)
+        
         # Setup UI
         self.setWindowTitle("PostMini - Desktop API Client")
         self.setGeometry(100, 100, 1400, 900)
@@ -471,7 +478,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'headers_table') and hasattr(self.headers_table, '_custom_delegate'):
             self.headers_table._custom_delegate.set_environment_manager(self.env_manager)
         
-        # Initialize toast notification system (after UI is created)
+        # Reinitialize toast with the actual central widget (was created early with temp widget)
         self.toast = ToastManager(self.centralWidget())
         
         self._setup_shortcuts()
@@ -481,6 +488,19 @@ class MainWindow(QMainWindow):
         
         # Initialize method combo styling
         self._update_method_style('GET')
+        
+        # Use QTimer to set splitter sizes AFTER the window is shown
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._fix_splitter_sizes)
+    
+    def _fix_splitter_sizes(self):
+        """Fix splitter sizes after window is shown."""
+        print(f"[DEBUG] _fix_splitter_sizes called after window shown")
+        if hasattr(self, 'main_splitter'):
+            self.main_splitter.setSizes([400, 0, 0, 0, 0, 1000, 0])
+            actual = self.main_splitter.sizes()
+            print(f"[DEBUG] Splitter sizes fixed to: [400, 0, 0, 0, 0, 1000, 0]")
+            print(f"[DEBUG] Actual sizes after fix: {actual}")
     
     def _get_icon_path(self, icon_name: str) -> str:
         """
@@ -566,6 +586,82 @@ class MainWindow(QMainWindow):
         self.settings_toggle_btn.clicked.connect(lambda: self._switch_left_panel('settings'))
         icon_bar_layout.addWidget(self.settings_toggle_btn)
         
+        # Git Sync toggle button
+        self.git_sync_toggle_btn = QPushButton("🔄")
+        self.git_sync_toggle_btn.setToolTip("Toggle Git Sync Panel")
+        self.git_sync_toggle_btn.setCheckable(True)
+        self.git_sync_toggle_btn.setChecked(False)
+        self.git_sync_toggle_btn.setFixedSize(50, 50)
+        self.git_sync_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+                font-size: 24px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:checked {
+                background: rgba(33, 150, 243, 0.15);
+                border-left: 3px solid #2196F3;
+            }
+        """)
+        self.git_sync_toggle_btn.clicked.connect(lambda: self._switch_left_panel('git_sync'))
+        icon_bar_layout.addWidget(self.git_sync_toggle_btn)
+        
+        # Variable Inspector toggle button
+        self.variable_inspector_toggle_btn = QPushButton("{{}}")
+        self.variable_inspector_toggle_btn.setToolTip("Toggle Variable Inspector Panel")
+        self.variable_inspector_toggle_btn.setCheckable(True)
+        self.variable_inspector_toggle_btn.setChecked(False)
+        self.variable_inspector_toggle_btn.setFixedSize(50, 50)
+        self.variable_inspector_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+                font-size: 18px;
+                font-weight: bold;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:checked {
+                background: rgba(33, 150, 243, 0.15);
+                border-left: 3px solid #2196F3;
+            }
+        """)
+        self.variable_inspector_toggle_btn.clicked.connect(lambda: self._switch_left_panel('variable_inspector'))
+        icon_bar_layout.addWidget(self.variable_inspector_toggle_btn)
+        
+        # Environments toggle button
+        self.environments_toggle_btn = QPushButton("🌍")
+        self.environments_toggle_btn.setToolTip("Toggle Environments Panel")
+        self.environments_toggle_btn.setCheckable(True)
+        self.environments_toggle_btn.setChecked(False)
+        self.environments_toggle_btn.setFixedSize(50, 50)
+        self.environments_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+                font-size: 24px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:checked {
+                background: rgba(33, 150, 243, 0.15);
+                border-left: 3px solid #2196F3;
+            }
+        """)
+        self.environments_toggle_btn.clicked.connect(lambda: self._switch_left_panel('environments'))
+        icon_bar_layout.addWidget(self.environments_toggle_btn)
+        
         icon_bar_layout.addStretch()  # Push buttons to top
         
         main_layout.addWidget(icon_bar)
@@ -582,6 +678,61 @@ class MainWindow(QMainWindow):
         self.settings_pane = SettingsPanel(self.db)
         self.settings_pane.setVisible(False)  # Hidden by default
         main_splitter.addWidget(self.settings_pane)
+        
+        # ==================== LEFT PANE: Git Sync ====================
+        self.git_sync_pane = GitSyncPanel(self.db, self)
+        self.git_sync_pane.setVisible(False)  # Hidden by default
+        main_splitter.addWidget(self.git_sync_pane)
+        
+        # Connect Git sync panel signals
+        self.git_sync_pane.sync_enabled.connect(self._on_git_sync_enabled)
+        self.git_sync_pane.sync_disabled.connect(self._on_git_sync_disabled)
+        self.git_sync_pane.sync_performed.connect(self._on_sync_performed)
+        
+        # ==================== LEFT PANE: Variable Inspector ====================
+        self.variable_inspector_pane = VariableInspectorPanel(self)
+        self.variable_inspector_pane.setVisible(False)  # Hidden by default
+        main_splitter.addWidget(self.variable_inspector_pane)
+        
+        # Connect variable inspector panel signals
+        print(f"[DEBUG] About to connect variable inspector signals")
+        self.variable_inspector_pane.refresh_requested.connect(self._refresh_variable_inspector_panel)
+        print(f"[DEBUG] refresh_requested connected")
+        self.variable_inspector_pane.variable_edited.connect(self._on_variable_edited)
+        print(f"[DEBUG] variable_edited connected")
+        
+        # Connect variable_deleted signal
+        print(f"[DEBUG] Attempting to connect variable_deleted signal...")
+        print(f"[DEBUG] Signal signature: variable_deleted(str, str)")
+        print(f"[DEBUG] Handler signature: _on_variable_deleted(scope: str, name: str)")
+        
+        # Try using lambda to ensure proper connection
+        self.variable_inspector_pane.variable_deleted.connect(
+            lambda scope, name: self._handle_variable_deleted(scope, name)
+        )
+        print(f"[DEBUG] variable_deleted connected via lambda wrapper")
+        
+        # Test the connection immediately (toast is now available)
+        print(f"[DEBUG] Testing connection by emitting test signal")
+        self.variable_inspector_pane.variable_deleted.emit("test_scope", "test_name")
+        print(f"[DEBUG] Test signal emitted")
+        
+        self.variable_inspector_pane.variable_added.connect(self._on_variable_added)
+        print(f"[DEBUG] variable_added connected")
+        print(f"[DEBUG] Variable inspector signals connected successfully")
+        
+        # Connect environment change to auto-refresh variables panel
+        self.env_combo.currentIndexChanged.connect(self._on_env_change_refresh_vars)
+        
+        # ==================== LEFT PANE: Environments ====================
+        self.environments_pane = EnvironmentsPanel(self.db, self)
+        self.environments_pane.setVisible(False)  # Hidden by default
+        main_splitter.addWidget(self.environments_pane)
+        
+        # Connect environment panel signals
+        self.environments_pane.environment_created.connect(self._on_environment_changed_refresh)
+        self.environments_pane.environment_deleted.connect(self._on_environment_changed_refresh)
+        self.environments_pane.environment_updated.connect(self._on_environment_changed_refresh)
         
         # Track current left panel
         self.current_left_panel = 'collections'
@@ -710,7 +861,16 @@ class MainWindow(QMainWindow):
         center_container_layout.addWidget(self.center_stack)
         
         # Show empty state by default
-        self.center_stack.setCurrentWidget(self.no_request_empty_state)
+        print(f"[DEBUG] Setting empty state as current widget during init")
+        print(f"[DEBUG] center_stack widget count: {self.center_stack.count()}")
+        print(f"[DEBUG] Widget 0 (empty state): {self.center_stack.widget(0)}")
+        print(f"[DEBUG] Widget 1 (tabs container): {self.center_stack.widget(1)}")
+        
+        # Use setCurrentIndex to ensure empty state (index 0) is shown
+        self.center_stack.setCurrentIndex(0)
+        print(f"[DEBUG] Current index after setting: {self.center_stack.currentIndex()}")
+        print(f"[DEBUG] Current widget: {self.center_stack.currentWidget()}")
+        print(f"[DEBUG] Request tabs count: {self.request_tabs.count()}")
         
         # Add center container to main splitter
         main_splitter.addWidget(center_container)
@@ -722,8 +882,22 @@ class MainWindow(QMainWindow):
         self.recent_requests_widget.setVisible(False)  # Hidden by default
         main_splitter.addWidget(self.recent_requests_widget)
         
-        # Set splitter sizes (25% left, 60% center, 15% right when visible)
-        main_splitter.setSizes([350, 1050, 250])
+        # Set splitter sizes for ALL widgets (including hidden ones)
+        # Splitter has 6 widgets: collections(0), settings(1), git(2), variables(3), center(4), recent(5)
+        # Set size to 0 for hidden widgets, proper sizes for visible ones
+        print(f"[DEBUG] main_splitter widget count: {main_splitter.count()}")
+        for i in range(main_splitter.count()):
+            widget = main_splitter.widget(i)
+            print(f"[DEBUG] Splitter widget {i}: {widget.__class__.__name__}, visible: {widget.isVisibleTo(main_splitter)}")
+        
+        # Store reference to main splitter for later size adjustment
+        self.main_splitter = main_splitter
+        
+        # Set initial sizes (Qt may adjust these until window is shown)
+        main_splitter.setSizes([400, 0, 0, 0, 0, 1000, 0])
+        actual_sizes = main_splitter.sizes()
+        print(f"[DEBUG] Splitter sizes set to: [400, 0, 0, 0, 0, 1000, 0]")
+        print(f"[DEBUG] Actual splitter sizes after set: {actual_sizes}")
         
         main_layout.addWidget(main_splitter)
         
@@ -746,11 +920,6 @@ class MainWindow(QMainWindow):
         self.env_combo.currentIndexChanged.connect(self._on_environment_changed)
         toolbar.addWidget(self.env_combo)
         
-        # Manage environments button
-        manage_env_btn = QPushButton("⚙️ Manage Environments")
-        manage_env_btn.clicked.connect(self._open_environment_dialog)
-        toolbar.addWidget(manage_env_btn)
-        
         toolbar.addSeparator()
         
         # History button
@@ -760,33 +929,7 @@ class MainWindow(QMainWindow):
         
         toolbar.addSeparator()
         
-        # Variables dropdown button (with inspector and library options)
-        variables_btn = QPushButton("📊 Variables")
-        variables_btn.setToolTip("Access variables tools")
-        
-        # Create menu for dropdown
-        variables_menu = QMenu(self)
-        
-        inspector_action = variables_menu.addAction("🔍 Variable Inspector")
-        inspector_action.setToolTip("View all available variables in current context")
-        inspector_action.triggered.connect(self._show_variable_inspector)
-        
-        library_action = variables_menu.addAction("📚 Extracted Variables Manager")
-        library_action.setToolTip("Manage extracted variables library")
-        library_action.triggered.connect(self._open_variable_library)
-        
-        variables_btn.setMenu(variables_menu)
-        toolbar.addWidget(variables_btn)
-        
-        toolbar.addSeparator()
-        
-        # Git Sync button
-        self.git_sync_btn = QPushButton("🔄 Git Sync")
-        self.git_sync_btn.setToolTip("Manage Git-based collaboration")
-        self.git_sync_btn.clicked.connect(self._open_git_sync_dialog)
-        toolbar.addWidget(self.git_sync_btn)
-        
-        # Git sync status indicator
+        # Git sync status indicator (no button, status only)
         self.git_sync_status_label = QLabel("Git: Not Enabled")
         self.git_sync_status_label.setStyleSheet("color: #999; font-size: 11px; padding: 0 10px;")
         toolbar.addWidget(self.git_sync_status_label)
@@ -1085,6 +1228,7 @@ class MainWindow(QMainWindow):
         
         # If no tabs left, show empty state
         if self.request_tabs.count() == 0:
+            print(f"[DEBUG] No tabs left, switching center_stack to empty state")
             self.center_stack.setCurrentWidget(self.no_request_empty_state)
             # Clear all editor fields to prevent stale data
             self._clear_request_editor()
@@ -1151,6 +1295,7 @@ class MainWindow(QMainWindow):
             # Request is already open - switch to that tab instead of creating a new one
             print(f"[DEBUG] Request {request_id} already open in tab {existing_tab}, switching to it")
             self.request_tabs.setCurrentIndex(existing_tab)
+            print(f"[DEBUG] Switching center_stack to tabs_container (request already open)")
             self.center_stack.setCurrentWidget(self.tabs_container)
             return
         
@@ -1205,6 +1350,7 @@ class MainWindow(QMainWindow):
             self._on_tab_changed(tab_index)
         
         # Show tabs view
+        print(f"[DEBUG] Switching center_stack to tabs_container (after creating new tab)")
         self.center_stack.setCurrentWidget(self.tabs_container)
     
     def _update_tab_title(self, index: int):
@@ -1266,11 +1412,26 @@ class MainWindow(QMainWindow):
         """Create the left pane containing the collections tree."""
         pane = QWidget()
         layout = QVBoxLayout(pane)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-        # Title
-        title = QLabel("Collections")
-        title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        layout.addWidget(title)
+        # Header - unified style
+        header = QWidget()
+        header.setStyleSheet("""
+            QWidget {
+                background: transparent;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+        """)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 12, 12, 12)
+        
+        title = QLabel("📁 Collections")
+        title.setStyleSheet("font-size: 13px; font-weight: 600; border: none;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        
+        layout.addWidget(header)
         
         # Collections tree
         self.collections_tree = QTreeWidget()
@@ -4372,16 +4533,60 @@ class MainWindow(QMainWindow):
         self.recent_requests_btn.setChecked(not is_visible)
     
     def _switch_left_panel(self, panel_name: str):
-        """Switch between left panels (collections, settings, etc.)."""
+        """Switch between left panels (collections, settings, git_sync, variable_inspector, etc.)."""
+        # Use stored main splitter reference
+        main_splitter = self.main_splitter
+        
         if panel_name == self.current_left_panel:
             # Clicking the same panel toggles it
-            is_visible = self.collections_pane.isVisible() if panel_name == 'collections' else self.settings_pane.isVisible()
             if panel_name == 'collections':
+                is_visible = self.collections_pane.isVisible()
                 self.collections_pane.setVisible(not is_visible)
                 self.collections_toggle_btn.setChecked(not is_visible)
+                # Update splitter sizes
+                if not is_visible:  # About to show
+                    main_splitter.setSizes([400, 0, 0, 0, 0, 1000, 0])
+                else:  # About to hide
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
             elif panel_name == 'settings':
+                is_visible = self.settings_pane.isVisible()
                 self.settings_pane.setVisible(not is_visible)
                 self.settings_toggle_btn.setChecked(not is_visible)
+                # Update splitter sizes
+                if not is_visible:  # About to show
+                    main_splitter.setSizes([0, 400, 0, 0, 0, 1000, 0])
+                else:  # About to hide
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
+            elif panel_name == 'git_sync':
+                is_visible = self.git_sync_pane.isVisible()
+                self.git_sync_pane.setVisible(not is_visible)
+                self.git_sync_toggle_btn.setChecked(not is_visible)
+                # Update splitter sizes
+                if not is_visible:  # About to show
+                    main_splitter.setSizes([0, 0, 400, 0, 0, 1000, 0])
+                else:  # About to hide
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
+            elif panel_name == 'variable_inspector':
+                is_visible = self.variable_inspector_pane.isVisible()
+                self.variable_inspector_pane.setVisible(not is_visible)
+                self.variable_inspector_toggle_btn.setChecked(not is_visible)
+                # Update splitter sizes
+                if not is_visible:  # About to show
+                    main_splitter.setSizes([0, 0, 0, 400, 0, 1000, 0])
+                else:  # About to hide
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
+                # Refresh data when opening
+                if not is_visible:
+                    self._refresh_variable_inspector_panel()
+            elif panel_name == 'environments':
+                is_visible = self.environments_pane.isVisible()
+                self.environments_pane.setVisible(not is_visible)
+                self.environments_toggle_btn.setChecked(not is_visible)
+                # Update splitter sizes
+                if not is_visible:  # About to show
+                    main_splitter.setSizes([0, 0, 0, 0, 400, 1000, 0])
+                else:  # About to hide
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
         else:
             # Switching to a different panel
             # Hide current panel
@@ -4391,14 +4596,39 @@ class MainWindow(QMainWindow):
             elif self.current_left_panel == 'settings':
                 self.settings_pane.setVisible(False)
                 self.settings_toggle_btn.setChecked(False)
+            elif self.current_left_panel == 'git_sync':
+                self.git_sync_pane.setVisible(False)
+                self.git_sync_toggle_btn.setChecked(False)
+            elif self.current_left_panel == 'variable_inspector':
+                self.variable_inspector_pane.setVisible(False)
+                self.variable_inspector_toggle_btn.setChecked(False)
+            elif self.current_left_panel == 'environments':
+                self.environments_pane.setVisible(False)
+                self.environments_toggle_btn.setChecked(False)
             
-            # Show new panel
+            # Show new panel and update splitter sizes
             if panel_name == 'collections':
                 self.collections_pane.setVisible(True)
                 self.collections_toggle_btn.setChecked(True)
+                main_splitter.setSizes([400, 0, 0, 0, 0, 1000, 0])
             elif panel_name == 'settings':
                 self.settings_pane.setVisible(True)
                 self.settings_toggle_btn.setChecked(True)
+                main_splitter.setSizes([0, 400, 0, 0, 0, 1000, 0])
+            elif panel_name == 'git_sync':
+                self.git_sync_pane.setVisible(True)
+                self.git_sync_toggle_btn.setChecked(True)
+                main_splitter.setSizes([0, 0, 400, 0, 0, 1000, 0])
+            elif panel_name == 'variable_inspector':
+                self.variable_inspector_pane.setVisible(True)
+                self.variable_inspector_toggle_btn.setChecked(True)
+                main_splitter.setSizes([0, 0, 0, 400, 0, 1000, 0])
+                # Refresh data when opening
+                self._refresh_variable_inspector_panel()
+            elif panel_name == 'environments':
+                self.environments_pane.setVisible(True)
+                self.environments_toggle_btn.setChecked(True)
+                main_splitter.setSizes([0, 0, 0, 0, 400, 1000, 0])
             
             self.current_left_panel = panel_name
     
@@ -4685,13 +4915,19 @@ class MainWindow(QMainWindow):
             if env:
                 self.env_manager.set_active_environment(env)
     
-    def _open_environment_dialog(self):
-        """Open the environment management dialog."""
-        dialog = EnvironmentDialog(self.db, self)
-        dialog.exec()
-        
-        # Reload environments after dialog closes
+    def _on_env_change_refresh_vars(self):
+        """Auto-refresh variables panel when environment changes."""
+        # Only refresh if the variables panel is visible
+        if self.variable_inspector_pane.isVisible():
+            self._refresh_variable_inspector_panel()
+    
+    def _on_environment_changed_refresh(self, env_id: int = None):
+        """Handle environment creation/update/deletion - refresh combo and panel."""
         self._load_environments()
+        
+        # Refresh environments panel if visible
+        if self.environments_pane.isVisible():
+            self.environments_pane.refresh()
     
     # ==================== Import/Export ====================
     
@@ -5187,6 +5423,211 @@ class MainWindow(QMainWindow):
             if widget.isVisible():
                 self._load_inspector_variables(widget)
     
+    def _refresh_variable_inspector_panel(self):
+        """Refresh the variable inspector panel with current data."""
+        print(f"[DEBUG] === Refreshing Variable Inspector Panel ===")
+        # Get environment variables
+        environment_vars = {}
+        environment_name = None
+        environment_id = None
+        if hasattr(self, 'env_manager') and self.env_manager:
+            if self.env_manager.has_active_environment():
+                environment_name = self.env_manager.get_active_environment_name()
+                environment_vars = self.env_manager.get_active_variables()
+                # Get environment ID from the active environment
+                if self.env_manager.active_environment:
+                    environment_id = self.env_manager.active_environment.get('id')
+                print(f"[DEBUG] Active environment: {environment_name} (ID: {environment_id})")
+                print(f"[DEBUG] Variables from env_manager: {list(environment_vars.keys())}")
+                
+                # Double-check database directly
+                if environment_id:
+                    db_env = self.db.get_environment(environment_id)
+                    if db_env:
+                        print(f"[DEBUG] Variables from database: {list(db_env.get('variables', {}).keys())}")
+        
+        # Get collection variables
+        collection_vars = {}
+        if hasattr(self, 'current_collection_id') and self.current_collection_id:
+            collection_vars = self.db.get_collection_variables(self.current_collection_id)
+        
+        # Get extracted variables
+        extracted_vars = self.db.get_all_extracted_variables()
+        print(f"[DEBUG] Extracted variables count: {len(extracted_vars)}")
+        
+        # Load into panel
+        print(f"[DEBUG] Loading into panel...")
+        self.variable_inspector_pane.load_variables(
+            environment_vars=environment_vars,
+            collection_vars=collection_vars,
+            extracted_vars=extracted_vars,
+            environment_name=environment_name,
+            environment_id=environment_id
+        )
+        print(f"[DEBUG] === Refresh Complete ===\n")
+    
+    def _on_variable_edited(self, scope: str, name: str, new_value: str):
+        """Handle variable edit from inspector panel."""
+        try:
+            if scope == 'environment':
+                # Update environment variable
+                if hasattr(self, 'env_manager') and self.env_manager:
+                    if self.env_manager.has_active_environment() and self.env_manager.active_environment:
+                        env_id = self.env_manager.active_environment.get('id')
+                        env = self.db.get_environment(env_id)
+                        if env:
+                            # Update the variable in the dictionary
+                            variables = env.get('variables', {})
+                            variables[name] = new_value
+                            # Save back to database
+                            self.db.update_environment(env_id, env['name'], variables)
+                            # Refresh environment manager
+                            self.env_manager.set_active_environment(self.db.get_environment(env_id))
+                            self.toast.success(f"Updated variable: {name}")
+            elif scope == 'extracted':
+                # Find and update extracted variable
+                extracted_vars = self.db.get_all_extracted_variables()
+                for var in extracted_vars:
+                    if var['name'] == name:
+                        # Delete old and create new (since there's no update method)
+                        self.db.delete_extracted_variable(var['id'])
+                        self.db.create_extracted_variable(
+                            name=name,
+                            value=new_value,
+                            source_request_id=var.get('source_request_id'),
+                            source_request_name=var.get('source_request_name'),
+                            json_path=var.get('json_path'),
+                            description=var.get('description')
+                        )
+                        self.toast.success(f"Updated variable: {name}")
+                        break
+            
+            # Refresh panel
+            self._refresh_variable_inspector_panel()
+        except Exception as e:
+            print(f"Error updating variable: {e}")
+            self.toast.error(f"Failed to update: {str(e)}")
+    
+    def _handle_variable_deleted(self, scope: str, name: str):
+        """Wrapper for _on_variable_deleted to help debug signal connection."""
+        print(f"[DEBUG] +++++ _handle_variable_deleted WRAPPER CALLED +++++")
+        print(f"[DEBUG] Wrapper received: scope='{scope}', name='{name}'")
+        self._on_variable_deleted(scope, name)
+    
+    def _on_variable_deleted(self, scope: str, name: str):
+        """Handle variable deletion from inspector panel."""
+        print(f"[DEBUG] ============ _on_variable_deleted CALLED ============")
+        print(f"[DEBUG] Received parameters: scope='{scope}', name='{name}'")
+        print(f"[DEBUG] Parameter types: scope type={type(scope)}, name type={type(name)}")
+        try:
+            print(f"[DEBUG] Inside try block, about to process deletion")
+            print(f"[DEBUG] Deleting variable: scope={scope}, name={name}")
+            if scope == 'environment':
+                # Delete environment variable
+                if hasattr(self, 'env_manager') and self.env_manager:
+                    if self.env_manager.has_active_environment() and self.env_manager.active_environment:
+                        env_id = self.env_manager.active_environment.get('id')
+                        print(f"[DEBUG] Environment ID: {env_id}")
+                        env = self.db.get_environment(env_id)
+                        if env:
+                            print(f"[DEBUG] Environment loaded: {env['name']}")
+                            # Remove the variable from the dictionary
+                            variables = env.get('variables', {})
+                            print(f"[DEBUG] Variables before delete: {list(variables.keys())}")
+                            if name in variables:
+                                del variables[name]
+                                print(f"[DEBUG] Variables after delete: {list(variables.keys())}")
+                                # Save back to database
+                                self.db.update_environment(env_id, env['name'], variables)
+                                print(f"[DEBUG] Updated environment in database")
+                                # Refresh environment manager
+                                updated_env = self.db.get_environment(env_id)
+                                if updated_env:
+                                    print(f"[DEBUG] Reloaded environment from DB: {list(updated_env.get('variables', {}).keys())}")
+                                    self.env_manager.set_active_environment(updated_env)
+                                    print(f"[DEBUG] Updated env_manager")
+                                self.toast.success(f"Deleted variable: {name}")
+                            else:
+                                print(f"[DEBUG] Variable {name} not found in environment variables")
+                                self.toast.warning(f"Variable {name} not found")
+                        else:
+                            print(f"[DEBUG] Environment not found")
+                    else:
+                        print(f"[DEBUG] No active environment")
+            elif scope == 'extracted':
+                # Find and delete extracted variable
+                extracted_vars = self.db.get_all_extracted_variables()
+                print(f"[DEBUG] Looking for extracted variable {name} in {len(extracted_vars)} variables")
+                for var in extracted_vars:
+                    if var['name'] == name:
+                        print(f"[DEBUG] Found extracted variable, deleting ID: {var['id']}")
+                        self.db.delete_extracted_variable(var['id'])
+                        self.toast.success(f"Deleted variable: {name}")
+                        break
+            
+            # Refresh panel
+            print(f"[DEBUG] Refreshing variables panel")
+            self._refresh_variable_inspector_panel()
+        except Exception as e:
+            print(f"[ERROR] Error deleting variable: {e}")
+            import traceback
+            traceback.print_exc()
+            self.toast.error(f"Failed to delete: {str(e)}")
+    
+    def _on_variable_added(self, name: str, value: str):
+        """Handle adding a new variable to the current environment."""
+        try:
+            print(f"[DEBUG] Adding variable: name={name}, value={value}")
+            if hasattr(self, 'env_manager') and self.env_manager:
+                if self.env_manager.has_active_environment() and self.env_manager.active_environment:
+                    env_id = self.env_manager.active_environment.get('id')
+                    print(f"[DEBUG] Environment ID: {env_id}")
+                    env = self.db.get_environment(env_id)
+                    if env:
+                        print(f"[DEBUG] Environment loaded: {env['name']}")
+                        # Add the variable to the dictionary
+                        variables = env.get('variables', {})
+                        
+                        # Check if variable already exists
+                        if name in variables:
+                            reply = QMessageBox.question(
+                                self,
+                                "Variable Exists",
+                                f"Variable '{name}' already exists with value: {variables[name]}\n\nOverwrite?",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                QMessageBox.StandardButton.No
+                            )
+                            if reply == QMessageBox.StandardButton.No:
+                                return
+                        
+                        variables[name] = value
+                        print(f"[DEBUG] Variables after add: {list(variables.keys())}")
+                        # Save back to database
+                        self.db.update_environment(env_id, env['name'], variables)
+                        print(f"[DEBUG] Updated environment in database")
+                        # Refresh environment manager
+                        updated_env = self.db.get_environment(env_id)
+                        if updated_env:
+                            print(f"[DEBUG] Reloaded environment from DB: {list(updated_env.get('variables', {}).keys())}")
+                            self.env_manager.set_active_environment(updated_env)
+                            print(f"[DEBUG] Updated env_manager")
+                        self.toast.success(f"Added variable: {name}")
+                    else:
+                        print(f"[DEBUG] Environment not found")
+                        self.toast.error("Environment not found")
+                else:
+                    print(f"[DEBUG] No active environment")
+                    self.toast.error("No active environment")
+            
+            # Refresh panel
+            print(f"[DEBUG] Refreshing variables panel")
+            self._refresh_variable_inspector_panel()
+        except Exception as e:
+            print(f"[ERROR] Error adding variable: {e}")
+            import traceback
+            traceback.print_exc()
+            self.toast.error(f"Failed to add: {str(e)}")
+    
     def _open_variable_library(self):
         """Open the variable library dialog."""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout
@@ -5200,7 +5641,7 @@ class MainWindow(QMainWindow):
         
         # Add variable library widget
         library = VariableLibraryWidget()
-        library.variable_deleted.connect(self._on_variable_deleted)
+        library.variable_deleted.connect(self._on_library_variable_deleted)
         library.refresh_requested.connect(lambda: self._refresh_variable_library(library))
         layout.addWidget(library)
         
@@ -5239,8 +5680,8 @@ class MainWindow(QMainWindow):
                 f"Failed to save variable: {str(e)}"
             )
     
-    def _on_variable_deleted(self, variable_id: int):
-        """Handle variable deletion."""
+    def _on_library_variable_deleted(self, variable_id: int):
+        """Handle variable deletion from variable library dialog."""
         try:
             self.db.delete_extracted_variable(variable_id)
             self.toast.success("Variable deleted")
@@ -5784,41 +6225,32 @@ class MainWindow(QMainWindow):
             self.git_sync_status_label.setText("Files: Not Synced")
             self.git_sync_status_label.setStyleSheet("color: #999; font-size: 11px; padding: 0 10px;")
             self.git_sync_status_label.setToolTip("File sync not enabled - collections not saved to filesystem")
-            self.git_sync_btn.setStyleSheet("")
             return
         
         # Get sync status
         status = self.git_sync_manager.get_sync_status()
         
-        # Update label and button style (dark-mode friendly)
+        # Update label style (dark-mode friendly)
         if status.status == SyncStatus.STATUS_SYNCED:
             self.git_sync_status_label.setText("Files: ✅ Synced")
             self.git_sync_status_label.setStyleSheet("color: #4CAF50; font-size: 11px; padding: 0 10px;")
             self.git_sync_status_label.setToolTip("Database and .postmini/ files are in sync")
-            self.git_sync_btn.setStyleSheet("")
         elif status.status == SyncStatus.STATUS_NEEDS_PULL:
             self.git_sync_status_label.setText("Files: 📥 Import Available")
             self.git_sync_status_label.setStyleSheet("color: #2196F3; font-size: 11px; padding: 0 10px;")
-            self.git_sync_status_label.setToolTip("Files in .postmini/ have changes - click to import")
-            # Dark mode friendly - use border instead of light background
-            self.git_sync_btn.setStyleSheet("border: 2px solid #2196F3; font-weight: bold;")
+            self.git_sync_status_label.setToolTip("Files in .postmini/ have changes - open Git Sync panel to import")
         elif status.status == SyncStatus.STATUS_NEEDS_PUSH:
             self.git_sync_status_label.setText("Files: 📤 Export Needed")
             self.git_sync_status_label.setStyleSheet("color: #FF9800; font-size: 11px; padding: 0 10px;")
-            self.git_sync_status_label.setToolTip("Database has unsaved changes - click to export")
-            # Dark mode friendly - use border instead of light background
-            self.git_sync_btn.setStyleSheet("border: 2px solid #FF9800; font-weight: bold;")
+            self.git_sync_status_label.setToolTip("Database has unsaved changes - open Git Sync panel to export")
         elif status.status == SyncStatus.STATUS_CONFLICT:
             self.git_sync_status_label.setText("Files: ⚠️ Conflict")
             self.git_sync_status_label.setStyleSheet("color: #F44336; font-size: 11px; padding: 0 10px;")
-            self.git_sync_status_label.setToolTip("Both database and files have changes")
-            # Dark mode friendly - use border instead of light background
-            self.git_sync_btn.setStyleSheet("border: 2px solid #F44336; font-weight: bold;")
+            self.git_sync_status_label.setToolTip("Both database and files have changes - open Git Sync panel")
         else:
             self.git_sync_status_label.setText("Files: Enabled")
             self.git_sync_status_label.setStyleSheet("color: #666; font-size: 11px; padding: 0 10px;")
             self.git_sync_status_label.setToolTip("File sync enabled")
-            self.git_sync_btn.setStyleSheet("")
     
     def _auto_sync_to_filesystem(self):
         """Auto-sync database to filesystem (push) if enabled."""

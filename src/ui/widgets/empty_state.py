@@ -33,10 +33,14 @@ class EmptyStateWidget(QWidget):
         # Icon/Illustration (large emoji)
         icon_label = QLabel(self.icon)
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Set large font - 3x smaller than before (300/3 = 100)
+        icon_label.setMinimumSize(133, 133)  # 400/3 ≈ 133
         icon_font = QFont()
-        icon_font.setPixelSize(80)
+        icon_font.setPointSize(100)  # Reduced from 300 to 100 (3x smaller)
         icon_label.setFont(icon_font)
+        icon_label.setStyleSheet("font-size: 100pt;")  # Also set via stylesheet as backup
         layout.addWidget(icon_label)
+        print(f"[DEBUG] Empty state icon created with font size 100pt, min size 133x133")
         
         # Add spacing
         layout.addSpacing(20)
@@ -73,7 +77,7 @@ class NoRequestEmptyState(EmptyStateWidget):
     def __init__(self, parent=None):
         super().__init__(
             icon="🚀",
-            title="Select a request to get started",
+            title="Select or add a request to get started",
             description="Choose a request from the collections panel on the left, or create a new one to begin testing your API.",
             parent=parent
         )
