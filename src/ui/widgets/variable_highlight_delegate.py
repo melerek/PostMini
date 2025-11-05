@@ -51,38 +51,91 @@ class HighlightedLineEdit(QLineEdit):
         """Set the environment manager for variable resolution."""
         self.environment_manager = env_manager
     
-    def _is_variable_defined(self, var_name):
-        """Check if a variable is defined in the environment manager."""
-        # Check for dynamic variables first (they always exist)
-        if var_name.startswith('$'):
-            from src.features.dynamic_variables import DynamicVariables
-            dynamic_vars = DynamicVariables()
-            return var_name in dynamic_vars.get_all_variables()
+    def _is_variable_defined(self, var_ref):
+        """Check if a variable is defined in the appropriate scope.
+        
+        Args:
+            var_ref: Variable reference which can be:
+                - "env.varname" for environment variables
+                - "col.varname" for collection variables  
+                - "ext.varname" for extracted variables
+                - "$.varname" for dynamic variables
+                - "varname" for backward compatibility (checks all scopes)
+        """
+        # Parse the variable reference
+        if '.' in var_ref and not var_ref.startswith('$'):
+            parts = var_ref.split('.', 1)
+            prefix = parts[0]
+            var_name = parts[1]
+        else:
+            prefix = None
+            var_name = var_ref
+        
+        # Handle dynamic variables (always defined)
+        if prefix == '$' or var_name.startswith('$'):
+            return True
         
         if not self.environment_manager:
             return False
         
-        # Get all active variables
-        all_vars = {}
-        try:
-            all_vars = self.environment_manager.get_active_variables()
-            
-            # Also check collection variables if available
-            if hasattr(self.environment_manager, 'collection_variables'):
-                all_vars.update(self.environment_manager.collection_variables)
-            
-            # Check extracted variables (including extracted.xxx format)
-            if hasattr(self.environment_manager, 'extracted_variables'):
-                # extracted_variables is a dict, not a list
-                all_vars.update(self.environment_manager.extracted_variables)
-                # Also support extracted.varname format
-                for name, value in self.environment_manager.extracted_variables.items():
-                    all_vars[f"extracted.{name}"] = value
-        except:
+        # Handle explicit environment variables
+        if prefix == 'env':
+            if self.environment_manager.has_active_environment():
+                env_vars = self.environment_manager.get_active_variables()
+                return var_name in env_vars and env_vars[var_name] not in (None, '', '❌ Undefined')
             return False
         
-        # Check if variable name exists and has a non-empty value
-        return var_name in all_vars and all_vars[var_name] not in (None, '', '❌ Undefined')
+        # Handle explicit collection variables
+        if prefix == 'col':
+            try:
+                from PyQt6.QtWidgets import QWidget
+                parent = self.parent()
+                while parent:
+                    if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                        if hasattr(parent, 'db'):
+                            col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                            return var_name in col_vars and col_vars[var_name] not in (None, '', '❌ Undefined')
+                    parent = parent.parent() if isinstance(parent, QWidget) else None
+            except:
+                pass
+            return False
+        
+        # Handle explicit extracted variables
+        if prefix == 'ext':
+            try:
+                extracted_vars = self.environment_manager.get_extracted_variables()
+                return var_name in extracted_vars and extracted_vars[var_name] not in (None, '', '❌ Undefined')
+            except:
+                return False
+        
+        # No prefix - backward compatibility: check all scopes
+        # Priority: extracted > collection > environment
+        try:
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            if var_name in extracted_vars:
+                return extracted_vars[var_name] not in (None, '', '❌ Undefined')
+        except:
+            pass
+        
+        try:
+            from PyQt6.QtWidgets import QWidget
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                    if hasattr(parent, 'db'):
+                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                        if var_name in col_vars:
+                            return col_vars[var_name] not in (None, '', '❌ Undefined')
+                parent = parent.parent() if isinstance(parent, QWidget) else None
+        except:
+            pass
+        
+        if self.environment_manager.has_active_environment():
+            env_vars = self.environment_manager.get_active_variables()
+            if var_name in env_vars:
+                return env_vars[var_name] not in (None, '', '❌ Undefined')
+        
+        return False
     
     def paintEvent(self, event):
         """Custom paint event to highlight variables."""
@@ -130,16 +183,24 @@ class HighlightedLineEdit(QLineEdit):
             if cursor_pixel_pos > visible_width - 20:  # Keep cursor visible with 20px margin
                 scroll_offset = cursor_pixel_pos - (visible_width - 20)
         
-        # Find all variables (both {{var}} and $var)
-        pattern = re.compile(r'\{\{([^}]+)\}\}|(\$[a-zA-Z][a-zA-Z0-9]*)')
+        # Find all variables with new prefix syntax
+        # Pattern matches: {{env.var}}, {{col.var}}, {{ext.var}}, {{$var}}, {{var}}
+        pattern = re.compile(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
         self._variable_regions = []  # Clear previous regions
         
         for match in pattern.finditer(text):
             start_pos = match.start()
             end_pos = match.end()
             var_text = match.group(0)
-            # Extract variable name (group 1 is {{var}}, group 2 is $var)
-            var_name = match.group(1) if match.group(1) else match.group(2)
+            # Extract prefix and variable name
+            prefix = match.group(1)  # env, col, ext, $ or None
+            var_name = match.group(2)  # The variable name
+            
+            # Build full variable reference for lookup
+            if prefix:
+                var_full_ref = f"{prefix}.{var_name}"
+            else:
+                var_full_ref = var_name
             
             # Calculate pixel position from start of text
             text_before = text[:start_pos]
@@ -158,10 +219,10 @@ class HighlightedLineEdit(QLineEdit):
             
             # Store region for hover detection
             region_rect = QRect(int(x), int(y), int(var_width), int(height))
-            self._variable_regions.append((region_rect, var_name))
+            self._variable_regions.append((region_rect, var_full_ref))
             
-            # Check if variable is defined
-            is_defined = self._is_variable_defined(var_name)
+            # Check if variable is defined (using full reference with prefix)
+            is_defined = self._is_variable_defined(var_full_ref)
             
             # Choose color based on whether variable is defined
             color = self.var_defined_color if is_defined else self.var_undefined_color
@@ -193,47 +254,104 @@ class HighlightedLineEdit(QLineEdit):
         pos = event.pos()
         tooltip_shown = False
         
-        for region_rect, var_name in self._variable_regions:
+        for region_rect, var_ref in self._variable_regions:
             if region_rect.contains(pos):
-                # Get variable value
-                if self.environment_manager:
-                    # Check for dynamic variables first
-                    if var_name.startswith('$'):
-                        from src.features.dynamic_variables import DynamicVariables
-                        dynamic_vars = DynamicVariables()
-                        if var_name in dynamic_vars.get_all_variables():
-                            value = f"🎲 Dynamic: {var_name} (auto-generated at request time)"
-                            tooltip_text = f"<b>{var_name}</b><br/><span style='color: #4CAF50;'>{value}</span>"
-                            QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
-                            tooltip_shown = True
-                            break
-                    
-                    # Get all active variables
-                    all_vars = self.environment_manager.get_active_variables()
-                    
-                    # Also get collection variables if available
-                    if hasattr(self.environment_manager, 'collection_variables'):
-                        all_vars.update(self.environment_manager.collection_variables)
-                    
-                    # Get extracted variables (including extracted.xxx format)
-                    if hasattr(self.environment_manager, 'extracted_variables'):
-                        # extracted_variables is a dict, not a list
-                        all_vars.update(self.environment_manager.extracted_variables)
-                        # Also support extracted.varname format
-                        for name, value_str in self.environment_manager.extracted_variables.items():
-                            all_vars[f"extracted.{name}"] = value_str
-                    
-                    # Get value
-                    value = all_vars.get(var_name, "❌ Undefined")
-                    
-                    # Show tooltip
-                    tooltip_text = f"<b>{var_name}</b><br/><span style='color: #4CAF50;'>{value}</span>"
+                # Get variable value using new prefix-based lookup
+                value = self._get_variable_value_by_ref(var_ref)
+                
+                if value and value != "❌ Undefined":
+                    # Show tooltip with scope information
+                    tooltip_text = f"<b>{var_ref}</b><br/><span style='color: #4CAF50;'>{value}</span>"
                     QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
                     tooltip_shown = True
                     break
         
         if not tooltip_shown:
             QToolTip.hideText()
+    
+    def _get_variable_value_by_ref(self, var_ref):
+        """Get variable value based on reference with prefix.
+        
+        Args:
+            var_ref: Variable reference like "env.varname", "col.varname", "ext.varname", "$.varname", or "varname"
+        
+        Returns:
+            The variable value or "❌ Undefined" if not found
+        """
+        # Parse the variable reference
+        if '.' in var_ref and not var_ref.startswith('$'):
+            parts = var_ref.split('.', 1)
+            prefix = parts[0]
+            var_name = parts[1]
+        else:
+            prefix = None
+            var_name = var_ref
+        
+        # Handle dynamic variables
+        if prefix == '$' or var_name.startswith('$'):
+            return f"🎲 Dynamic: {var_ref} (auto-generated at request time)"
+        
+        if not self.environment_manager:
+            return "❌ Undefined"
+        
+        # Handle explicit environment variables
+        if prefix == 'env':
+            if self.environment_manager.has_active_environment():
+                env_vars = self.environment_manager.get_active_variables()
+                return env_vars.get(var_name, "❌ Undefined")
+            return "❌ Undefined (No active environment)"
+        
+        # Handle explicit collection variables
+        if prefix == 'col':
+            try:
+                from PyQt6.QtWidgets import QWidget
+                parent = self.parent()
+                while parent:
+                    if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                        if hasattr(parent, 'db'):
+                            col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                            return col_vars.get(var_name, "❌ Undefined")
+                    parent = parent.parent() if isinstance(parent, QWidget) else None
+            except:
+                pass
+            return "❌ Undefined (No collection variables)"
+        
+        # Handle explicit extracted variables
+        if prefix == 'ext':
+            try:
+                extracted_vars = self.environment_manager.get_extracted_variables()
+                return extracted_vars.get(var_name, "❌ Undefined")
+            except:
+                return "❌ Undefined (No extracted variables)"
+        
+        # No prefix - backward compatibility: check all scopes
+        # Priority: extracted > collection > environment
+        try:
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            if var_name in extracted_vars:
+                return extracted_vars[var_name]
+        except:
+            pass
+        
+        try:
+            from PyQt6.QtWidgets import QWidget
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                    if hasattr(parent, 'db'):
+                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                        if var_name in col_vars:
+                            return col_vars[var_name]
+                parent = parent.parent() if isinstance(parent, QWidget) else None
+        except:
+            pass
+        
+        if self.environment_manager.has_active_environment():
+            env_vars = self.environment_manager.get_active_variables()
+            if var_name in env_vars:
+                return env_vars[var_name]
+        
+        return "❌ Undefined"
 
 
 class HighlightedTextEdit(QTextEdit):
@@ -248,38 +366,89 @@ class HighlightedTextEdit(QTextEdit):
         """Set the environment manager for variable resolution."""
         self.environment_manager = env_manager
     
-    def _get_variable_value(self, var_name):
-        """Get the value of a variable."""
-        # Check for dynamic variables
-        if var_name.startswith('$'):
-            from src.features.dynamic_variables import DynamicVariables
-            dynamic_vars = DynamicVariables()
-            if var_name in dynamic_vars.get_all_variables():
-                return f"🎲 Dynamic: {var_name} (auto-generated at request time)"
+    def _get_variable_value(self, var_ref):
+        """Get the value of a variable using prefix-based lookup.
+        
+        Args:
+            var_ref: Variable reference like "env.varname", "col.varname", "ext.varname", "$.varname", or "varname"
+        
+        Returns:
+            The variable value or "❌ Undefined" if not found
+        """
+        # Parse the variable reference
+        if '.' in var_ref and not var_ref.startswith('$'):
+            parts = var_ref.split('.', 1)
+            prefix = parts[0]
+            var_name = parts[1]
+        else:
+            prefix = None
+            var_name = var_ref
+        
+        # Handle dynamic variables
+        if prefix == '$' or var_name.startswith('$'):
+            return f"🎲 Dynamic: {var_ref} (auto-generated at request time)"
         
         if not self.environment_manager:
-            return None
+            return "❌ Undefined"
         
-        # Get all active variables
-        all_vars = {}
+        # Handle explicit environment variables
+        if prefix == 'env':
+            if self.environment_manager.has_active_environment():
+                env_vars = self.environment_manager.get_active_variables()
+                return env_vars.get(var_name, "❌ Undefined")
+            return "❌ Undefined (No active environment)"
+        
+        # Handle explicit collection variables
+        if prefix == 'col':
+            try:
+                from PyQt6.QtWidgets import QWidget
+                parent = self.parent()
+                while parent:
+                    if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                        if hasattr(parent, 'db'):
+                            col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                            return col_vars.get(var_name, "❌ Undefined")
+                    parent = parent.parent() if isinstance(parent, QWidget) else None
+            except:
+                pass
+            return "❌ Undefined (No collection variables)"
+        
+        # Handle explicit extracted variables
+        if prefix == 'ext':
+            try:
+                extracted_vars = self.environment_manager.get_extracted_variables()
+                return extracted_vars.get(var_name, "❌ Undefined")
+            except:
+                return "❌ Undefined (No extracted variables)"
+        
+        # No prefix - backward compatibility: check all scopes
+        # Priority: extracted > collection > environment
         try:
-            all_vars = self.environment_manager.get_active_variables()
-            
-            # Also check collection variables if available
-            if hasattr(self.environment_manager, 'collection_variables'):
-                all_vars.update(self.environment_manager.collection_variables)
-            
-            # Check extracted variables
-            if hasattr(self.environment_manager, 'extracted_variables'):
-                # extracted_variables is a dict, not a list
-                all_vars.update(self.environment_manager.extracted_variables)
-                # Also support extracted.varname format
-                for name, value in self.environment_manager.extracted_variables.items():
-                    all_vars[f"extracted.{name}"] = value
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            if var_name in extracted_vars:
+                return extracted_vars[var_name]
         except:
             pass
         
-        return all_vars.get(var_name, "❌ Undefined")
+        try:
+            from PyQt6.QtWidgets import QWidget
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                    if hasattr(parent, 'db'):
+                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                        if var_name in col_vars:
+                            return col_vars[var_name]
+                parent = parent.parent() if isinstance(parent, QWidget) else None
+        except:
+            pass
+        
+        if self.environment_manager.has_active_environment():
+            env_vars = self.environment_manager.get_active_variables()
+            if var_name in env_vars:
+                return env_vars[var_name]
+        
+        return "❌ Undefined"
     
     def mouseMoveEvent(self, event):
         """Handle mouse move to show tooltips for variables."""
@@ -292,8 +461,9 @@ class HighlightedTextEdit(QTextEdit):
         cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
         text = cursor.selectedText()
         
-        # Find all variables in the text (both {{var}} and $var formats)
-        pattern = re.compile(r'\{\{([^}]+)\}\}|(\$[a-zA-Z][a-zA-Z0-9]*)')
+        # Find all variables with new prefix syntax
+        # Pattern matches: {{env.xxx}}, {{col.xxx}}, {{ext.xxx}}, {{$xxx}}, {{xxx}}
+        pattern = re.compile(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
         
         # Get the position in the block
         position_in_block = self.cursorForPosition(event.pos()).positionInBlock()
@@ -305,15 +475,22 @@ class HighlightedTextEdit(QTextEdit):
             
             # Check if mouse is over this variable
             if start <= position_in_block <= end:
-                # Extract variable name (group 1 is {{var}}, group 2 is $var)
-                var_name = match.group(1) if match.group(1) else match.group(2)
+                # Extract prefix and variable name
+                prefix = match.group(1)  # env, col, ext, $ or None
+                var_name = match.group(2)  # The variable name
+                
+                # Build full variable reference for lookup
+                if prefix:
+                    var_ref = f"{prefix}.{var_name}"
+                else:
+                    var_ref = var_name
                 
                 # Get variable value
-                value = self._get_variable_value(var_name)
+                value = self._get_variable_value(var_ref)
                 
-                if value:
+                if value and value != "❌ Undefined":
                     # Show tooltip
-                    tooltip_text = f"<b>{var_name}</b><br/><span style='color: #4CAF50;'>{value}</span>"
+                    tooltip_text = f"<b>{var_ref}</b><br/><span style='color: #4CAF50;'>{value}</span>"
                     QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
                     tooltip_shown = True
                     break
@@ -359,61 +536,114 @@ class VariableSyntaxHighlighter(QSyntaxHighlighter):
         self.environment_manager = env_manager
         self.rehighlight()
     
-    def _is_variable_defined(self, var_name):
-        """Check if a variable is defined in the current environment."""
-        # Check for dynamic variables first (they always exist)
-        if var_name.startswith('$'):
-            from src.features.dynamic_variables import DynamicVariables
-            dynamic_vars = DynamicVariables()
-            return var_name in dynamic_vars.get_all_variables()
+    def _is_variable_defined(self, var_ref):
+        """Check if a variable is defined in the appropriate scope.
+        
+        Args:
+            var_ref: Variable reference which can be:
+                - "env.varname" for environment variables
+                - "col.varname" for collection variables  
+                - "ext.varname" for extracted variables
+                - "$.varname" for dynamic variables
+                - "varname" for backward compatibility (checks all scopes)
+        """
+        # Parse the variable reference
+        if '.' in var_ref and not var_ref.startswith('$'):
+            parts = var_ref.split('.', 1)
+            prefix = parts[0]
+            var_name = parts[1]
+        else:
+            prefix = None
+            var_name = var_ref
+        
+        # Handle dynamic variables (always defined)
+        if prefix == '$' or var_name.startswith('$'):
+            return True
         
         if not self.environment_manager:
             return False
         
-        # Get all active variables
-        all_vars = self.environment_manager.get_active_variables()
+        # Handle explicit environment variables
+        if prefix == 'env':
+            if self.environment_manager.has_active_environment():
+                env_vars = self.environment_manager.get_active_variables()
+                return var_name in env_vars
+            return False
         
-        # Also get collection variables if available
-        if hasattr(self.environment_manager, 'collection_variables'):
-            all_vars.update(self.environment_manager.collection_variables)
+        # Handle explicit collection variables (try to get from parent)
+        if prefix == 'col':
+            try:
+                # Try to find parent with collection variables access
+                if hasattr(self, 'parent') and callable(self.parent):
+                    parent_obj = self.parent()
+                    while parent_obj:
+                        if hasattr(parent_obj, 'current_collection_id') and parent_obj.current_collection_id:
+                            if hasattr(parent_obj, 'db'):
+                                col_vars = parent_obj.db.get_collection_variables(parent_obj.current_collection_id)
+                                return var_name in col_vars
+                        parent_obj = parent_obj.parent() if hasattr(parent_obj, 'parent') and callable(parent_obj.parent) else None
+            except:
+                pass
+            return False
         
-        # Get extracted variables (including extracted.xxx format)
-        if hasattr(self.environment_manager, 'extracted_variables'):
-            # extracted_variables is a dict, not a list
-            all_vars.update(self.environment_manager.extracted_variables)
-            # Also support extracted.varname format
-            for name, value in self.environment_manager.extracted_variables.items():
-                all_vars[f"extracted.{name}"] = value
+        # Handle explicit extracted variables
+        if prefix == 'ext':
+            try:
+                extracted_vars = self.environment_manager.get_extracted_variables()
+                return var_name in extracted_vars
+            except:
+                return False
         
-        return var_name in all_vars
+        # No prefix - backward compatibility: check all scopes
+        # Priority: extracted > collection > environment
+        try:
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            if var_name in extracted_vars:
+                return True
+        except:
+            pass
+        
+        try:
+            if hasattr(self, 'parent') and callable(self.parent):
+                parent_obj = self.parent()
+                while parent_obj:
+                    if hasattr(parent_obj, 'current_collection_id') and parent_obj.current_collection_id:
+                        if hasattr(parent_obj, 'db'):
+                            col_vars = parent_obj.db.get_collection_variables(parent_obj.current_collection_id)
+                            if var_name in col_vars:
+                                return True
+                    parent_obj = parent_obj.parent() if hasattr(parent_obj, 'parent') and callable(parent_obj.parent) else None
+        except:
+            pass
+        
+        if self.environment_manager.has_active_environment():
+            env_vars = self.environment_manager.get_active_variables()
+            if var_name in env_vars:
+                return True
+        
+        return False
     
     def highlightBlock(self, text):
-        """Highlight {{variable}} and $variable patterns in the text with status colors."""
+        """Highlight variable patterns with new prefix syntax."""
         from PyQt6.QtCore import QRegularExpression
         
-        # Pattern to match {{anything}}
-        pattern_braces = QRegularExpression(r'\{\{([^}]+)\}\}')
+        # Pattern to match {{prefix.variable}} or {{variable}} or {{$variable}}
+        # Matches: {{env.xxx}}, {{col.xxx}}, {{ext.xxx}}, {{$xxx}}, {{xxx}}
+        pattern_braces = QRegularExpression(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
         iterator = pattern_braces.globalMatch(text)
         while iterator.hasNext():
             match = iterator.next()
-            var_name = match.captured(1)  # Get variable name without braces
+            prefix = match.captured(1)  # env, col, ext, $ or empty
+            var_name = match.captured(2)  # The variable name
+            
+            # Build full variable reference for lookup
+            if prefix:
+                var_full_ref = f"{prefix}.{var_name}"
+            else:
+                var_full_ref = var_name
             
             # Check if variable is defined
-            is_defined = self._is_variable_defined(var_name)
-            
-            # Apply appropriate format
-            format_to_use = self.defined_format if is_defined else self.undefined_format
-            self.setFormat(match.capturedStart(), match.capturedLength(), format_to_use)
-        
-        # Pattern to match $dynamicVariable
-        pattern_dollar = QRegularExpression(r'\$[a-zA-Z][a-zA-Z0-9]*')
-        iterator = pattern_dollar.globalMatch(text)
-        while iterator.hasNext():
-            match = iterator.next()
-            var_name = match.captured(0)  # Get full $variable including $
-            
-            # Check if variable is defined (dynamic variables are always defined)
-            is_defined = self._is_variable_defined(var_name)
+            is_defined = self._is_variable_defined(var_full_ref)
             
             # Apply appropriate format
             format_to_use = self.defined_format if is_defined else self.undefined_format
@@ -433,10 +663,15 @@ class VariableHighlightDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.theme = theme
         self.environment_manager = None  # Will be set from main window
+        self.main_window = None  # Store reference to main window for collection variables
     
     def set_environment_manager(self, env_manager):
         """Set the environment manager for variable resolution."""
         self.environment_manager = env_manager
+    
+    def set_main_window(self, main_window):
+        """Set the main window reference for accessing collection variables."""
+        self.main_window = main_window
     
     def createEditor(self, parent, option, index):
         """Create editor with variable highlighting."""
@@ -517,37 +752,51 @@ class VariableHighlightDelegate(QStyledItemDelegate):
             x = opt.rect.x() + 5  # Left padding
             y = opt.rect.y() + opt.rect.height() // 2 + painter.fontMetrics().ascent() // 2
             
-            i = 0
-            while i < len(text):
-                if i < len(text) - 1 and text[i:i+2] == '{{':
-                    # Find end of variable
-                    end = text.find('}}', i + 2)
-                    if end != -1:
-                        # Extract variable name
-                        var_text = text[i:end+2]
-                        var_name = text[i+2:end]  # Variable name without braces
-                        
-                        # Check if variable is defined
-                        is_defined = self._is_variable_defined(var_name)
-                        
-                        # Choose color based on whether variable is defined
-                        if self.theme == 'dark':
-                            var_color = QColor("#4CAF50") if is_defined else QColor("#F44336")
-                        else:
-                            var_color = QColor("#2E7D32") if is_defined else QColor("#D32F2F")
-                        
-                        # Draw variable in appropriate color
-                        painter.setPen(var_color)
-                        painter.drawText(x, y, var_text)
-                        x += painter.fontMetrics().horizontalAdvance(var_text)
-                        i = end + 2
-                        continue
+            # Use regex to find variables with new prefix syntax
+            import re
+            pattern = re.compile(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
+            
+            last_end = 0
+            for match in pattern.finditer(text):
+                # Draw text before variable
+                before_text = text[last_end:match.start()]
+                if before_text:
+                    painter.setPen(base_color)
+                    painter.drawText(x, y, before_text)
+                    x += painter.fontMetrics().horizontalAdvance(before_text)
                 
-                # Draw regular character
+                # Extract variable info
+                prefix = match.group(1)  # env, col, ext, $ or None
+                var_name = match.group(2)  # The variable name
+                var_text = match.group(0)  # Full text like {{col.xxx}}
+                
+                # Build full variable reference
+                if prefix:
+                    var_ref = f"{prefix}.{var_name}"
+                else:
+                    var_ref = var_name
+                
+                # Check if variable is defined
+                is_defined = self._is_variable_defined(var_ref)
+                
+                # Choose color based on whether variable is defined
+                if self.theme == 'dark':
+                    var_color = QColor("#4CAF50") if is_defined else QColor("#F44336")
+                else:
+                    var_color = QColor("#2E7D32") if is_defined else QColor("#D32F2F")
+                
+                # Draw variable in appropriate color
+                painter.setPen(var_color)
+                painter.drawText(x, y, var_text)
+                x += painter.fontMetrics().horizontalAdvance(var_text)
+                
+                last_end = match.end()
+            
+            # Draw remaining text after last variable
+            remaining_text = text[last_end:]
+            if remaining_text:
                 painter.setPen(base_color)
-                painter.drawText(x, y, text[i])
-                x += painter.fontMetrics().horizontalAdvance(text[i])
-                i += 1
+                painter.drawText(x, y, remaining_text)
             
             painter.restore()
         else:
@@ -559,32 +808,75 @@ class VariableHighlightDelegate(QStyledItemDelegate):
         """Update theme."""
         self.theme = theme
     
-    def _is_variable_defined(self, var_name):
-        """Check if a variable is defined in the environment manager."""
+    def _is_variable_defined(self, var_ref):
+        """Check if a variable is defined using prefix-based lookup.
+        
+        Args:
+            var_ref: Variable reference like "env.varname", "col.varname", "ext.varname", "$.varname", or "varname"
+        
+        Returns:
+            True if defined, False otherwise
+        """
+        # Parse the variable reference
+        if '.' in var_ref and not var_ref.startswith('$'):
+            parts = var_ref.split('.', 1)
+            prefix = parts[0]
+            var_name = parts[1]
+        else:
+            prefix = None
+            var_name = var_ref
+        
+        # Handle dynamic variables (always defined)
+        if prefix == '$' or var_name.startswith('$'):
+            return True
+        
         if not self.environment_manager:
             return False
         
-        # Get all active variables
-        all_vars = {}
-        try:
-            all_vars = self.environment_manager.get_active_variables()
-            
-            # Also check collection variables if available
-            if hasattr(self.environment_manager, 'collection_variables'):
-                all_vars.update(self.environment_manager.collection_variables)
-            
-            # Check extracted variables (including extracted.xxx format)
-            if hasattr(self.environment_manager, 'extracted_variables'):
-                # extracted_variables is a dict, not a list
-                all_vars.update(self.environment_manager.extracted_variables)
-                # Also support extracted.varname format
-                for name, value in self.environment_manager.extracted_variables.items():
-                    all_vars[f"extracted.{name}"] = value
-        except:
+        # Handle explicit environment variables
+        if prefix == 'env':
+            if self.environment_manager.has_active_environment():
+                env_vars = self.environment_manager.get_active_variables()
+                return var_name in env_vars and env_vars[var_name] not in (None, '', '❌ Undefined')
             return False
         
-        # Check if variable name exists and has a non-empty value
-        return var_name in all_vars and all_vars[var_name] not in (None, '', '❌ Undefined')
+        # Handle explicit collection variables
+        if prefix == 'col':
+            if self.main_window and hasattr(self.main_window, 'current_collection_id'):
+                if self.main_window.current_collection_id and hasattr(self.main_window, 'db'):
+                    col_vars = self.main_window.db.get_collection_variables(self.main_window.current_collection_id)
+                    return var_name in col_vars and col_vars[var_name] not in (None, '', '❌ Undefined')
+            return False
+        
+        # Handle explicit extracted variables
+        if prefix == 'ext':
+            try:
+                extracted_vars = self.environment_manager.get_extracted_variables()
+                return var_name in extracted_vars and extracted_vars[var_name] not in (None, '', '❌ Undefined')
+            except:
+                return False
+        
+        # No prefix - backward compatibility: check all scopes
+        # Priority: extracted > collection > environment
+        try:
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            if var_name in extracted_vars:
+                return extracted_vars[var_name] not in (None, '', '❌ Undefined')
+        except:
+            pass
+        
+        if self.main_window and hasattr(self.main_window, 'current_collection_id'):
+            if self.main_window.current_collection_id and hasattr(self.main_window, 'db'):
+                col_vars = self.main_window.db.get_collection_variables(self.main_window.current_collection_id)
+                if var_name in col_vars:
+                    return col_vars[var_name] not in (None, '', '❌ Undefined')
+        
+        if self.environment_manager.has_active_environment():
+            env_vars = self.environment_manager.get_active_variables()
+            if var_name in env_vars:
+                return env_vars[var_name] not in (None, '', '❌ Undefined')
+        
+        return False
     
     def helpEvent(self, event, view, option, index):
         """Show tooltip when hovering over variables."""
@@ -592,9 +884,10 @@ class VariableHighlightDelegate(QStyledItemDelegate):
             text = index.data(Qt.ItemDataRole.DisplayRole)
             
             if text and '{{' in text and '}}' in text:
-                # Find if mouse is over a variable
+                # Find if mouse is over a variable with new prefix syntax
                 import re
-                pattern = re.compile(r'\{\{([^}]+)\}\}')
+                # Pattern matches: {{env.xxx}}, {{col.xxx}}, {{ext.xxx}}, {{$xxx}}, {{xxx}}
+                pattern = re.compile(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
                 
                 # Get font metrics to calculate positions
                 fm = view.fontMetrics()
@@ -605,12 +898,18 @@ class VariableHighlightDelegate(QStyledItemDelegate):
                 relative_x = mouse_pos.x() - cell_rect.x() - 5  # 5px left padding
                 
                 # Check each variable
-                current_x = 0
                 for match in pattern.finditer(text):
                     # Calculate position of text before this variable
                     text_before = text[:match.start()]
                     var_text = match.group(0)
-                    var_name = match.group(1)
+                    prefix = match.group(1)  # env, col, ext, $ or None
+                    var_name = match.group(2)  # The variable name
+                    
+                    # Build full variable reference
+                    if prefix:
+                        var_ref = f"{prefix}.{var_name}"
+                    else:
+                        var_ref = var_name
                     
                     start_x = fm.horizontalAdvance(text_before)
                     var_width = fm.horizontalAdvance(var_text)
@@ -618,28 +917,12 @@ class VariableHighlightDelegate(QStyledItemDelegate):
                     
                     # Check if mouse is over this variable
                     if start_x <= relative_x <= end_x:
-                        # Get variable value
-                        if self.environment_manager:
-                            # Get all active variables
-                            all_vars = self.environment_manager.get_active_variables()
-                            
-                            # Also get collection variables if available
-                            if hasattr(self.environment_manager, 'collection_variables'):
-                                all_vars.update(self.environment_manager.collection_variables)
-                            
-                            # Get extracted variables (including extracted.xxx format)
-                            if hasattr(self.environment_manager, 'extracted_variables'):
-                                # extracted_variables is a dict, not a list
-                                all_vars.update(self.environment_manager.extracted_variables)
-                                # Also support extracted.varname format
-                                for name, value in self.environment_manager.extracted_variables.items():
-                                    all_vars[f"extracted.{name}"] = value
-                            
-                            # Get value
-                            value = all_vars.get(var_name, "❌ Undefined")
-                            
+                        # Get variable value using prefix-based lookup
+                        value = self._get_variable_value_for_tooltip(var_ref)
+                        
+                        if value and value != "❌ Undefined":
                             # Show tooltip
-                            tooltip_text = f"<b>{var_name}</b><br/><span style='color: #4CAF50;'>{value}</span>"
+                            tooltip_text = f"<b>{var_ref}</b><br/><span style='color: #4CAF50;'>{value}</span>"
                             QToolTip.showText(event.globalPos(), tooltip_text, view)
                             return True
                 
@@ -648,4 +931,74 @@ class VariableHighlightDelegate(QStyledItemDelegate):
                 return True
         
         return super().helpEvent(event, view, option, index)
+    
+    def _get_variable_value_for_tooltip(self, var_ref):
+        """Get variable value for tooltip using prefix-based lookup.
+        
+        Args:
+            var_ref: Variable reference like "env.varname", "col.varname", "ext.varname", "$.varname", or "varname"
+        
+        Returns:
+            The variable value or "❌ Undefined" if not found
+        """
+        # Parse the variable reference
+        if '.' in var_ref and not var_ref.startswith('$'):
+            parts = var_ref.split('.', 1)
+            prefix = parts[0]
+            var_name = parts[1]
+        else:
+            prefix = None
+            var_name = var_ref
+        
+        # Handle dynamic variables
+        if prefix == '$' or var_name.startswith('$'):
+            return f"🎲 Dynamic (auto-generated)"
+        
+        if not self.environment_manager:
+            return "❌ Undefined"
+        
+        # Handle explicit environment variables
+        if prefix == 'env':
+            if self.environment_manager.has_active_environment():
+                env_vars = self.environment_manager.get_active_variables()
+                return env_vars.get(var_name, "❌ Undefined")
+            return "❌ Undefined (No active environment)"
+        
+        # Handle explicit collection variables
+        if prefix == 'col':
+            if self.main_window and hasattr(self.main_window, 'current_collection_id'):
+                if self.main_window.current_collection_id and hasattr(self.main_window, 'db'):
+                    col_vars = self.main_window.db.get_collection_variables(self.main_window.current_collection_id)
+                    return col_vars.get(var_name, "❌ Undefined")
+            return "❌ Undefined (No collection variables)"
+        
+        # Handle explicit extracted variables
+        if prefix == 'ext':
+            try:
+                extracted_vars = self.environment_manager.get_extracted_variables()
+                return extracted_vars.get(var_name, "❌ Undefined")
+            except:
+                return "❌ Undefined (No extracted variables)"
+        
+        # No prefix - backward compatibility: check all scopes
+        # Priority: extracted > collection > environment
+        try:
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            if var_name in extracted_vars:
+                return extracted_vars[var_name]
+        except:
+            pass
+        
+        if self.main_window and hasattr(self.main_window, 'current_collection_id'):
+            if self.main_window.current_collection_id and hasattr(self.main_window, 'db'):
+                col_vars = self.main_window.db.get_collection_variables(self.main_window.current_collection_id)
+                if var_name in col_vars:
+                    return col_vars[var_name]
+        
+        if self.environment_manager.has_active_environment():
+            env_vars = self.environment_manager.get_active_variables()
+            if var_name in env_vars:
+                return env_vars[var_name]
+        
+        return "❌ Undefined"
 

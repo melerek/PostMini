@@ -204,6 +204,10 @@ class NoPaddingDelegate(QStyledItemDelegate):
         """Set the environment manager for variable resolution."""
         self.var_highlighter_delegate.set_environment_manager(env_manager)
     
+    def set_main_window(self, main_window):
+        """Set the main window reference for accessing collection variables."""
+        self.var_highlighter_delegate.set_main_window(main_window)
+    
     def createEditor(self, parent, option, index):
         """Create editor using variable highlighting delegate."""
         return self.var_highlighter_delegate.createEditor(parent, option, index)
@@ -242,6 +246,7 @@ class ColoredTabBar(QTabBar):
         self.tab_data = {}  # Store method/name for each tab index
         self.setDrawBase(False)  # Don't draw the base line
         self.setMouseTracking(True)  # Enable mouse tracking for hover effects
+        self.setCursor(Qt.CursorShape.PointingHandCursor)  # Show pointer cursor
         self.hovered_tab = -1  # Track which tab is hovered
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
@@ -256,10 +261,10 @@ class ColoredTabBar(QTabBar):
         self.update()
     
     def tabSizeHint(self, index: int):
-        """Calculate tab size based on content."""
+        """Calculate tab size based on content - Cursor style."""
         if index not in self.tab_data:
             # Provide a reasonable default size for tabs without data yet
-            return QSize(150, 38)
+            return QSize(120, 35)
         
         data = self.tab_data[index]
         method = data['method']
@@ -278,10 +283,11 @@ class ColoredTabBar(QTabBar):
         changes_width = fm.horizontalAdvance(" •") if has_changes else 0
         close_btn_width = 24  # Space for close button
         
-        # Add padding
-        total_width = 24 + method_width + bullet_width + name_width + changes_width + close_btn_width
+        # Add padding (12px left + 28px right from stylesheet)
+        total_width = 12 + method_width + bullet_width + name_width + changes_width + 28
         
-        return QSize(min(max(total_width, 120), 250), 38)  # Reduced height from 42 to 38
+        # Cursor-style sizing: more compact, allow natural sizing
+        return QSize(min(max(total_width, 80), 300), 35)
     
     def mouseMoveEvent(self, event):
         """Track which tab is being hovered."""
@@ -367,23 +373,23 @@ class ColoredTabBar(QTabBar):
             # Get tab rect
             rect = self.tabRect(index)
             is_selected = (index == self.currentIndex())
+            is_hovered = rect.contains(self.mapFromGlobal(self.cursor().pos()))
             is_dark_theme = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
             
-            # Draw background
+            # Draw background - Cursor style
             if is_selected:
-                painter.fillRect(rect, QColor('#1e1e1e' if is_dark_theme else '#FFFFFF'))
-            elif rect.contains(self.mapFromGlobal(self.cursor().pos())):
-                # Hover state
-                painter.fillRect(rect, QColor('#1a3a52' if is_dark_theme else '#E3F2FD'))
+                # Selected tab matches content area
+                painter.fillRect(rect, QColor('#1E1E1E' if is_dark_theme else '#FFFFFF'))
+            # No hover background - only text color changes (handled below)
             
-            # Draw vertical separator (right border)
-            separator_color = QColor('#3e3e42' if is_dark_theme else '#E0E0E0')
+            # Draw subtle vertical separator (right border) - gray color
+            separator_color = QColor('#3F3F3F' if is_dark_theme else '#D0D0D0')
             painter.setPen(QPen(separator_color, 1))
             painter.drawLine(rect.topRight().x(), rect.top(), rect.bottomRight().x(), rect.bottom())
             
-            # Draw bottom border (underline) for selected tab
+            # Draw bottom border (underline) for selected tab - Cursor blue
             if is_selected:
-                painter.setPen(QPen(QColor('#007acc' if is_dark_theme else '#2196F3'), 3))
+                painter.setPen(QPen(QColor('#007ACC'), 2))
                 painter.drawLine(rect.bottomLeft().x(), rect.bottom() - 1, 
                                rect.bottomRight().x(), rect.bottom() - 1)
             
@@ -407,9 +413,11 @@ class ColoredTabBar(QTabBar):
             
             # Draw bullet separator
             if is_selected:
-                painter.setPen(QPen(QColor('#007acc' if is_dark_theme else '#2196F3')))
+                painter.setPen(QPen(QColor('#FFFFFF' if is_dark_theme else '#212121')))
+            elif is_hovered:
+                painter.setPen(QPen(QColor('#CCCCCC' if is_dark_theme else '#212121')))
             else:
-                painter.setPen(QPen(QColor('#9E9E9E' if is_dark_theme else '#757575')))
+                painter.setPen(QPen(QColor('#969696' if is_dark_theme else '#616161')))
             font.setBold(False)
             font.setPointSize(9)
             painter.setFont(font)
@@ -428,11 +436,13 @@ class ColoredTabBar(QTabBar):
                     name_width = painter.fontMetrics().horizontalAdvance(name_display)
                 name_display += "..."
             
-            # Apply text hierarchy: active = primary, inactive = secondary
+            # Apply text hierarchy - Cursor style (more contrast)
             if is_selected:
-                painter.setPen(QPen(QColor('#E0E0E0' if is_dark_theme else '#212121')))  # Primary text
+                painter.setPen(QPen(QColor('#FFFFFF' if is_dark_theme else '#212121')))  # High contrast for selected
+            elif is_hovered:
+                painter.setPen(QPen(QColor('#CCCCCC' if is_dark_theme else '#212121')))  # Brighter on hover
             else:
-                painter.setPen(QPen(QColor('#9E9E9E' if is_dark_theme else '#757575')))  # Secondary text
+                painter.setPen(QPen(QColor('#969696' if is_dark_theme else '#616161')))  # Muted for inactive
             
             painter.drawText(x, y, name_display)
             x += painter.fontMetrics().horizontalAdvance(name_display) + 6
@@ -457,8 +467,8 @@ class MainWindow(QMainWindow):
         # Initialize script engine
         self.script_engine = ScriptEngine(timeout_ms=5000)
         
-        # Initialize environment manager
-        self.env_manager = EnvironmentManager()
+        # Initialize environment manager with database reference for variable persistence
+        self.env_manager = EnvironmentManager(db=self.db)
         
         # Initialize import/export
         self.exporter = CollectionExporter(self.db)
@@ -516,8 +526,14 @@ class MainWindow(QMainWindow):
         # Connect environment manager to table delegates for variable tooltips
         if hasattr(self, 'params_table') and hasattr(self.params_table, '_custom_delegate'):
             self.params_table._custom_delegate.set_environment_manager(self.env_manager)
+            self.params_table._custom_delegate.set_main_window(self)
         if hasattr(self, 'headers_table') and hasattr(self.headers_table, '_custom_delegate'):
             self.headers_table._custom_delegate.set_environment_manager(self.env_manager)
+            self.headers_table._custom_delegate.set_main_window(self)
+        
+        # Connect environment manager to test tab for variable highlighting in test fields
+        if hasattr(self, 'test_tab'):
+            self.test_tab.set_environment_manager(self.env_manager)
         
         # Reinitialize toast with the actual central widget (was created early with temp widget)
         self.toast = ToastManager(self.centralWidget())
@@ -811,8 +827,8 @@ class MainWindow(QMainWindow):
         
         # Create horizontal container for tab bar + recent button (always visible)
         tab_bar_container = QWidget()
-        tab_bar_container.setMaximumHeight(38)  # Fixed height to prevent extension
-        tab_bar_container.setMinimumHeight(38)
+        tab_bar_container.setMaximumHeight(35)  # Cursor-style height
+        tab_bar_container.setMinimumHeight(35)
         tab_bar_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         tab_bar_layout = QHBoxLayout(tab_bar_container)
         tab_bar_layout.setContentsMargins(0, 0, 0, 0)
@@ -826,14 +842,14 @@ class MainWindow(QMainWindow):
         self.request_tabs.setDocumentMode(True)
         self.request_tabs.tabCloseRequested.connect(self._close_tab)
         self.request_tabs.currentChanged.connect(self._on_tab_changed)
-        self.request_tabs.setMaximumHeight(38)  # Only show the tab bar (reduced from 42)
+        self.request_tabs.setMaximumHeight(35)  # Cursor-style tab height
         self.request_tabs.setObjectName("requestTabs")  # For specific styling
         tab_bar_layout.addWidget(self.request_tabs)
         
         # Add New Request button - independent of tabs, always visible
         self.new_request_btn = QPushButton("+ New request")
         self.new_request_btn.setToolTip("Create new request (Ctrl+N)")
-        self.new_request_btn.setFixedHeight(38)  # Match tab bar height
+        self.new_request_btn.setFixedHeight(35)  # Match tab bar height
         self.new_request_btn.setMinimumWidth(120)
         self.new_request_btn.setStyleSheet("""
             QPushButton {
@@ -1425,6 +1441,9 @@ class MainWindow(QMainWindow):
             
             # Update tab title
             self._update_tab_title(index)
+            
+            # Refresh variable inspector panel to show correct collection variables
+            self._refresh_variable_inspector_panel()
         else:
             print(f"[DEBUG] WARNING: Tab {index} not found in tab_states!")
     
@@ -1905,7 +1924,7 @@ class MainWindow(QMainWindow):
         url_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         url_layout = QHBoxLayout(url_container)
         url_layout.setContentsMargins(0, 0, 0, 0)
-        url_layout.setSpacing(12)  # Increased spacing for better visual separation
+        url_layout.setSpacing(0)  # No spacing - buttons will be connected
         
         # HTTP Method Combo with improved styling
         self.method_combo = QComboBox()
@@ -1917,6 +1936,7 @@ class MainWindow(QMainWindow):
         # Apply method-specific colors via styleSheet update on change
         self.method_combo.currentTextChanged.connect(self._update_method_style)
         url_layout.addWidget(self.method_combo)
+        url_layout.addSpacing(12)  # Spacing after method combo
         
         self.url_input = HighlightedLineEdit(theme=self.current_theme)
         self.url_input.setPlaceholderText("Enter request URL or paste text")
@@ -1925,6 +1945,7 @@ class MainWindow(QMainWindow):
         self.url_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         url_layout.addWidget(self.url_input)
+        url_layout.addSpacing(12)  # Spacing after URL input
         
         # IMPROVED: Larger, more prominent Send button
         self.send_btn = QPushButton("Send")
@@ -1942,28 +1963,97 @@ class MainWindow(QMainWindow):
         send_font.setPixelSize(14)
         self.send_btn.setFont(send_font)
         url_layout.addWidget(self.send_btn)
+        url_layout.addSpacing(12)  # Spacing after Send button
         
-        # Add 8px spacing between buttons (4-point grid)
-        url_layout.addSpacing(8)
+        # Create a container for the connected button group - ZERO spacing
+        button_group = QWidget()
+        button_group.setStyleSheet("QWidget { background: transparent; }")
+        button_group_layout = QHBoxLayout(button_group)
+        button_group_layout.setContentsMargins(0, 0, 0, 0)
+        button_group_layout.setSpacing(0)
         
+        # Save button with rounded corners only on the left
         self.save_btn = QPushButton("Save")
-        self.save_btn.setMinimumWidth(80)
-        self.save_btn.setMinimumHeight(38)  # Match Send button height
+        self.save_btn.setFixedSize(80, 38)
         self.save_btn.clicked.connect(self._save_request)
         self.save_btn.setToolTip("Save request (Ctrl+S)")
-        self.save_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        url_layout.addWidget(self.save_btn)
+        self.save_btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #444444;
+                border-top-left-radius: 4px;
+                border-bottom-left-radius: 4px;
+                border-top-right-radius: 0px;
+                border-bottom-right-radius: 0px;
+                background-color: transparent;
+                color: #E0E0E0;
+                padding: 0px;
+                margin: 0px;
+            }
+            QPushButton:hover {
+                background-color: #2A2A2A;
+                border-color: #555555;
+            }
+            QPushButton:pressed {
+                background-color: #2D2D2D;
+            }
+        """)
+        button_group_layout.addWidget(self.save_btn)
         
-        # Add 8px spacing between buttons (4-point grid)
-        url_layout.addSpacing(8)
+        # Menu button with down arrow
+        self.menu_btn = QPushButton("▼")
+        self.menu_btn.setFixedSize(28, 38)
+        self.menu_btn.setToolTip("More options")
+        self.menu_btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #444444;
+                border-left: none;
+                border-top-left-radius: 0px;
+                border-bottom-left-radius: 0px;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+                background-color: transparent;
+                color: #E0E0E0;
+                padding: 0px;
+                margin: 0px;
+            }
+            QPushButton:hover {
+                background-color: #2A2A2A;
+                border-color: #555555;
+                border-left: none;
+            }
+            QPushButton:pressed {
+                background-color: #2D2D2D;
+            }
+        """)
         
-        self.code_btn = QPushButton("💻 Code")
-        self.code_btn.setMinimumWidth(80)
-        self.code_btn.setMinimumHeight(38)  # Match Send button height
-        self.code_btn.clicked.connect(self._generate_code)
-        self.code_btn.setToolTip("Generate code snippet (Ctrl+Shift+C)")
-        self.code_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        url_layout.addWidget(self.code_btn)
+        # Style the arrow
+        menu_font = QFont()
+        menu_font.setPixelSize(7)
+        self.menu_btn.setFont(menu_font)
+        button_group_layout.addWidget(self.menu_btn)
+        
+        # Add the button group to url_layout
+        url_layout.addWidget(button_group)
+        
+        # Create menu for the button
+        self.options_menu = QMenu(self)
+        
+        # Code action
+        code_action = QAction("💻 Code", self)
+        code_action.setShortcut(QKeySequence("Ctrl+Shift+C"))
+        code_action.triggered.connect(self._generate_code)
+        code_action.setToolTip("Generate code snippet")
+        self.options_menu.addAction(code_action)
+        
+        # Copy as cURL action
+        curl_action = QAction("📋 Copy as cURL", self)
+        curl_action.triggered.connect(self._copy_as_curl)
+        curl_action.setToolTip("Copy request as cURL command")
+        self.options_menu.addAction(curl_action)
+        
+        # Connect button to show menu (without dropdown arrow indicator)
+        self.menu_btn.clicked.connect(self._show_options_menu)
+        url_layout.addWidget(self.menu_btn)
         
         layout.addWidget(url_container, 0)  # Stretch factor 0 = fixed
         
@@ -1974,7 +2064,41 @@ class MainWindow(QMainWindow):
         
         # Description section (collapsible)
         self.description_widget = self._create_description_section()
-        layout.addWidget(self.description_widget)
+        layout.addWidget(self.description_widget, 0)  # Stretch factor 0 = fixed height
+        
+        # Create collapsible container for request tabs
+        self.request_tabs_container = QWidget()
+        request_tabs_layout = QVBoxLayout(self.request_tabs_container)
+        request_tabs_layout.setContentsMargins(0, 0, 0, 0)
+        request_tabs_layout.setSpacing(0)
+        
+        # Header with collapse/expand button for request area
+        request_header_layout = QHBoxLayout()
+        request_header_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.request_tabs_toggle_btn = QPushButton("▼ Request")
+        self.request_tabs_toggle_btn.setFlat(True)
+        self.request_tabs_toggle_btn.setStyleSheet("""
+            QPushButton {
+                text-align: left;
+                padding: 4px 8px;
+                border: none;
+                background: transparent;
+                color: #9E9E9E;
+                font-weight: normal;
+            }
+            QPushButton:hover {
+                background-color: rgba(100, 100, 100, 0.2);
+            }
+        """)
+        self.request_tabs_toggle_btn.clicked.connect(self._toggle_request_tabs)
+        request_header_layout.addWidget(self.request_tabs_toggle_btn)
+        request_header_layout.addStretch()
+        
+        request_tabs_layout.addLayout(request_header_layout)
+        
+        # Add spacing between toggle button and tabs
+        request_tabs_layout.addSpacing(4)
         
         # Tabs for Params, Headers, Authorization, Body (this should expand)
         self.inner_tabs = QTabWidget()
@@ -2026,7 +2150,10 @@ class MainWindow(QMainWindow):
         # Initialize tab counts
         self._update_tab_counts()
         
-        layout.addWidget(self.inner_tabs, 1)  # Stretch factor 1 = expands to fill
+        request_tabs_layout.addWidget(self.inner_tabs, 1)  # Stretch factor 1 = expands to fill
+        
+        # Add the request tabs container to the main layout
+        layout.addWidget(self.request_tabs_container, 1)  # Stretch factor 1 = expands to fill
         
         return editor
     
@@ -2037,19 +2164,27 @@ class MainWindow(QMainWindow):
         
         # Title row with collapse icon
         title_layout = QHBoxLayout()
+        title_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Collapse icon (clickable)
-        self.response_collapse_icon = QLabel("▼")
-        self.response_collapse_icon.setFont(QFont("Arial", 12))
-        self.response_collapse_icon.setFixedWidth(20)
-        self.response_collapse_icon.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.response_collapse_icon.setToolTip("Collapse/Expand response panel")
-        self.response_collapse_icon.mousePressEvent = lambda event: self._toggle_response_panel()
-        title_layout.addWidget(self.response_collapse_icon)
-        
-        title = QLabel("Response")
-        title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        title_layout.addWidget(title)
+        # Collapse button (clickable with hover effect)
+        self.response_collapse_btn = QPushButton("▼ Response")
+        self.response_collapse_btn.setFlat(True)
+        self.response_collapse_btn.setStyleSheet("""
+            QPushButton {
+                text-align: left;
+                padding: 4px 8px;
+                border: none;
+                background: transparent;
+                color: #9E9E9E;
+                font-weight: normal;
+            }
+            QPushButton:hover {
+                background-color: rgba(100, 100, 100, 0.2);
+            }
+        """)
+        self.response_collapse_btn.clicked.connect(self._toggle_response_panel)
+        self.response_collapse_btn.setToolTip("Collapse/Expand response panel")
+        title_layout.addWidget(self.response_collapse_btn)
         
         title_layout.addStretch()
         
@@ -2184,6 +2319,9 @@ class MainWindow(QMainWindow):
         self.current_response_pretty = ""  # Pretty-formatted text
         self.is_pretty_mode = True  # Track current view mode
         
+        # Initialize request details storage
+        self.current_request_details = None  # Store actual request that was sent
+        
         # Add padding to body widget
         body_layout.setContentsMargins(10, 10, 10, 10)
         
@@ -2197,6 +2335,12 @@ class MainWindow(QMainWindow):
             1, QHeaderView.ResizeMode.Stretch
         )
         self.response_tabs.addTab(self.response_headers_table, "Headers")
+        
+        # Request Details tab
+        self.request_details_viewer = QTextEdit()
+        self.request_details_viewer.setReadOnly(True)
+        self.request_details_viewer.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.response_tabs.addTab(self.request_details_viewer, "Request Details")
         
         # Variable Extraction tab
         self.variable_extraction_widget = VariableExtractionWidget()
@@ -2294,6 +2438,34 @@ class MainWindow(QMainWindow):
             self.description_toggle_btn.setText("▶ Description")
         else:
             self.description_toggle_btn.setText("▼ Description")
+    
+    def _toggle_request_tabs(self):
+        """Toggle the visibility of the request tabs section."""
+        is_visible = self.inner_tabs.isVisible()
+        self.inner_tabs.setVisible(not is_visible)
+        
+        # Update button text and adjust splitter
+        if is_visible:
+            # Collapsing - give more space to response
+            self.request_tabs_toggle_btn.setText("▶ Request")
+            # When collapsed, set minimal height for the container
+            self.request_tabs_container.setMaximumHeight(30)
+            
+            # Adjust splitter to give most space to response
+            # Fixed parts in request editor: title (40px) + URL bar (~60px) + description header + request header
+            total_height = sum(self.request_response_splitter.sizes())
+            request_fixed_height = 200  # Conservative estimate for fixed height elements
+            response_height = max(total_height - request_fixed_height, total_height * 0.7)  # At least 70% to response
+            self.request_response_splitter.setSizes([int(total_height - response_height), int(response_height)])
+        else:
+            # Expanding - restore normal proportions
+            self.request_tabs_toggle_btn.setText("▼ Request")
+            # When expanded, allow it to grow
+            self.request_tabs_container.setMaximumHeight(16777215)  # Qt's default max
+            
+            # Restore 50/50 split or user's preferred split
+            total_height = sum(self.request_response_splitter.sizes())
+            self.request_response_splitter.setSizes([int(total_height * 0.5), int(total_height * 0.5)])
     
     def _create_auth_widget(self) -> QWidget:
         """Create the authorization configuration widget."""
@@ -4205,8 +4377,12 @@ class MainWindow(QMainWindow):
             auth_type = 'None'
             auth_token = ""
         
-        # Apply variable substitution (collection vars -> environment vars -> extracted vars -> dynamic variables)
-        # Dynamic variables ($variable) work even without an active environment
+        # Apply variable substitution with new prefix system
+        # {{env.xxx}} - environment variables
+        # {{col.xxx}} - collection variables
+        # {{ext.xxx}} - extracted variables
+        # {{$xxx}} - dynamic variables
+        # {{xxx}} - backward compatibility (checks all scopes)
         
         # Get collection variables if we have a current collection
         collection_variables = {}
@@ -4217,32 +4393,29 @@ class MainWindow(QMainWindow):
         extracted_variables = {}
         all_extracted = self.db.get_all_extracted_variables()
         for var in all_extracted:
-            # Store WITHOUT "extracted." prefix - the substitution code adds it
+            # Store WITHOUT prefix - the new substitution system handles prefixes
             extracted_variables[var['name']] = var['value']
         
-        # Debug: Show what extracted variables are available
+        # Update environment manager's extracted variables for substitution
+        self.env_manager.set_extracted_variables(extracted_variables)
+        
+        # Debug: Show what variables are available
         if all_extracted:
             print(f"[DEBUG] Loaded {len(all_extracted)} extracted variables:")
             for var in all_extracted:
                 print(f"  - {var['name']} = {var['value']}")
-            print(f"[DEBUG] Variable dict keys: {list(extracted_variables.keys())}")
         else:
             print("[DEBUG] No extracted variables found in database")
         
+        print(f"[DEBUG] Collection variables: {len(collection_variables)}")
+        print(f"[DEBUG] Environment variables: {len(self.env_manager.get_active_variables()) if self.env_manager.has_active_environment() else 0}")
+        
         if self.env_manager.has_active_environment():
-            # Get environment variables
-            env_variables = self.env_manager.get_active_variables()
+            print(f"[DEBUG] Using environment manager substitution with new prefix system")
             
-            # Merge variables: env_variables < collection_variables < extracted_variables
-            merged_variables = {**env_variables, **collection_variables, **extracted_variables}
-            
-            print(f"[DEBUG] Using environment manager substitution")
-            print(f"[DEBUG] Merged variables count: {len(merged_variables)}")
-            print(f"[DEBUG] Merged variable keys: {list(merged_variables.keys())[:10]}")  # Show first 10
-            
-            # Substitute both {{env}} and $dynamic variables
+            # Substitute with new prefix system
             substituted, unresolved = self.env_manager.substitute_in_request(
-                url, params, headers, body, auth_token, extra_variables=merged_variables
+                url, params, headers, body, auth_token, collection_variables=collection_variables
             )
             
             print(f"[DEBUG] After substitution:")
@@ -4272,81 +4445,35 @@ class MainWindow(QMainWindow):
             # Don't overwrite OAuth token with substituted auth_token
             if auth_type == 'Bearer Token':
                 auth_token = substituted['auth_token']
-        elif collection_variables or extracted_variables:
-            # No active environment, but we have collection variables or extracted variables
+        else:
+            # No active environment - use direct substitution for collection, extracted, and dynamic variables
             from src.features.variable_substitution import VariableSubstitution
             
-            print(f"[DEBUG] No active environment - using direct substitution")
+            print(f"[DEBUG] No active environment - using direct substitution with new prefix system")
             print(f"[DEBUG] Collection vars: {len(collection_variables)}")
             print(f"[DEBUG] Extracted vars: {len(extracted_variables)}")
             
-            # Don't merge - pass separately!
-            print(f"[DEBUG] Extracted variables dict: {extracted_variables}")
-            
-            # Substitute URL
-            url, _ = VariableSubstitution.substitute(url, collection_variables, extracted_variables)
+            # Substitute URL (no env vars, but collection and extracted vars work)
+            url, _ = VariableSubstitution.substitute(url, None, collection_variables, extracted_variables)
             print(f"[DEBUG] URL after substitution: {url}")
             
             # Substitute params
             if params:
-                new_params = {}
-                for k, v in params.items():
-                    new_key, _ = VariableSubstitution.substitute(k, collection_variables, extracted_variables)
-                    new_val, _ = VariableSubstitution.substitute(v, collection_variables, extracted_variables)
-                    new_params[new_key] = new_val
-                params = new_params
+                params, _ = VariableSubstitution.substitute_dict(params, None, collection_variables, extracted_variables)
             
             # Substitute headers
             if headers:
                 print(f"[DEBUG] Substituting headers: {headers}")
-                new_headers = {}
-                for k, v in headers.items():
-                    new_key, _ = VariableSubstitution.substitute(k, collection_variables, extracted_variables)
-                    new_val, _ = VariableSubstitution.substitute(v, collection_variables, extracted_variables)
-                    print(f"[DEBUG]   {k}: {v} -> {new_key}: {new_val}")
-                    new_headers[new_key] = new_val
-                headers = new_headers
+                headers, _ = VariableSubstitution.substitute_dict(headers, None, collection_variables, extracted_variables)
                 print(f"[DEBUG] Headers after substitution: {headers}")
             
             # Substitute body
             if body:
-                body, _ = VariableSubstitution.substitute(body, collection_variables, extracted_variables)
+                body, _ = VariableSubstitution.substitute(body, None, collection_variables, extracted_variables)
             
             # Substitute auth token
             if auth_token:
-                auth_token, _ = VariableSubstitution.substitute(auth_token, collection_variables, extracted_variables)
-        else:
-            # No active environment, but still substitute dynamic variables
-            from src.features.variable_substitution import VariableSubstitution
-            
-            # Substitute URL
-            url, _ = VariableSubstitution.substitute(url, {})
-            
-            # Substitute params
-            if params:
-                substituted_params = {}
-                for key, value in params.items():
-                    new_key, _ = VariableSubstitution.substitute(str(key), {})
-                    new_value, _ = VariableSubstitution.substitute(str(value), {})
-                    substituted_params[new_key] = new_value
-                params = substituted_params
-            
-            # Substitute headers
-            if headers:
-                substituted_headers = {}
-                for key, value in headers.items():
-                    new_key, _ = VariableSubstitution.substitute(str(key), {})
-                    new_value, _ = VariableSubstitution.substitute(str(value), {})
-                    substituted_headers[new_key] = new_value
-                headers = substituted_headers
-            
-            # Substitute body
-            if body:
-                body, _ = VariableSubstitution.substitute(body, {})
-            
-            # Substitute auth token
-            if auth_token:
-                auth_token, _ = VariableSubstitution.substitute(auth_token, {})
+                auth_token, _ = VariableSubstitution.substitute(auth_token, None, collection_variables, extracted_variables)
         
         # Apply default protocol if URL doesn't have one
         if not url.startswith(('http://', 'https://', 'ws://', 'wss://')):
@@ -4494,6 +4621,17 @@ class MainWindow(QMainWindow):
                 self._reset_send_button()
                 return
         
+        # Store request details (after variable substitution and pre-request script)
+        self.current_request_details = {
+            'method': method,
+            'url': url,
+            'params': params,
+            'headers': headers,
+            'body': body,
+            'auth_type': auth_type,
+            'auth_token': auth_token
+        }
+        
         # Create and start request thread
         self.request_thread = RequestThread(
             self.api_client, method, url, params, headers, body, auth_type, auth_token
@@ -4540,6 +4678,9 @@ class MainWindow(QMainWindow):
         
         # Display response
         self._display_response(response)
+        
+        # Update request details viewer
+        self._update_request_details_viewer()
         
         # ========== Execute Post-response Script ==========
         post_response_script = self.scripts_tab.get_post_response_script()
@@ -4669,6 +4810,9 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Status: Error")
         self.status_label.setStyleSheet("color: #F44336; font-weight: bold;")
         self.response_body.setPlainText(enhanced_error['full'])
+        
+        # Update request details viewer
+        self._update_request_details_viewer()
         
         # Save to history (with error)
         self._save_to_history(error_message=error_message)
@@ -4955,9 +5099,11 @@ class MainWindow(QMainWindow):
         self.response_body.clear()
         self.response_headers_table.clearContents()
         self.response_headers_table.setRowCount(0)
+        self.request_details_viewer.clear()
         self.current_response = None
         self.current_response_raw = ""
         self.current_response_pretty = ""
+        self.current_request_details = None
         # Switch back to empty state
         self.response_stack.setCurrentWidget(self.response_empty_state)
         
@@ -4973,6 +5119,40 @@ class MainWindow(QMainWindow):
         # Clear test results viewer
         if hasattr(self, 'test_results_viewer') and self.test_results_viewer is not None:
             self.test_results_viewer.clear()
+    
+    def _update_request_details_viewer(self):
+        """Update the request details viewer with the current request information."""
+        if not self.current_request_details:
+            self.request_details_viewer.clear()
+            return
+        
+        details = self.current_request_details
+        request_text = f"Method: {details.get('method', 'GET')}\n"
+        request_text += f"URL: {details.get('url', '-')}\n"
+        
+        if details.get('params'):
+            request_text += "\nQuery Parameters:\n"
+            for key, value in details['params'].items():
+                request_text += f"  {key}: {value}\n"
+        
+        if details.get('headers'):
+            request_text += "\nHeaders:\n"
+            for key, value in details['headers'].items():
+                request_text += f"  {key}: {value}\n"
+        
+        if details.get('body'):
+            request_text += f"\nBody:\n{details['body']}\n"
+        
+        if details.get('auth_type') and details['auth_type'] != 'None':
+            request_text += f"\nAuth Type: {details['auth_type']}\n"
+            if details.get('auth_token') and details['auth_type'] == 'Bearer Token':
+                # Show only first 20 chars of token for security
+                token = details['auth_token']
+                if len(token) > 20:
+                    token = token[:20] + "..."
+                request_text += f"Auth Token: {token}\n"
+        
+        self.request_details_viewer.setPlainText(request_text)
     
     def _restore_response(self, response_data: Dict):
         """Restore a response from saved data."""
@@ -5125,14 +5305,14 @@ class MainWindow(QMainWindow):
             
             # Hide content and adjust splitter to minimal response panel size
             self.response_content_widget.hide()
-            self.response_collapse_icon.setText("▶")
+            self.response_collapse_btn.setText("▶ Response")
             
             # Get total height and set response panel to minimal height (60px for header)
             total_height = sum(self.request_response_splitter.sizes())
             self.request_response_splitter.setSizes([total_height - 60, 60])
         else:
             self.response_content_widget.show()
-            self.response_collapse_icon.setText("▼")
+            self.response_collapse_btn.setText("▼ Response")
             
             # Restore previous sizes or use default proportions
             if hasattr(self, 'splitter_sizes_before_collapse'):
@@ -6559,6 +6739,62 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to replay request: {str(e)}")
     
     # ==================== Code Generation ====================
+    
+    def _show_options_menu(self):
+        """Show the options menu below the menu button."""
+        # Position menu below the button
+        button_pos = self.menu_btn.mapToGlobal(self.menu_btn.rect().bottomLeft())
+        self.options_menu.exec(button_pos)
+    
+    def _copy_as_curl(self):
+        """Copy the current request as a cURL command to clipboard."""
+        try:
+            # Get current request data
+            method = self.method_combo.currentText()
+            url = self.url_input.text().strip()
+            
+            if not url:
+                QMessageBox.warning(self, "Warning", "Please enter a URL first!")
+                return
+            
+            # Get request details
+            params = self._get_table_as_dict(self.params_table)
+            headers = self._get_table_as_dict(self.headers_table)
+            body = self.body_input.toPlainText()
+            auth_type = self.auth_type_combo.currentText()
+            
+            # Get auth token (Bearer or OAuth)
+            auth_token = None
+            if auth_type == 'Bearer Token':
+                auth_token = self.auth_token_input.text()
+            elif auth_type == 'OAuth 2.0' and self.current_oauth_token:
+                auth_token = self.current_oauth_token.get('access_token')
+                auth_type = 'Bearer Token'  # For code generation
+            
+            # Import CodeGenerator
+            from src.features.code_generator import CodeGenerator
+            
+            # Generate cURL command
+            curl_command = CodeGenerator.generate_curl(
+                method=method,
+                url=url,
+                params=params if params else None,
+                headers=headers if headers else None,
+                body=body if body else None,
+                auth_type=auth_type,
+                auth_token=auth_token
+            )
+            
+            # Copy to clipboard
+            from PyQt6.QtGui import QClipboard
+            clipboard = QApplication.clipboard()
+            clipboard.setText(curl_command)
+            
+            # Show success toast
+            self.toast_manager.show_toast("✅ Copied to clipboard", "cURL command copied successfully!")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to copy as cURL: {str(e)}")
     
     def _generate_code(self):
         """Generate code snippet for the current request."""

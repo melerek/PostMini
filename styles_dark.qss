@@ -312,32 +312,39 @@ QTreeWidget::branch {
     background: transparent;
 }
 
-/* ==================== TABS - HIGH DENSITY, CLEAR ACTIVE STATE ==================== */
+/* ==================== TABS - CURSOR STYLE ==================== */
 QTabWidget::pane {
-    border: 1px solid #2D2D2D;  /* Subtle border */
+    border: 1px solid #2D2D2D;
     border-top: none;
     background-color: #1E1E1E;
 }
 
+QTabBar {
+    background-color: #252526;  /* Cursor dark tab bar background */
+}
+
 QTabBar::tab {
     background-color: transparent;
-    color: #9E9E9E;  /* Secondary text for inactive */
+    color: #969696;  /* Muted text for inactive */
     border: none;
+    border-right: 1px solid #3F3F3F;  /* Gray separator */
     border-bottom: 2px solid transparent;
-    padding: 6px 12px;  /* 4-point grid */
-    margin: 0px 2px;  /* Minimal spacing */
+    padding: 8px 12px;
+    min-width: 40px;  /* Minimal width, adjust to content */
+    font-size: 13px;
+    margin: 0px;
 }
 
 QTabBar::tab:hover {
-    background-color: #2A2A2A;  /* Global hover */
-    color: #E0E0E0;
+    background-color: transparent;  /* No background change on hover */
+    color: #CCCCCC;
 }
 
 QTabBar::tab:selected {
-    background-color: #252525;  /* Subtle active */
-    color: #E0E0E0;  /* Primary text for active */
-    border-bottom: 2px solid #3A79D0;  /* CLEAR active indicator with primary color */
-    font-weight: 500;
+    background-color: #1E1E1E;  /* Match content area */
+    color: #FFFFFF;
+    border-bottom: 2px solid #007ACC;  /* Cursor blue accent */
+    font-weight: 400;  /* Regular weight like Cursor */
 }
 
 /* ==================== SPLITTER ==================== */
@@ -494,15 +501,19 @@ QStatusBar QLabel {
 
 /* ==================== SPECIAL COMPONENTS ==================== */
 
-/* Request Tabs - Fixed Height */
+/* Request Tabs - Cursor Style */
+QTabWidget#requestTabs {
+    background-color: #252526;
+}
+
 QTabWidget#requestTabs QTabBar {
-    background-color: #252525;
+    background-color: #252526;
 }
 
 QTabWidget#requestTabs QTabBar::tab {
-    min-width: 120px;
-    max-width: 200px;
-    padding: 4px 8px;  /* 4-point grid */
+    padding: 8px 28px 8px 12px;  /* Right padding for close button */
+    min-width: 60px;
+    max-width: 300px;  /* Allow wider tabs if needed */
 }
 
 /* Method Combo */

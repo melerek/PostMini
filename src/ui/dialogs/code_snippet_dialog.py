@@ -129,16 +129,16 @@ class CodeSnippetDialog(QDialog):
         close_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
-                color: #212121;
+                color: #E0E0E0;
                 border: 1px solid #444444;
                 border-radius: 4px;
                 padding: 8px 16px;
             }
             QPushButton:hover {
-                background-color: rgba(0, 0, 0, 0.05);
+                background-color: rgba(255, 255, 255, 0.05);
             }
             QPushButton:pressed {
-                background-color: rgba(0, 0, 0, 0.1);
+                background-color: rgba(255, 255, 255, 0.1);
             }
         """)
         button_layout.addWidget(close_btn)

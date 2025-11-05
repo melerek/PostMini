@@ -346,12 +346,19 @@ class VariableInspectorPanel(QWidget):
             var_name = data['name']
             scope = data['scope']
             
-            # Determine syntax based on scope
-            if scope == 'extracted':
-                syntax = f"{{{{extracted.{var_name}}}}}"
+            # Determine syntax based on scope with new prefix system
+            if scope == 'environment':
+                syntax = f"{{{{env.{var_name}}}}}"
+            elif scope == 'collection':
+                syntax = f"{{{{col.{var_name}}}}}"
+            elif scope == 'extracted':
+                syntax = f"{{{{ext.{var_name}}}}}"
             elif scope == 'dynamic':
-                syntax = var_name  # Dynamic vars already have $
+                # Dynamic vars: remove $ prefix from name if present, then add in {{$xxx}} format
+                clean_name = var_name.lstrip('$')
+                syntax = f"{{{{${clean_name}}}}}"
             else:
+                # Fallback for unknown scopes
                 syntax = f"{{{{{var_name}}}}}"
             
             # Copy to clipboard

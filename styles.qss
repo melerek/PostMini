@@ -265,7 +265,7 @@ QTreeWidget::branch:has-children:open {
     image: url(assets/icons/arrow-down-light.svg);
 }
 
-/* ==================== TAB WIDGET - HIGH DENSITY ==================== */
+/* ==================== TAB WIDGET - CURSOR STYLE ==================== */
 QTabWidget::pane {
     border: 1px solid #E0E0E0;
     border-top: none;
@@ -273,41 +273,57 @@ QTabWidget::pane {
     background-color: #FFFFFF;
 }
 
+QTabBar {
+    background-color: #F5F5F5;
+}
+
 QTabBar::tab {
-    background-color: #FAFAFA;
-    color: #9E9E9E;  /* Secondary text for inactive */
+    background-color: transparent;
+    color: #616161;  /* Muted text for inactive */
     border: none;
-    border-right: 1px solid #E0E0E0;
-    padding: 6px 12px;
-    min-width: 80px;
-    font-size: 12px;
+    border-right: 1px solid #D0D0D0;  /* Gray separator */
+    padding: 8px 12px;
+    min-width: 40px;  /* Minimal width, adjust to content */
+    font-size: 13px;
+    margin: 0px;
 }
 
 QTabBar::tab:hover {
-    background-color: #F0F0F0;
+    background-color: transparent;  /* No background change on hover */
     color: #212121;
 }
 
 QTabBar::tab:selected {
     background-color: #FFFFFF;
-    color: #212121;  /* Primary text for active */
-    border-bottom: 2px solid #3a79d0;  /* CLEAR active indicator */
-    font-weight: 500;  /* Semi-bold for active tabs */
+    color: #212121;
+    border-bottom: 2px solid #007ACC;  /* Cursor blue accent */
+    font-weight: 400;  /* Regular weight like Cursor */
 }
 
 QTabBar::tab:!selected {
     margin-top: 0px;
 }
 
-/* Request Tabs */
+/* Request Tabs - Cursor Style */
+QTabWidget#requestTabs {
+    background-color: #F5F5F5;
+}
+
+QTabWidget#requestTabs QTabBar {
+    background-color: #F5F5F5;
+}
+
 QTabWidget#requestTabs QTabBar::tab {
-    padding: 6px 32px 6px 12px;
+    padding: 8px 28px 8px 12px;  /* Right padding for close button */
+    min-width: 60px;
+    max-width: 300px;  /* Allow wider tabs if needed */
 }
 
 QTabWidget#requestTabs QTabBar::close-button {
     image: url(assets/icons/close-tab-light-grey.svg);
     subcontrol-position: right;
     subcontrol-origin: padding;
+    margin-right: 4px;
 }
 
 QTabWidget#requestTabs QTabBar::close-button:hover {

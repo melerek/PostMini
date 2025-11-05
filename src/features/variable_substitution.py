@@ -1,11 +1,14 @@
 """
 Variable Substitution Utility
 
-This module provides utilities for substituting environment variables in strings.
-Variables are defined using {{variableName}} syntax and can be used in URLs,
-headers, parameters, body, and authentication tokens.
+This module provides utilities for substituting variables in strings.
+Variables use prefixed syntax to differentiate scopes:
+- {{env.variable}} - Environment variables
+- {{col.variable}} - Collection variables
+- {{ext.variable}} - Extracted variables (from responses)
+- {{$variable}} - Dynamic variables (auto-generated)
 
-Dynamic variables with $variable syntax are also supported for auto-generated values.
+For backward compatibility, {{variable}} without prefix will check all scopes.
 """
 
 import re
@@ -16,89 +19,124 @@ from .dynamic_variables import resolve_dynamic_variable
 class VariableSubstitution:
     """
     Handles variable substitution with support for:
-    - {{variable}} - Environment variables
-    - {{extracted.variable}} - Extracted variables (from responses)
-    - $variable - Dynamic variables (auto-generated)
+    - {{env.variable}} - Environment variables (explicit)
+    - {{col.variable}} - Collection variables (explicit)
+    - {{ext.variable}} - Extracted variables (explicit)
+    - {{$variable}} - Dynamic variables (explicit)
+    - {{variable}} - Any scope (backward compatibility - checks all scopes)
     """
     
-    # Regex pattern to match {{variableName}} or {{extracted.variableName}}
-    VARIABLE_PATTERN = re.compile(r'\{\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?)\}\}')
+    # Regex pattern to match {{prefix.variableName}} or {{variableName}} or {{$variableName}}
+    VARIABLE_PATTERN = re.compile(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
     
-    # Regex pattern to match $variableName
-    DYNAMIC_VARIABLE_PATTERN = re.compile(r'\$([a-zA-Z][a-zA-Z0-9]*)')
+    # Legacy pattern for backward compatibility (kept for reference but handled by main pattern)
+    LEGACY_VARIABLE_PATTERN = re.compile(r'\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
     
     @staticmethod
-    def substitute(text: str, variables: Dict[str, str], extracted_variables: Dict[str, str] = None) -> Tuple[str, List[str]]:
+    def substitute(text: str, env_variables: Dict[str, str] = None, 
+                   collection_variables: Dict[str, str] = None,
+                   extracted_variables: Dict[str, str] = None) -> Tuple[str, List[str]]:
         """
-        Replace all {{variable}}, {{extracted.variable}}, and $variable occurrences in text with their values.
+        Replace all variable occurrences in text with their values using new prefix syntax.
         
-        Dynamic variables ($variable) are processed first, then environment variables ({{variable}}).
-        Extracted variables use {{extracted.variableName}} syntax.
+        Supported syntax:
+        - {{env.variable}} - Environment variables (explicit)
+        - {{col.variable}} - Collection variables (explicit)
+        - {{ext.variable}} - Extracted variables (explicit)
+        - {{$variable}} - Dynamic variables (explicit)
+        - {{variable}} - Any scope (checks all in priority: extracted > collection > environment)
         
         Args:
             text: The text containing variables to substitute
-            variables: Dictionary of variable names to values (for {{var}} syntax)
+            env_variables: Dictionary of environment variable names to values
+            collection_variables: Dictionary of collection variable names to values
             extracted_variables: Dictionary of extracted variable names to values
             
         Returns:
             Tuple of (substituted_text, list_of_unresolved_variables)
             
         Example:
-            >>> variables = {'baseUrl': 'https://api.example.com', 'version': 'v1'}
-            >>> extracted = {'authToken': 'abc123'}
-            >>> substitute('{{baseUrl}}/{{version}}/users?token={{extracted.authToken}}', variables, extracted)
+            >>> env_vars = {'baseUrl': 'https://api.example.com'}
+            >>> col_vars = {'version': 'v1'}
+            >>> ext_vars = {'authToken': 'abc123'}
+            >>> substitute('{{env.baseUrl}}/{{col.version}}/users?token={{ext.authToken}}', env_vars, col_vars, ext_vars)
             ('https://api.example.com/v1/users?token=abc123', [])
         """
         if not text:
             return text, []
         
+        if env_variables is None:
+            env_variables = {}
+        if collection_variables is None:
+            collection_variables = {}
         if extracted_variables is None:
             extracted_variables = {}
         
         unresolved = []
         
-        # First pass: substitute dynamic variables ($variable)
-        def replace_dynamic(match):
-            var_name = f'${match.group(1)}'
-            resolved = resolve_dynamic_variable(var_name)
-            # If not resolved (same as input), it's unresolved
-            if resolved == var_name:
-                unresolved.append(var_name)
-            return resolved
-        
-        result = VariableSubstitution.DYNAMIC_VARIABLE_PATTERN.sub(replace_dynamic, text)
-        
-        # Second pass: substitute environment and extracted variables ({{variable}} or {{extracted.variable}})
-        def replace_env(match):
-            var_path = match.group(1)
+        # Substitute all variables with new syntax
+        def replace_variable(match):
+            prefix = match.group(1)  # env, col, ext, $ or None
+            var_name = match.group(2)  # The variable name
             
-            # Check if it's an extracted variable
-            if var_path.startswith('extracted.'):
-                var_name = var_path.split('.', 1)[1]
+            # Handle dynamic variables with {{$variable}} syntax
+            if prefix == '$':
+                resolved = resolve_dynamic_variable(f'${var_name}')
+                # If not resolved (same as input), it's unresolved
+                if resolved == f'${var_name}':
+                    unresolved.append(f'{{{{${var_name}}}}}')
+                return resolved
+            
+            # Handle explicit environment variables {{env.variable}}
+            elif prefix == 'env':
+                if var_name in env_variables:
+                    return str(env_variables[var_name])
+                else:
+                    unresolved.append(f'{{{{env.{var_name}}}}}')
+                    return match.group(0)  # Keep original if not found
+            
+            # Handle explicit collection variables {{col.variable}}
+            elif prefix == 'col':
+                if var_name in collection_variables:
+                    return str(collection_variables[var_name])
+                else:
+                    unresolved.append(f'{{{{col.{var_name}}}}}')
+                    return match.group(0)  # Keep original if not found
+            
+            # Handle explicit extracted variables {{ext.variable}}
+            elif prefix == 'ext':
                 if var_name in extracted_variables:
                     return str(extracted_variables[var_name])
                 else:
-                    unresolved.append(f"extracted.{var_name}")
+                    unresolved.append(f'{{{{ext.{var_name}}}}}')
                     return match.group(0)  # Keep original if not found
+            
+            # No prefix - backward compatibility: check all scopes (priority: extracted > collection > environment)
             else:
-                # Regular environment variable
-                if var_path in variables:
-                    return str(variables[var_path])
+                if var_name in extracted_variables:
+                    return str(extracted_variables[var_name])
+                elif var_name in collection_variables:
+                    return str(collection_variables[var_name])
+                elif var_name in env_variables:
+                    return str(env_variables[var_name])
                 else:
-                    unresolved.append(var_path)
+                    unresolved.append(f'{{{{{var_name}}}}}')
                     return match.group(0)  # Keep original {{var}} if not found
         
-        result = VariableSubstitution.VARIABLE_PATTERN.sub(replace_env, result)
+        result = VariableSubstitution.VARIABLE_PATTERN.sub(replace_variable, text)
         return result, unresolved
     
     @staticmethod
-    def substitute_dict(data: Dict, variables: Dict[str, str], extracted_variables: Dict[str, str] = None) -> Tuple[Dict, List[str]]:
+    def substitute_dict(data: Dict, env_variables: Dict[str, str] = None,
+                       collection_variables: Dict[str, str] = None,
+                       extracted_variables: Dict[str, str] = None) -> Tuple[Dict, List[str]]:
         """
         Substitute variables in all values of a dictionary.
         
         Args:
             data: Dictionary with values that may contain variables
-            variables: Dictionary of variable names to values
+            env_variables: Dictionary of environment variable names to values
+            collection_variables: Dictionary of collection variable names to values
             extracted_variables: Dictionary of extracted variable names to values
             
         Returns:
@@ -112,8 +150,12 @@ class VariableSubstitution:
         
         for key, value in data.items():
             # Substitute in both key and value
-            new_key, unresolved_key = VariableSubstitution.substitute(str(key), variables, extracted_variables)
-            new_value, unresolved_value = VariableSubstitution.substitute(str(value), variables, extracted_variables)
+            new_key, unresolved_key = VariableSubstitution.substitute(
+                str(key), env_variables, collection_variables, extracted_variables
+            )
+            new_value, unresolved_value = VariableSubstitution.substitute(
+                str(value), env_variables, collection_variables, extracted_variables
+            )
             
             result[new_key] = new_value
             all_unresolved.extend(unresolved_key)
@@ -207,10 +249,11 @@ class EnvironmentManager:
     Manager for handling active environment and variable resolution.
     """
     
-    def __init__(self):
+    def __init__(self, db=None):
         self.active_environment = None
         self.active_variables = {}
         self.extracted_variables = {}  # For extracted variables from responses
+        self.db = db  # Database manager for persisting environment variable changes
     
     def set_extracted_variables(self, extracted_vars: Dict[str, str]):
         """
@@ -254,10 +297,39 @@ class EnvironmentManager:
         """Get the active environment variables."""
         return self.active_variables.copy()
     
-    def substitute_in_request(self, url: str, params: Dict, headers: Dict, 
-                            body: str, auth_token: str, extra_variables: Dict = None) -> Tuple[Dict, List[str]]:
+    def set_variable(self, key: str, value: str):
         """
-        Substitute variables in all request components.
+        Set an environment variable (updates both in-memory and database).
+        
+        Args:
+            key: Variable name
+            value: Variable value
+        """
+        if not self.has_active_environment():
+            return
+        
+        # Update in-memory
+        self.active_variables[key] = value
+        
+        # Update in database if we have a db reference
+        if self.db and self.active_environment:
+            env_id = self.active_environment.get('id')
+            if env_id:
+                # Get current environment from database
+                env = self.db.get_environment(env_id)
+                if env:
+                    # Update the variables dict
+                    variables = env.get('variables', {})
+                    variables[key] = value
+                    # Save back to database
+                    self.db.update_environment(env_id, env['name'], variables)
+                    # Update our cached environment data
+                    self.active_environment['variables'] = variables
+    
+    def substitute_in_request(self, url: str, params: Dict, headers: Dict, 
+                            body: str, auth_token: str, collection_variables: Dict = None) -> Tuple[Dict, List[str]]:
+        """
+        Substitute variables in all request components using new prefix syntax.
         
         Args:
             url: Request URL
@@ -265,7 +337,7 @@ class EnvironmentManager:
             headers: Request headers
             body: Request body
             auth_token: Authentication token
-            extra_variables: Additional variables to merge (e.g., collection variables)
+            collection_variables: Collection variables (separate from environment)
             
         Returns:
             Tuple of (substituted_data_dict, unresolved_variables_list)
@@ -277,36 +349,38 @@ class EnvironmentManager:
             - body: Substituted body
             - auth_token: Substituted auth token
         """
-        # Merge active variables with extra variables (extra takes precedence)
-        variables = self.active_variables.copy()
-        if extra_variables:
-            variables.update(extra_variables)
+        if collection_variables is None:
+            collection_variables = {}
         
         all_unresolved = []
         
         # Substitute URL
-        new_url, unresolved = VariableSubstitution.substitute(url, variables, self.extracted_variables)
+        new_url, unresolved = VariableSubstitution.substitute(
+            url, self.active_variables, collection_variables, self.extracted_variables
+        )
         all_unresolved.extend(unresolved)
         
         # Substitute params
         new_params, unresolved = VariableSubstitution.substitute_dict(
-            params, variables, self.extracted_variables
+            params, self.active_variables, collection_variables, self.extracted_variables
         ) if params else ({}, [])
         all_unresolved.extend(unresolved)
         
         # Substitute headers
         new_headers, unresolved = VariableSubstitution.substitute_dict(
-            headers, variables, self.extracted_variables
+            headers, self.active_variables, collection_variables, self.extracted_variables
         ) if headers else ({}, [])
         all_unresolved.extend(unresolved)
         
         # Substitute body
-        new_body, unresolved = VariableSubstitution.substitute(body, variables, self.extracted_variables) if body else ('', [])
+        new_body, unresolved = VariableSubstitution.substitute(
+            body, self.active_variables, collection_variables, self.extracted_variables
+        ) if body else ('', [])
         all_unresolved.extend(unresolved)
         
         # Substitute auth token
         new_auth_token, unresolved = VariableSubstitution.substitute(
-            auth_token, variables, self.extracted_variables
+            auth_token, self.active_variables, collection_variables, self.extracted_variables
         ) if auth_token else ('', [])
         all_unresolved.extend(unresolved)
         

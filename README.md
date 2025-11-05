@@ -1,12 +1,12 @@
 # PostMini - Desktop API Client
 
-**Version 1.8.1** | Professional API Testing Tool | MIT License
+**Version 1.8.2** | Professional API Testing Tool | MIT License
 
 A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, **request chaining**, **variable extraction**, OAuth 2.0, API testing with advanced reporting, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.8.1-brightgreen)
+![Version](https://img.shields.io/badge/version-1.8.2-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Tests](https://img.shields.io/badge/tests-365%2B%20passing-success)
 
@@ -38,7 +38,13 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 
 ## Features
 
-### ✨ What's New in V1.8.1
+### ✨ What's New in V1.8.2
+- **🎨 UI Refinements**: Improved button layout and visual clarity
+  - Fixed Send/Save button spacing for better visual separation
+  - Added border to Save button right edge for clearer button boundaries
+  - Enhanced button group visual consistency
+  
+### Previous Updates (V1.8.1)
 - **🎨 Fixed Scripts Tab Dark Theme**: Code editors now properly match the dark theme
   - Script editor backgrounds now use correct dark colors (#252526)
   - Text colors match application primary text (#E0E0E0)

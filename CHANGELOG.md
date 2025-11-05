@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.2] - 2025-11-05
+
+### 🎨 UI Improvements
+
+#### Button Layout Refinements
+- **Fixed Send/Save button spacing** for better visual separation
+  - Restored 12px spacing between Send button and Save button group
+  - Improved visual clarity and button group organization
+- **Added border to Save button right edge**
+  - Save button now has complete border on all sides
+  - Better visual separation between Save and dropdown menu buttons
+  - Enhanced button group definition
+
+#### Technical Changes
+- Modified `src/ui/main_window.py` - Updated button layout spacing and styling
+  - Added explicit spacing after Send button
+  - Removed `border-right: none` from Save button stylesheet
+  - Improved button group visual consistency
+
+---
+
 ## [1.8.1] - 2025-11-05
 
 ### 🐛 Bug Fixes

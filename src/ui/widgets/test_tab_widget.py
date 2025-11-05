@@ -14,6 +14,7 @@ from PyQt6.QtGui import QFont, QAction
 from typing import List, Dict, Optional
 
 from src.features.test_engine import TestAssertion
+from src.ui.widgets.variable_highlight_delegate import HighlightedLineEdit
 
 
 class TestTabWidget(QWidget):
@@ -24,7 +25,16 @@ class TestTabWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_request_id = None
+        self.environment_manager = None  # Will be set from main window
         self._init_ui()
+    
+    def set_environment_manager(self, env_manager):
+        """Set the environment manager for variable resolution in input fields."""
+        self.environment_manager = env_manager
+        if hasattr(self, 'field_input'):
+            self.field_input.set_environment_manager(env_manager)
+        if hasattr(self, 'value_input'):
+            self.value_input.set_environment_manager(env_manager)
     
     def _init_ui(self):
         """Initialize the user interface."""
@@ -74,7 +84,7 @@ class TestTabWidget(QWidget):
         # Field (conditional)
         self.field_label = QLabel("Field:")
         form_layout.addWidget(self.field_label)
-        self.field_input = QLineEdit()
+        self.field_input = HighlightedLineEdit()
         self.field_input.setPlaceholderText("e.g., Content-Type")
         self.field_input.setMinimumWidth(100)
         form_layout.addWidget(self.field_input)
@@ -87,7 +97,7 @@ class TestTabWidget(QWidget):
         
         # Expected
         form_layout.addWidget(QLabel("Expected:"))
-        self.value_input = QLineEdit()
+        self.value_input = HighlightedLineEdit()
         self.value_input.setPlaceholderText("Value")
         self.value_input.setMinimumWidth(80)
         form_layout.addWidget(self.value_input, 1)  # Stretch

@@ -36,7 +36,7 @@ class VariableExtractionWidget(QWidget):
         
         # Compact header with instructions (hidden initially)
         self.header = QLabel("💡 Click any value in the response below to extract it as a variable")
-        self.header.setStyleSheet("padding: 6px 8px; background: #E3F2FD; border-radius: 4px; color: #1976D2; font-size: 12px;")
+        self.header.setStyleSheet("padding: 6px 8px; background: #37474F; border-radius: 4px; color: #81D4FA; font-size: 12px; margin-top: 8px; margin-bottom: 8px;")
         self.header.hide()  # Hidden until we have JSON data
         layout.addWidget(self.header)
         
