@@ -16,7 +16,7 @@ from datetime import datetime
 class RecentRequestItem(QWidget):
     """Custom widget for recent request list items."""
     
-    double_clicked = pyqtSignal(int)  # request_id - only emit on double click
+    clicked = pyqtSignal(int)  # request_id - emit on single click
     pin_toggled = pyqtSignal(int, bool)  # request_id, is_pinned
     
     def __init__(self, request_id: int, name: str, method: str, url: str, is_pinned: bool = False):
@@ -80,13 +80,13 @@ class RecentRequestItem(QWidget):
         self.pin_btn.setText("📌" if self.is_pinned else "📍")
         self.pin_toggled.emit(self.request_id, self.is_pinned)
     
-    def mouseDoubleClickEvent(self, event):
-        """Handle double click to open request."""
+    def mousePressEvent(self, event):
+        """Handle single click to open request."""
         if event.button() == Qt.MouseButton.LeftButton:
             # Don't emit if clicking the pin button
             if not self.pin_btn.geometry().contains(event.pos()):
-                self.double_clicked.emit(self.request_id)
-        super().mouseDoubleClickEvent(event)
+                self.clicked.emit(self.request_id)
+        super().mousePressEvent(event)
 
 
 class RecentRequestsWidget(QWidget):
@@ -218,7 +218,7 @@ class RecentRequestsWidget(QWidget):
                 request['url'],
                 bool(is_pinned)
             )
-            item_widget.double_clicked.connect(self.request_selected.emit)  # Changed from clicked to double_clicked
+            item_widget.clicked.connect(self.request_selected.emit)  # Single click to open
             item_widget.pin_toggled.connect(self._toggle_pin)
             
             # Add to list

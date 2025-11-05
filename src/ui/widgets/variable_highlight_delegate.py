@@ -4,8 +4,8 @@ Variable Highlight Delegate
 Custom delegate and syntax highlighter for highlighting variables in the format {{variableName}}.
 """
 
-from PyQt6.QtWidgets import QStyledItemDelegate, QLineEdit, QStyle, QToolTip
-from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QPainter, QFont, QPalette
+from PyQt6.QtWidgets import QStyledItemDelegate, QLineEdit, QStyle, QToolTip, QTextEdit
+from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QPainter, QFont, QPalette, QTextCursor
 from PyQt6.QtCore import Qt, QRegularExpression, pyqtSignal, QRect, QPoint
 import re
 
@@ -53,6 +53,12 @@ class HighlightedLineEdit(QLineEdit):
     
     def _is_variable_defined(self, var_name):
         """Check if a variable is defined in the environment manager."""
+        # Check for dynamic variables first (they always exist)
+        if var_name.startswith('$'):
+            from src.features.dynamic_variables import DynamicVariables
+            dynamic_vars = DynamicVariables()
+            return var_name in dynamic_vars.get_all_variables()
+        
         if not self.environment_manager:
             return False
         
@@ -65,10 +71,13 @@ class HighlightedLineEdit(QLineEdit):
             if hasattr(self.environment_manager, 'collection_variables'):
                 all_vars.update(self.environment_manager.collection_variables)
             
-            # Check extracted variables
+            # Check extracted variables (including extracted.xxx format)
             if hasattr(self.environment_manager, 'extracted_variables'):
-                for ev in self.environment_manager.extracted_variables:
-                    all_vars[ev['name']] = ev['value']
+                # extracted_variables is a dict, not a list
+                all_vars.update(self.environment_manager.extracted_variables)
+                # Also support extracted.varname format
+                for name, value in self.environment_manager.extracted_variables.items():
+                    all_vars[f"extracted.{name}"] = value
         except:
             return False
         
@@ -121,15 +130,16 @@ class HighlightedLineEdit(QLineEdit):
             if cursor_pixel_pos > visible_width - 20:  # Keep cursor visible with 20px margin
                 scroll_offset = cursor_pixel_pos - (visible_width - 20)
         
-        # Find all variables
-        pattern = re.compile(r'\{\{([^}]+)\}\}')
+        # Find all variables (both {{var}} and $var)
+        pattern = re.compile(r'\{\{([^}]+)\}\}|(\$[a-zA-Z][a-zA-Z0-9]*)')
         self._variable_regions = []  # Clear previous regions
         
         for match in pattern.finditer(text):
             start_pos = match.start()
             end_pos = match.end()
             var_text = match.group(0)
-            var_name = match.group(1)  # Variable name without braces
+            # Extract variable name (group 1 is {{var}}, group 2 is $var)
+            var_name = match.group(1) if match.group(1) else match.group(2)
             
             # Calculate pixel position from start of text
             text_before = text[:start_pos]
@@ -187,6 +197,17 @@ class HighlightedLineEdit(QLineEdit):
             if region_rect.contains(pos):
                 # Get variable value
                 if self.environment_manager:
+                    # Check for dynamic variables first
+                    if var_name.startswith('$'):
+                        from src.features.dynamic_variables import DynamicVariables
+                        dynamic_vars = DynamicVariables()
+                        if var_name in dynamic_vars.get_all_variables():
+                            value = f"🎲 Dynamic: {var_name} (auto-generated at request time)"
+                            tooltip_text = f"<b>{var_name}</b><br/><span style='color: #4CAF50;'>{value}</span>"
+                            QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
+                            tooltip_shown = True
+                            break
+                    
                     # Get all active variables
                     all_vars = self.environment_manager.get_active_variables()
                     
@@ -194,14 +215,103 @@ class HighlightedLineEdit(QLineEdit):
                     if hasattr(self.environment_manager, 'collection_variables'):
                         all_vars.update(self.environment_manager.collection_variables)
                     
-                    # Get extracted variables
+                    # Get extracted variables (including extracted.xxx format)
                     if hasattr(self.environment_manager, 'extracted_variables'):
-                        for ev in self.environment_manager.extracted_variables:
-                            all_vars[ev['name']] = ev['value']
+                        # extracted_variables is a dict, not a list
+                        all_vars.update(self.environment_manager.extracted_variables)
+                        # Also support extracted.varname format
+                        for name, value_str in self.environment_manager.extracted_variables.items():
+                            all_vars[f"extracted.{name}"] = value_str
                     
                     # Get value
                     value = all_vars.get(var_name, "❌ Undefined")
                     
+                    # Show tooltip
+                    tooltip_text = f"<b>{var_name}</b><br/><span style='color: #4CAF50;'>{value}</span>"
+                    QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
+                    tooltip_shown = True
+                    break
+        
+        if not tooltip_shown:
+            QToolTip.hideText()
+
+
+class HighlightedTextEdit(QTextEdit):
+    """QTextEdit with variable hover tooltips."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.environment_manager = None
+        self.setMouseTracking(True)
+    
+    def set_environment_manager(self, env_manager):
+        """Set the environment manager for variable resolution."""
+        self.environment_manager = env_manager
+    
+    def _get_variable_value(self, var_name):
+        """Get the value of a variable."""
+        # Check for dynamic variables
+        if var_name.startswith('$'):
+            from src.features.dynamic_variables import DynamicVariables
+            dynamic_vars = DynamicVariables()
+            if var_name in dynamic_vars.get_all_variables():
+                return f"🎲 Dynamic: {var_name} (auto-generated at request time)"
+        
+        if not self.environment_manager:
+            return None
+        
+        # Get all active variables
+        all_vars = {}
+        try:
+            all_vars = self.environment_manager.get_active_variables()
+            
+            # Also check collection variables if available
+            if hasattr(self.environment_manager, 'collection_variables'):
+                all_vars.update(self.environment_manager.collection_variables)
+            
+            # Check extracted variables
+            if hasattr(self.environment_manager, 'extracted_variables'):
+                # extracted_variables is a dict, not a list
+                all_vars.update(self.environment_manager.extracted_variables)
+                # Also support extracted.varname format
+                for name, value in self.environment_manager.extracted_variables.items():
+                    all_vars[f"extracted.{name}"] = value
+        except:
+            pass
+        
+        return all_vars.get(var_name, "❌ Undefined")
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move to show tooltips for variables."""
+        super().mouseMoveEvent(event)
+        
+        # Get the cursor position under the mouse
+        cursor = self.cursorForPosition(event.pos())
+        
+        # Get the text of the current block (line)
+        cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+        text = cursor.selectedText()
+        
+        # Find all variables in the text (both {{var}} and $var formats)
+        pattern = re.compile(r'\{\{([^}]+)\}\}|(\$[a-zA-Z][a-zA-Z0-9]*)')
+        
+        # Get the position in the block
+        position_in_block = self.cursorForPosition(event.pos()).positionInBlock()
+        
+        tooltip_shown = False
+        for match in pattern.finditer(text):
+            start = match.start()
+            end = match.end()
+            
+            # Check if mouse is over this variable
+            if start <= position_in_block <= end:
+                # Extract variable name (group 1 is {{var}}, group 2 is $var)
+                var_name = match.group(1) if match.group(1) else match.group(2)
+                
+                # Get variable value
+                value = self._get_variable_value(var_name)
+                
+                if value:
                     # Show tooltip
                     tooltip_text = f"<b>{var_name}</b><br/><span style='color: #4CAF50;'>{value}</span>"
                     QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
@@ -218,37 +328,101 @@ class VariableSyntaxHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None, theme='dark'):
         super().__init__(parent)
         self.theme = theme
-        self._setup_format()
+        self.environment_manager = None  # Will be set from main window
+        self._setup_formats()
     
-    def _setup_format(self):
-        """Setup the format for variable highlighting."""
-        self.variable_format = QTextCharFormat()
+    def _setup_formats(self):
+        """Setup the formats for variable highlighting."""
+        # Format for defined variables (green)
+        self.defined_format = QTextCharFormat()
+        # Format for undefined variables (red)
+        self.undefined_format = QTextCharFormat()
         
         # Color based on theme
         if self.theme == 'dark':
-            # Soft purple/blue color for dark theme
-            self.variable_format.setForeground(QColor("#BB86FC"))  # Material purple
+            # Green for defined variables
+            self.defined_format.setForeground(QColor("#4CAF50"))
+            # Red for undefined variables
+            self.undefined_format.setForeground(QColor("#F44336"))
         else:
-            # Darker purple for light theme
-            self.variable_format.setForeground(QColor("#6200EA"))  # Material deep purple
+            # Dark green for defined variables (light theme)
+            self.defined_format.setForeground(QColor("#2E7D32"))
+            # Dark red for undefined variables (light theme)
+            self.undefined_format.setForeground(QColor("#D32F2F"))
         
-        # Make it slightly bold for emphasis
-        self.variable_format.setFontWeight(QFont.Weight.Medium)
+        # Make both slightly bold for emphasis
+        self.defined_format.setFontWeight(QFont.Weight.Medium)
+        self.undefined_format.setFontWeight(QFont.Weight.Medium)
+    
+    def set_environment_manager(self, env_manager):
+        """Set the environment manager for variable resolution."""
+        self.environment_manager = env_manager
+        self.rehighlight()
+    
+    def _is_variable_defined(self, var_name):
+        """Check if a variable is defined in the current environment."""
+        # Check for dynamic variables first (they always exist)
+        if var_name.startswith('$'):
+            from src.features.dynamic_variables import DynamicVariables
+            dynamic_vars = DynamicVariables()
+            return var_name in dynamic_vars.get_all_variables()
+        
+        if not self.environment_manager:
+            return False
+        
+        # Get all active variables
+        all_vars = self.environment_manager.get_active_variables()
+        
+        # Also get collection variables if available
+        if hasattr(self.environment_manager, 'collection_variables'):
+            all_vars.update(self.environment_manager.collection_variables)
+        
+        # Get extracted variables (including extracted.xxx format)
+        if hasattr(self.environment_manager, 'extracted_variables'):
+            # extracted_variables is a dict, not a list
+            all_vars.update(self.environment_manager.extracted_variables)
+            # Also support extracted.varname format
+            for name, value in self.environment_manager.extracted_variables.items():
+                all_vars[f"extracted.{name}"] = value
+        
+        return var_name in all_vars
     
     def highlightBlock(self, text):
-        """Highlight {{variable}} patterns in the text."""
-        # Pattern to match {{anything}}
-        pattern = QRegularExpression(r'\{\{[^}]+\}\}')
+        """Highlight {{variable}} and $variable patterns in the text with status colors."""
+        from PyQt6.QtCore import QRegularExpression
         
-        iterator = pattern.globalMatch(text)
+        # Pattern to match {{anything}}
+        pattern_braces = QRegularExpression(r'\{\{([^}]+)\}\}')
+        iterator = pattern_braces.globalMatch(text)
         while iterator.hasNext():
             match = iterator.next()
-            self.setFormat(match.capturedStart(), match.capturedLength(), self.variable_format)
+            var_name = match.captured(1)  # Get variable name without braces
+            
+            # Check if variable is defined
+            is_defined = self._is_variable_defined(var_name)
+            
+            # Apply appropriate format
+            format_to_use = self.defined_format if is_defined else self.undefined_format
+            self.setFormat(match.capturedStart(), match.capturedLength(), format_to_use)
+        
+        # Pattern to match $dynamicVariable
+        pattern_dollar = QRegularExpression(r'\$[a-zA-Z][a-zA-Z0-9]*')
+        iterator = pattern_dollar.globalMatch(text)
+        while iterator.hasNext():
+            match = iterator.next()
+            var_name = match.captured(0)  # Get full $variable including $
+            
+            # Check if variable is defined (dynamic variables are always defined)
+            is_defined = self._is_variable_defined(var_name)
+            
+            # Apply appropriate format
+            format_to_use = self.defined_format if is_defined else self.undefined_format
+            self.setFormat(match.capturedStart(), match.capturedLength(), format_to_use)
     
     def set_theme(self, theme):
         """Update theme and reapply highlighting."""
         self.theme = theme
-        self._setup_format()
+        self._setup_formats()
         self.rehighlight()
 
 
@@ -399,10 +573,13 @@ class VariableHighlightDelegate(QStyledItemDelegate):
             if hasattr(self.environment_manager, 'collection_variables'):
                 all_vars.update(self.environment_manager.collection_variables)
             
-            # Check extracted variables
+            # Check extracted variables (including extracted.xxx format)
             if hasattr(self.environment_manager, 'extracted_variables'):
-                for ev in self.environment_manager.extracted_variables:
-                    all_vars[ev['name']] = ev['value']
+                # extracted_variables is a dict, not a list
+                all_vars.update(self.environment_manager.extracted_variables)
+                # Also support extracted.varname format
+                for name, value in self.environment_manager.extracted_variables.items():
+                    all_vars[f"extracted.{name}"] = value
         except:
             return False
         
@@ -450,10 +627,13 @@ class VariableHighlightDelegate(QStyledItemDelegate):
                             if hasattr(self.environment_manager, 'collection_variables'):
                                 all_vars.update(self.environment_manager.collection_variables)
                             
-                            # Get extracted variables
+                            # Get extracted variables (including extracted.xxx format)
                             if hasattr(self.environment_manager, 'extracted_variables'):
-                                for ev in self.environment_manager.extracted_variables:
-                                    all_vars[ev['name']] = ev['value']
+                                # extracted_variables is a dict, not a list
+                                all_vars.update(self.environment_manager.extracted_variables)
+                                # Also support extracted.varname format
+                                for name, value in self.environment_manager.extracted_variables.items():
+                                    all_vars[f"extracted.{name}"] = value
                             
                             # Get value
                             value = all_vars.get(var_name, "❌ Undefined")

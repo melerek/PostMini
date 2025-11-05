@@ -241,6 +241,8 @@ class ColoredTabBar(QTabBar):
         self.setDrawBase(False)  # Don't draw the base line
         self.setMouseTracking(True)  # Enable mouse tracking for hover effects
         self.hovered_tab = -1  # Track which tab is hovered
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
     
     def set_tab_data(self, index: int, method: str, name: str, has_changes: bool = False):
         """Store tab data for custom rendering."""
@@ -306,6 +308,39 @@ class ColoredTabBar(QTabBar):
             if button:
                 # Show close button only for hovered tab
                 button.setVisible(index == self.hovered_tab)
+    
+    def _show_context_menu(self, pos):
+        """Show context menu for tab operations."""
+        from PyQt6.QtWidgets import QMenu
+        from PyQt6.QtGui import QCursor
+        
+        # Get the tab index at the click position
+        tab_index = self.tabAt(pos)
+        if tab_index == -1:
+            return  # No tab at this position
+        
+        # Create context menu
+        menu = QMenu(self)
+        
+        # Add menu actions
+        close_others_action = menu.addAction("Close All But This")
+        close_all_action = menu.addAction("Close All")
+        
+        # Show menu and get selected action
+        action = menu.exec(QCursor.pos())
+        
+        # Handle the selected action
+        if action == close_others_action or action == close_all_action:
+            # Walk up the parent chain to find the MainWindow
+            main_window = self.parent()
+            while main_window and not isinstance(main_window, MainWindow):
+                main_window = main_window.parent()
+            
+            if main_window:
+                if action == close_others_action:
+                    main_window._close_all_tabs_except(tab_index)
+                elif action == close_all_action:
+                    main_window._close_all_tabs()
     
     def tabInserted(self, index: int):
         """Called when a tab is inserted - hide close button initially."""
@@ -485,6 +520,7 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self._load_collections()
         self._load_environments()
+        self._load_extracted_variables()  # Load extracted variables into env_manager
         self._init_git_sync()
         
         # Initialize method combo styling
@@ -739,6 +775,13 @@ class MainWindow(QMainWindow):
         
         self.variable_inspector_pane.variable_added.connect(self._on_variable_added)
         print(f"[DEBUG] variable_added connected")
+        
+        # Connect variable changes to update environments panel variable counts
+        self.variable_inspector_pane.variable_added.connect(self._update_environments_var_counts)
+        self.variable_inspector_pane.variable_edited.connect(lambda s, n, v: self._update_environments_var_counts())
+        self.variable_inspector_pane.variable_deleted.connect(lambda s, n: self._update_environments_var_counts())
+        print(f"[DEBUG] Variable inspector signals connected to environments panel updates")
+        
         print(f"[DEBUG] Variable inspector signals connected successfully")
         
         # ==================== LEFT PANE: Environments ====================
@@ -894,15 +937,40 @@ class MainWindow(QMainWindow):
         # Add center container to main splitter
         main_splitter.addWidget(center_container)
         
-        # ==================== RIGHT PANE: Recent Requests ====================
+        # ==================== RIGHT PANE: Recent Requests (OVERLAY) ====================
+        # Create the recent requests widget as an overlay on top of center_container
+        # instead of adding it to the splitter
         self.recent_requests_widget = RecentRequestsWidget(self.db)
         self.recent_requests_widget.request_selected.connect(self._load_request)
         self.recent_requests_widget.close_btn.clicked.connect(self._toggle_recent_requests)  # Connect close button
+        
+        # Set parent to center_container to make it an overlay
+        self.recent_requests_widget.setParent(center_container)
         self.recent_requests_widget.setVisible(False)  # Hidden by default
-        main_splitter.addWidget(self.recent_requests_widget)
+        
+        # Raise the widget to ensure it's on top
+        self.recent_requests_widget.raise_()
+        
+        # Apply styling for overlay appearance with shadow effect
+        self.recent_requests_widget.setStyleSheet("""
+            RecentRequestsWidget {
+                background: #1E1E1E;
+                border-left: 2px solid rgba(33, 150, 243, 0.3);
+                border-radius: 0px;
+            }
+        """)
+        
+        # Add a drop shadow effect for better visual separation
+        from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+        from PyQt6.QtGui import QColor
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 180))
+        shadow.setOffset(-3, 0)
+        self.recent_requests_widget.setGraphicsEffect(shadow)
         
         # Set splitter sizes for ALL widgets (including hidden ones)
-        # Splitter has 6 widgets: collections(0), settings(1), git(2), variables(3), center(4), recent(5)
+        # Splitter now has 6 widgets: collections(0), settings(1), git(2), variables(3), environments(4), center(5)
         # Set size to 0 for hidden widgets, proper sizes for visible ones
         print(f"[DEBUG] main_splitter widget count: {main_splitter.count()}")
         for i in range(main_splitter.count()):
@@ -912,10 +980,14 @@ class MainWindow(QMainWindow):
         # Store reference to main splitter for later size adjustment
         self.main_splitter = main_splitter
         
+        # Store reference to center_container for overlay positioning
+        self.center_container = center_container
+        
         # Set initial sizes (Qt may adjust these until window is shown)
-        main_splitter.setSizes([400, 0, 0, 0, 0, 1000, 0])
+        # Now only 6 widgets: collections, settings, git, variables, environments, center
+        main_splitter.setSizes([400, 0, 0, 0, 0, 1000])
         actual_sizes = main_splitter.sizes()
-        print(f"[DEBUG] Splitter sizes set to: [400, 0, 0, 0, 0, 1000, 0]")
+        print(f"[DEBUG] Splitter sizes set to: [400, 0, 0, 0, 0, 1000]")
         print(f"[DEBUG] Actual splitter sizes after set: {actual_sizes}")
         
         main_layout.addWidget(main_splitter)
@@ -1020,6 +1092,22 @@ class MainWindow(QMainWindow):
             self.git_sync_status_label.setText(f"📁 Git: {self.git_workspace['name']}")
         else:
             self.git_sync_status_label.setText("Git: Not Enabled")
+    
+    def resizeEvent(self, event):
+        """Handle window resize to reposition the overlay panel."""
+        super().resizeEvent(event)
+        
+        # Reposition the recent requests overlay if it's visible
+        if hasattr(self, 'recent_requests_widget') and self.recent_requests_widget.isVisible():
+            container_width = self.center_container.width()
+            overlay_width = 350
+            
+            self.recent_requests_widget.setGeometry(
+                container_width - overlay_width,
+                0,
+                overlay_width,
+                self.center_container.height()
+            )
     
     # ==================== TAB MANAGEMENT ====================
     
@@ -1273,6 +1361,98 @@ class MainWindow(QMainWindow):
             self._on_tab_changed(self.request_tabs.currentIndex())
         
         # Update collections tree highlighting after closing tab
+        self._update_current_request_highlight()
+    
+    def _close_all_tabs_except(self, keep_index: int):
+        """Close all tabs except the specified one."""
+        # Check for unsaved changes in any tab (except the one we're keeping)
+        has_unsaved = False
+        for i in range(self.request_tabs.count()):
+            if i != keep_index and i in self.tab_states and self.tab_states[i].get('has_changes', False):
+                has_unsaved = True
+                break
+        
+        # Confirm if there are unsaved changes
+        if has_unsaved:
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "Some tabs have unsaved changes. Close them anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        # Save the state of the tab we want to keep
+        keep_state = self.tab_states.get(keep_index)
+        
+        # Block signals to avoid triggering multiple updates
+        self.request_tabs.blockSignals(True)
+        
+        # Close all tabs from the end to avoid index shifting issues
+        # Start from the last tab and work backwards
+        for i in range(self.request_tabs.count() - 1, -1, -1):
+            if i != keep_index:
+                self.request_tabs.removeTab(i)
+        
+        self.request_tabs.blockSignals(False)
+        
+        # Now only one tab remains at index 0
+        # Update tab states
+        if keep_state:
+            self.tab_states = {0: keep_state}
+            
+            # Update tab bar data
+            method = keep_state.get('ui_state', {}).get('method', 'GET')
+            name = keep_state.get('name', 'Untitled')
+            self.request_tabs.tabBar().set_tab_data(0, method, name, keep_state.get('has_changes', False))
+        else:
+            self.tab_states = {}
+        
+        # Reset previous tab index
+        self.previous_tab_index = None
+        
+        # Ensure the remaining tab is selected and its state is restored
+        self.request_tabs.setCurrentIndex(0)
+        self._on_tab_changed(0)
+    
+    def _close_all_tabs(self):
+        """Close all tabs."""
+        # Check for unsaved changes in any tab
+        has_unsaved = False
+        for state in self.tab_states.values():
+            if state.get('has_changes', False):
+                has_unsaved = True
+                break
+        
+        # Confirm if there are unsaved changes
+        if has_unsaved:
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "Some tabs have unsaved changes. Close them anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        # Close all tabs
+        self.request_tabs.blockSignals(True)
+        while self.request_tabs.count() > 0:
+            self.request_tabs.removeTab(0)
+        self.request_tabs.blockSignals(False)
+        
+        # Clear tab states
+        self.tab_states = {}
+        self.previous_tab_index = None
+        
+        # Show empty state
+        self.center_stack.setCurrentWidget(self.no_request_empty_state)
+        self._clear_request_editor()
+        
+        # Update collections tree highlighting
         self._update_current_request_highlight()
     
     def _create_new_tab(self, request_id: Optional[int] = None, request_data: Optional[Dict] = None):
@@ -1539,23 +1719,23 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(pane)
         
         # Create vertical splitter (request editor | response viewer)
-        self.main_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.main_splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing
+        self.request_response_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.request_response_splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing
         
         # Top section: Request Editor
         request_editor = self._create_request_editor()
-        self.main_splitter.addWidget(request_editor)
+        self.request_response_splitter.addWidget(request_editor)
         
         # Bottom section: Response Viewer
         response_viewer = self._create_response_viewer()
-        self.main_splitter.addWidget(response_viewer)
+        self.request_response_splitter.addWidget(response_viewer)
         
         # Set splitter sizes to 50/50 split (equal space for request and response)
         # This will maintain proper proportions when window is maximized
-        self.main_splitter.setStretchFactor(0, 1)  # Request editor - 50%
-        self.main_splitter.setStretchFactor(1, 1)  # Response viewer - 50%
+        self.request_response_splitter.setStretchFactor(0, 1)  # Request editor - 50%
+        self.request_response_splitter.setStretchFactor(1, 1)  # Response viewer - 50%
         
-        layout.addWidget(self.main_splitter)
+        layout.addWidget(self.request_response_splitter)
         
         # Set initial sizes to 50/50 split after window is shown
         # This will be calculated based on actual available height
@@ -1705,12 +1885,16 @@ class MainWindow(QMainWindow):
         # Body tab
         body_widget = QWidget()
         body_layout = QVBoxLayout(body_widget)
-        self.body_input = QTextEdit()
+        # Use HighlightedTextEdit for variable hover tooltips
+        from src.ui.widgets.variable_highlight_delegate import HighlightedTextEdit
+        self.body_input = HighlightedTextEdit()
+        self.body_input.environment_manager = self.env_manager
         self.body_input.setPlaceholderText("Enter request body (e.g., JSON)")
         self.body_input.textChanged.connect(self._mark_as_changed)
         
-        # Add variable syntax highlighting to body
+        # Add variable syntax highlighting to body with status colors
         self.body_highlighter = VariableSyntaxHighlighter(self.body_input.document(), self.current_theme)
+        self.body_highlighter.environment_manager = self.env_manager
         
         body_layout.addWidget(self.body_input)
         self.inner_tabs.addTab(body_widget, "Body")
@@ -2018,7 +2202,9 @@ class MainWindow(QMainWindow):
         token_label = QLabel("Token:")
         token_label.setProperty("class", "secondary")  # Secondary text for form labels
         token_layout.addWidget(token_label)
-        self.auth_token_input = QLineEdit()
+        # Use HighlightedLineEdit for variable highlighting with status colors
+        self.auth_token_input = HighlightedLineEdit(theme=self.current_theme)
+        self.auth_token_input.environment_manager = self.env_manager
         self.auth_token_input.setPlaceholderText("Enter bearer token or use {{variable}}")
         self.auth_token_input.textChanged.connect(self._update_tab_counts)
         token_layout.addWidget(self.auth_token_input)
@@ -2313,6 +2499,48 @@ class MainWindow(QMainWindow):
         # Recurse through children
         for i in range(item.childCount()):
             self._store_expanded_state(item.child(i), expanded_collection_ids, expanded_folder_ids)
+    
+    def _expand_and_show_request(self, request_id: int):
+        """Expand the collection containing a request and scroll to make it visible."""
+        # Get request info to find its collection
+        request = self.db.get_request(request_id)
+        if not request:
+            return
+        
+        collection_id = request.get('collection_id')
+        if not collection_id:
+            return
+        
+        # Find and expand the collection item in the tree
+        for i in range(self.collections_tree.topLevelItemCount()):
+            collection_item = self.collections_tree.topLevelItem(i)
+            data = collection_item.data(0, Qt.ItemDataRole.UserRole)
+            
+            if data and data.get('type') == 'collection' and data.get('id') == collection_id:
+                # Expand the collection
+                collection_item.setExpanded(True)
+                
+                # Find and scroll to the request item
+                self._find_and_scroll_to_request(collection_item, request_id)
+                break
+    
+    def _find_and_scroll_to_request(self, parent_item, request_id: int):
+        """Recursively find a request item and scroll to it."""
+        for i in range(parent_item.childCount()):
+            child = parent_item.child(i)
+            data = child.data(0, Qt.ItemDataRole.UserRole)
+            
+            if data and data.get('type') == 'request' and data.get('id') == request_id:
+                # Found the request - scroll to it
+                self.collections_tree.scrollToItem(child)
+                return True
+            elif data and data.get('type') == 'folder':
+                # This is a folder - expand it and recurse
+                child.setExpanded(True)
+                if self._find_and_scroll_to_request(child, request_id):
+                    return True
+        
+        return False
     
     def _add_request_item_to_tree(self, request, parent_item, collection_id):
         """Add a request item to the tree under the given parent."""
@@ -4542,26 +4770,26 @@ class MainWindow(QMainWindow):
         
         if self.response_panel_collapsed:
             # Store current sizes before collapsing
-            self.splitter_sizes_before_collapse = self.main_splitter.sizes()
+            self.splitter_sizes_before_collapse = self.request_response_splitter.sizes()
             
             # Hide content and adjust splitter to minimal response panel size
             self.response_content_widget.hide()
             self.response_collapse_icon.setText("▶")
             
             # Get total height and set response panel to minimal height (60px for header)
-            total_height = sum(self.main_splitter.sizes())
-            self.main_splitter.setSizes([total_height - 60, 60])
+            total_height = sum(self.request_response_splitter.sizes())
+            self.request_response_splitter.setSizes([total_height - 60, 60])
         else:
             self.response_content_widget.show()
             self.response_collapse_icon.setText("▼")
             
             # Restore previous sizes or use default proportions
             if hasattr(self, 'splitter_sizes_before_collapse'):
-                self.main_splitter.setSizes(self.splitter_sizes_before_collapse)
+                self.request_response_splitter.setSizes(self.splitter_sizes_before_collapse)
             else:
                 # Default: 45-55 split
-                total_height = sum(self.main_splitter.sizes())
-                self.main_splitter.setSizes([int(total_height * 0.45), int(total_height * 0.55)])
+                total_height = sum(self.request_response_splitter.sizes())
+                self.request_response_splitter.setSizes([int(total_height * 0.45), int(total_height * 0.55)])
     
     def _expand_response_panel(self):
         """Ensure response panel is expanded (called when sending request)."""
@@ -4569,9 +4797,27 @@ class MainWindow(QMainWindow):
             self._toggle_response_panel()
     
     def _toggle_recent_requests(self):
-        """Toggle the recent requests panel visibility."""
+        """Toggle the recent requests panel visibility with overlay positioning."""
         is_visible = self.recent_requests_widget.isVisible()
-        self.recent_requests_widget.setVisible(not is_visible)
+        
+        if not is_visible:
+            # Show the overlay - position it on the right side of center_container
+            container_width = self.center_container.width()
+            overlay_width = 350  # Fixed width for the overlay
+            
+            # Position the overlay on the right side, full height
+            self.recent_requests_widget.setGeometry(
+                container_width - overlay_width,  # X position (right-aligned)
+                0,  # Y position (top)
+                overlay_width,  # Width
+                self.center_container.height()  # Height (full height of container)
+            )
+            self.recent_requests_widget.setVisible(True)
+            self.recent_requests_widget.raise_()  # Ensure it's on top
+        else:
+            # Hide the overlay
+            self.recent_requests_widget.setVisible(False)
+        
         self.recent_requests_btn.setChecked(not is_visible)
     
     def _switch_left_panel(self, panel_name: str):
@@ -4585,38 +4831,38 @@ class MainWindow(QMainWindow):
                 is_visible = self.collections_pane.isVisible()
                 self.collections_pane.setVisible(not is_visible)
                 self.collections_toggle_btn.setChecked(not is_visible)
-                # Update splitter sizes
+                # Update splitter sizes (6 widgets: collections, settings, git, variables, environments, center)
                 if not is_visible:  # About to show
-                    main_splitter.setSizes([400, 0, 0, 0, 0, 1000, 0])
+                    main_splitter.setSizes([400, 0, 0, 0, 0, 1000])
                 else:  # About to hide
-                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1400])
             elif panel_name == 'settings':
                 is_visible = self.settings_pane.isVisible()
                 self.settings_pane.setVisible(not is_visible)
                 self.settings_toggle_btn.setChecked(not is_visible)
                 # Update splitter sizes
                 if not is_visible:  # About to show
-                    main_splitter.setSizes([0, 400, 0, 0, 0, 1000, 0])
+                    main_splitter.setSizes([0, 400, 0, 0, 0, 1000])
                 else:  # About to hide
-                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1400])
             elif panel_name == 'git_sync':
                 is_visible = self.git_sync_pane.isVisible()
                 self.git_sync_pane.setVisible(not is_visible)
                 self.git_sync_toggle_btn.setChecked(not is_visible)
                 # Update splitter sizes
                 if not is_visible:  # About to show
-                    main_splitter.setSizes([0, 0, 400, 0, 0, 1000, 0])
+                    main_splitter.setSizes([0, 0, 400, 0, 0, 1000])
                 else:  # About to hide
-                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1400])
             elif panel_name == 'variable_inspector':
                 is_visible = self.variable_inspector_pane.isVisible()
                 self.variable_inspector_pane.setVisible(not is_visible)
                 self.variable_inspector_toggle_btn.setChecked(not is_visible)
                 # Update splitter sizes
                 if not is_visible:  # About to show
-                    main_splitter.setSizes([0, 0, 0, 400, 0, 1000, 0])
+                    main_splitter.setSizes([0, 0, 0, 400, 0, 1000])
                 else:  # About to hide
-                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1400])
                 # Refresh data when opening
                 if not is_visible:
                     self._refresh_variable_inspector_panel()
@@ -4626,9 +4872,9 @@ class MainWindow(QMainWindow):
                 self.environments_toggle_btn.setChecked(not is_visible)
                 # Update splitter sizes
                 if not is_visible:  # About to show
-                    main_splitter.setSizes([0, 0, 0, 0, 400, 1000, 0])
+                    main_splitter.setSizes([0, 0, 0, 0, 400, 1000])
                 else:  # About to hide
-                    main_splitter.setSizes([0, 0, 0, 0, 0, 1700, 0])
+                    main_splitter.setSizes([0, 0, 0, 0, 0, 1400])
         else:
             # Switching to a different panel
             # Hide current panel
@@ -4652,25 +4898,25 @@ class MainWindow(QMainWindow):
             if panel_name == 'collections':
                 self.collections_pane.setVisible(True)
                 self.collections_toggle_btn.setChecked(True)
-                main_splitter.setSizes([400, 0, 0, 0, 0, 1000, 0])
+                main_splitter.setSizes([400, 0, 0, 0, 0, 1000])
             elif panel_name == 'settings':
                 self.settings_pane.setVisible(True)
                 self.settings_toggle_btn.setChecked(True)
-                main_splitter.setSizes([0, 400, 0, 0, 0, 1000, 0])
+                main_splitter.setSizes([0, 400, 0, 0, 0, 1000])
             elif panel_name == 'git_sync':
                 self.git_sync_pane.setVisible(True)
                 self.git_sync_toggle_btn.setChecked(True)
-                main_splitter.setSizes([0, 0, 400, 0, 0, 1000, 0])
+                main_splitter.setSizes([0, 0, 400, 0, 0, 1000])
             elif panel_name == 'variable_inspector':
                 self.variable_inspector_pane.setVisible(True)
                 self.variable_inspector_toggle_btn.setChecked(True)
-                main_splitter.setSizes([0, 0, 0, 400, 0, 1000, 0])
+                main_splitter.setSizes([0, 0, 0, 400, 0, 1000])
                 # Refresh data when opening
                 self._refresh_variable_inspector_panel()
             elif panel_name == 'environments':
                 self.environments_pane.setVisible(True)
                 self.environments_toggle_btn.setChecked(True)
-                main_splitter.setSizes([0, 0, 0, 0, 400, 1000, 0])
+                main_splitter.setSizes([0, 0, 0, 0, 400, 1000])
             
             self.current_left_panel = panel_name
     
@@ -4947,6 +5193,19 @@ class MainWindow(QMainWindow):
                     self.env_combo.setCurrentIndex(i)
                     break
     
+    def _load_extracted_variables(self):
+        """Load extracted variables from database into environment manager."""
+        # Get all extracted variables from database
+        all_extracted = self.db.get_all_extracted_variables()
+        
+        # Convert to dictionary format {name: value}
+        extracted_vars = {}
+        for var in all_extracted:
+            extracted_vars[var['name']] = var['value']
+        
+        # Set in environment manager
+        self.env_manager.set_extracted_variables(extracted_vars)
+    
     def _on_environment_changed(self, index: int):
         """Handle environment selection change."""
         env_id = self.env_combo.itemData(index)
@@ -4959,6 +5218,17 @@ class MainWindow(QMainWindow):
             env = self.db.get_environment(env_id)
             if env:
                 self.env_manager.set_active_environment(env)
+        
+        # Reload extracted variables (they're always available regardless of environment)
+        self._load_extracted_variables()
+        
+        # Refresh variable highlighting in auth token field
+        if hasattr(self, 'auth_token_input'):
+            self.auth_token_input.update()
+        
+        # Refresh variable highlighting in body
+        if hasattr(self, 'body_highlighter'):
+            self.body_highlighter.rehighlight()
     
     def _on_env_change_refresh_vars(self):
         """Auto-refresh variables panel when environment changes."""
@@ -5118,76 +5388,88 @@ class MainWindow(QMainWindow):
     
     def _import_curl(self):
         """Import a cURL command and create a new request."""
-        if not self.current_collection_id:
+        # Check if any collections exist
+        collections = self.db.get_all_collections()
+        if not collections:
             QMessageBox.warning(
                 self,
-                "No Collection Selected",
-                "Please select a collection first, then import the cURL command."
+                "No Collections",
+                "Please create a collection first before importing cURL commands."
             )
             return
         
         # Open cURL import dialog
-        dialog = CurlImportDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            request_data = dialog.get_request_data()
-            
-            if not request_data:
-                return
-            
-            # Ask for request name
-            from PyQt6.QtWidgets import QInputDialog
-            request_name, ok = QInputDialog.getText(
-                self,
-                "Request Name",
-                "Enter a name for this request:",
-                text=f"{request_data['method']} {request_data['url'].split('/')[-1] or 'Request'}"
+        from src.ui.dialogs.curl_import_dialog import CurlImportDialog
+        curl_dialog = CurlImportDialog(self)
+        if curl_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        
+        request_data = curl_dialog.get_request_data()
+        if not request_data:
+            return
+        
+        # Generate default name from URL
+        default_name = f"{request_data['method']} {request_data['url'].split('/')[-1] or 'Request'}"
+        
+        # Ask for request name and target collection
+        from src.ui.dialogs.request_destination_dialog import RequestDestinationDialog
+        dest_dialog = RequestDestinationDialog(
+            parent=self,
+            db_manager=self.db,
+            default_name=default_name,
+            current_collection_id=self.current_collection_id
+        )
+        
+        if dest_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        
+        request_name = dest_dialog.get_request_name()
+        collection_id = dest_dialog.get_collection_id()
+        
+        if not request_name or not collection_id:
+            return
+        
+        try:
+            # Create the request in the database with all data
+            request_id = self.db.create_request(
+                collection_id=collection_id,
+                name=request_name,
+                url=request_data['url'],
+                method=request_data['method'],
+                params=request_data.get('params'),
+                headers=request_data.get('headers'),
+                body=request_data.get('body')
             )
             
-            if not ok or not request_name.strip():
-                return
+            # Reload the collection tree
+            self._load_collections()
             
-            try:
-                # Create the request in the database
-                request_id = self.db.create_request(
-                    collection_id=self.current_collection_id,
-                    name=request_name.strip(),
-                    url=request_data['url'],
-                    method=request_data['method']
-                )
-                
-                # Update parameters
-                if request_data.get('params'):
-                    self.db.update_request_params(request_id, request_data['params'])
-                
-                # Update headers
-                if request_data.get('headers'):
-                    self.db.update_request_headers(request_id, request_data['headers'])
-                
-                # Update body
-                if request_data.get('body'):
-                    self.db.update_request_body(request_id, request_data['body'])
-                
-                # Reload the collection tree
-                self._load_collections()
-                
-                # Select the new request
-                self._select_request_by_id(request_id)
-                
-                # Auto-sync if enabled
-                self._auto_sync_to_filesystem()
-                
-                QMessageBox.information(
-                    self,
-                    "cURL Imported",
-                    f"Successfully created request '{request_name}' from cURL command!"
-                )
-                
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Import Error",
-                    f"Failed to create request from cURL:\n{str(e)}"
-                )
+            # Ensure collections pane is visible
+            if not self.collections_pane.isVisible():
+                self.collections_pane.setVisible(True)
+                self.collections_toggle_btn.setChecked(True)
+            
+            # Expand collection and show the new request in the tree
+            self._expand_and_show_request(request_id)
+            
+            # Load the new request into the editor
+            self._load_request(request_id)
+            
+            # Auto-sync if enabled
+            self._auto_sync_to_filesystem()
+            
+            QMessageBox.information(
+                self,
+                "cURL Imported",
+                f"Successfully created request '{request_name}' from cURL command!"
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Import Error",
+                f"Failed to create request from cURL:\n{str(e)}"
+            )
     
     def _import_openapi(self):
         """Import an OpenAPI/Swagger specification."""
@@ -5544,6 +5826,13 @@ class MainWindow(QMainWindow):
                             json_path=var.get('json_path'),
                             description=var.get('description')
                         )
+                        # Reload extracted variables into environment manager
+                        self._load_extracted_variables()
+                        # Refresh variable highlighting
+                        if hasattr(self, 'body_highlighter'):
+                            self.body_highlighter.rehighlight()
+                        if hasattr(self, 'auth_token_input'):
+                            self.auth_token_input.update()
                         self.toast.success(f"Updated variable: {name}")
                         break
             
@@ -5607,6 +5896,13 @@ class MainWindow(QMainWindow):
                     if var['name'] == name:
                         print(f"[DEBUG] Found extracted variable, deleting ID: {var['id']}")
                         self.db.delete_extracted_variable(var['id'])
+                        # Reload extracted variables into environment manager
+                        self._load_extracted_variables()
+                        # Refresh variable highlighting
+                        if hasattr(self, 'body_highlighter'):
+                            self.body_highlighter.rehighlight()
+                        if hasattr(self, 'auth_token_input'):
+                            self.auth_token_input.update()
                         self.toast.success(f"Deleted variable: {name}")
                         break
             
@@ -5673,6 +5969,18 @@ class MainWindow(QMainWindow):
             traceback.print_exc()
             self.toast.error(f"Failed to add: {str(e)}")
     
+    def _update_environments_var_counts(self):
+        """Update variable counts in the environments panel without full refresh."""
+        if hasattr(self, 'environments_pane'):
+            self.environments_pane.update_variable_counts()
+        
+        # Also refresh variable highlighting since variables changed
+        if hasattr(self, 'auth_token_input'):
+            self.auth_token_input.update()
+        
+        if hasattr(self, 'body_highlighter'):
+            self.body_highlighter.rehighlight()
+    
     def _open_variable_library(self):
         """Open the variable library dialog."""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout
@@ -5715,6 +6023,15 @@ class MainWindow(QMainWindow):
                 json_path=json_path
             )
             
+            # Reload extracted variables into environment manager
+            self._load_extracted_variables()
+            
+            # Refresh variable highlighting
+            if hasattr(self, 'body_highlighter'):
+                self.body_highlighter.rehighlight()
+            if hasattr(self, 'auth_token_input'):
+                self.auth_token_input.update()
+            
             # Show success toast
             self.toast.success(f"Variable '{name}' saved! Use {{{{extracted.{name}}}}} in requests")
             
@@ -5729,6 +6046,16 @@ class MainWindow(QMainWindow):
         """Handle variable deletion from variable library dialog."""
         try:
             self.db.delete_extracted_variable(variable_id)
+            
+            # Reload extracted variables into environment manager
+            self._load_extracted_variables()
+            
+            # Refresh variable highlighting
+            if hasattr(self, 'body_highlighter'):
+                self.body_highlighter.rehighlight()
+            if hasattr(self, 'auth_token_input'):
+                self.auth_token_input.update()
+            
             self.toast.success("Variable deleted")
         except Exception as e:
             QMessageBox.critical(

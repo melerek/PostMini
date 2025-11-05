@@ -69,10 +69,12 @@ class EnvironmentListItem(QWidget):
     
     edit_clicked = pyqtSignal(int)  # environment_id
     delete_clicked = pyqtSignal(int)  # environment_id
+    variables_clicked = pyqtSignal(int)  # environment_id - to switch to variables panel
     
     def __init__(self, env_id: int, name: str, var_count: int, parent=None):
         super().__init__(parent)
         self.env_id = env_id
+        self.count_label = None  # Store reference for updates
         self._init_ui(name, var_count)
     
     def _init_ui(self, name: str, var_count: int):
@@ -93,17 +95,39 @@ class EnvironmentListItem(QWidget):
         info_layout.setContentsMargins(0, 0, 0, 0)
         
         name_label = QLabel(name)
-        name_label.setStyleSheet("font-size: 13px; font-weight: 500; background: transparent; color: #fff;")
+        name_label.setStyleSheet("font-size: 12px; font-weight: 500; background: transparent; color: #fff;")
         name_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         info_layout.addWidget(name_label)
         
-        count_label = QLabel(f"{var_count} variable{'s' if var_count != 1 else ''}")
-        count_label.setStyleSheet("font-size: 11px; color: #888; background: transparent;")
-        count_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        info_layout.addWidget(count_label)
+        self.count_label = QLabel(f"{var_count} variable{'s' if var_count != 1 else ''}")
+        self.count_label.setStyleSheet("font-size: 11px; color: #888; background: transparent;")
+        self.count_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        info_layout.addWidget(self.count_label)
         
         layout.addLayout(info_layout)
         layout.addStretch()
+        
+        # Variables button - switch to variables panel with this environment
+        vars_btn = QPushButton("Variables")
+        vars_btn.setFixedHeight(26)
+        vars_btn.setToolTip("View and manage variables for this environment")
+        vars_btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid rgba(33, 150, 243, 0.3);
+                border-radius: 3px;
+                background: rgba(33, 150, 243, 0.1);
+                font-size: 11px;
+                color: #64B5F6;
+                padding: 0px 10px;
+            }
+            QPushButton:hover {
+                background: rgba(33, 150, 243, 0.2);
+                border-color: rgba(33, 150, 243, 0.5);
+                color: #90CAF9;
+            }
+        """)
+        vars_btn.clicked.connect(lambda: self.variables_clicked.emit(self.env_id))
+        layout.addWidget(vars_btn)
         
         # Edit button - flat style with text
         edit_btn = QPushButton("Edit")
@@ -151,6 +175,11 @@ class EnvironmentListItem(QWidget):
         
         # Set transparent background for the widget itself
         self.setStyleSheet("background: transparent;")
+    
+    def update_variable_count(self, var_count: int):
+        """Update the variable count display."""
+        if self.count_label:
+            self.count_label.setText(f"{var_count} variable{'s' if var_count != 1 else ''}")
 
 
 class EnvironmentsPanel(QWidget):
@@ -335,10 +364,13 @@ class EnvironmentsPanel(QWidget):
                 item_widget = EnvironmentListItem(env['id'], env['name'], var_count)
                 item_widget.edit_clicked.connect(self._edit_environment)
                 item_widget.delete_clicked.connect(self._delete_environment)
+                item_widget.variables_clicked.connect(self._open_variables_panel)
                 
                 # Create list item
                 list_item = QListWidgetItem(self.env_list)
                 list_item.setSizeHint(item_widget.sizeHint())
+                # Store environment_id in the list item for later retrieval
+                list_item.setData(Qt.ItemDataRole.UserRole, env['id'])
                 
                 # Add to list
                 self.env_list.addItem(list_item)
@@ -452,4 +484,39 @@ class EnvironmentsPanel(QWidget):
                 "Error",
                 f"Failed to delete environment:\n{str(e)}"
             )
+    
+    def _open_variables_panel(self, env_id: int):
+        """Switch to variables panel with the specified environment active."""
+        # Get the main window by walking up the parent hierarchy
+        main_window = self.parent()
+        while main_window and not hasattr(main_window, '_switch_left_panel'):
+            main_window = main_window.parent()
+        
+        if main_window:
+            # Find the environment in the combo box and set it as active
+            env = self.db.get_environment(env_id)
+            if env:
+                # Find the index in the environment combo box
+                for i in range(main_window.env_combo.count()):
+                    if main_window.env_combo.itemData(i) == env_id:
+                        main_window.env_combo.setCurrentIndex(i)
+                        break
+                
+                # Switch to variables panel
+                main_window._switch_left_panel('variable_inspector')
+    
+    def update_variable_counts(self):
+        """Update variable counts for all environments without full refresh."""
+        for i in range(self.env_list.count()):
+            item = self.env_list.item(i)
+            widget = self.env_list.itemWidget(item)
+            env_id = item.data(Qt.ItemDataRole.UserRole)
+            
+            if widget and env_id:
+                # Get updated variable count from database
+                env = self.db.get_environment(env_id)
+                if env:
+                    variables = env.get('variables', {})
+                    var_count = len(variables) if variables else 0
+                    widget.update_variable_count(var_count)
 
