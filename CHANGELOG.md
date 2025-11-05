@@ -7,6 +7,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.0] - 2025-11-04
+
+### 🎨 Major UI Reorganization
+
+#### Top Toolbar Removed
+- **Removed entire top toolbar** for a cleaner, more spacious interface
+- Maximizes vertical space for API testing workflows
+- Modern, streamlined look similar to VS Code
+
+#### Bottom Status Bar Enhancements
+- **Moved Environment Selector** from top toolbar to status bar
+  - Compact inline selector with minimal visual footprint
+  - Easy access without taking up valuable screen space
+  - Styled with subtle background and hover effects
+- **Moved Git Sync Status** from top toolbar to status bar
+  - Shows "Git: Not Enabled" or "📁 Git: {workspace_name}"
+  - Consolidated duplicate git status labels into single label
+- **Moved Keyboard Shortcuts Hint** to status bar (right side)
+  - Changed from "Press Ctrl+/ for shortcuts" to "💡 Ctrl+/ for shortcuts"
+  - Positioned on right side for quick reference
+- **Improved Status Bar Layout**
+  - Removed excessive separators for cleaner appearance
+  - Consistent 12px padding throughout
+  - Better color scheme: Blue (#2196F3) for active items, Gray (#999) for passive
+  - Fixed empty blocks caused by unused widgets
+  - Left side: Ready | Git Status | Environment
+  - Right side: Keyboard shortcuts hint
+
+#### Left Sidebar Reorganization
+- **Requests History** moved to left sidebar icon bar
+  - 📋 icon positioned below Environments
+  - Opens dialog on click (not a panel toggle)
+  - Better organization of frequently-used features
+- **Settings** moved to bottom of sidebar
+  - ⚙️ icon now at the bottom (logical placement for configuration)
+  - Separated from main workflow icons
+
+#### New Request Button Enhancement
+- Changed from just "+" to **"+ New request"** with clear text label
+- Improved sizing and styling
+- Better visual hierarchy
+- More discoverable for new users
+
+### 🐛 Bug Fixes
+
+#### Tab Width Issue
+- **Fixed narrow tab width** when creating new requests
+  - Tabs now show proper width immediately on creation
+  - Changed default tab size hint from Qt's narrow default to 150px
+  - Added forced tab bar updates after setting tab data
+  - Applied fix to all tab creation scenarios (new requests, opening from collections, tab updates)
+  - No more mysteriously narrow tabs!
+
+#### Status Bar Cleanup
+- Removed duplicate `status_git_sync_label` (was creating empty blocks)
+- Fixed spacer widget showing as visible block
+- Consolidated Git workspace status into single label
+- All status bar widgets now serve a purpose
+
+### 🎯 User Experience Impact
+
+- **More Screen Space**: Removing top toolbar gives ~40px more vertical space
+- **Cleaner Interface**: Fewer UI elements on screen = less cognitive load
+- **Better Organization**: Related features grouped logically
+- **Improved Discoverability**: "New request" text makes button purpose clear
+- **Professional Look**: Status bar similar to VS Code, Visual Studio, JetBrains IDEs
+- **Consistent Behavior**: Tab widths work reliably in all scenarios
+
+### 🔧 Technical Changes
+
+- Removed `_create_toolbar()` method from `main_window.py`
+- Removed theme toggle button (kept hidden for future use)
+- Updated `_create_status_bar()` with comprehensive redesign
+- Modified left sidebar icon layout in `_init_ui()`
+- Enhanced `ColoredTabBar.tabSizeHint()` with better default sizing
+- Added tab bar update calls after setting tab data (3 locations)
+- Cleaned up duplicate widget references
+
+### 📊 Before/After Comparison
+
+**Before v1.8.0:**
+- Top toolbar with 7+ widgets
+- Narrow status bar with limited info
+- History button in top toolbar
+- Settings in middle of sidebar
+- Just "+" for new request button
+- Tabs sometimes showed narrow width
+
+**After v1.8.0:**
+- No top toolbar (40px more space)
+- Comprehensive status bar with all key info
+- History icon in logical sidebar position
+- Settings at bottom of sidebar
+- Clear "+ New request" button
+- Tabs always show correct width
+
+### 🎨 Design Philosophy
+
+This release focuses on **vertical space optimization** and **information density**:
+- Every pixel counts in an API testing tool
+- Status bar is the perfect place for contextual information
+- Top toolbar was redundant - all functions accessible elsewhere
+- Professional tools (VS Code, IDEs) don't waste vertical space
+
+---
+
 ## [1.7.1] - 2025-11-04
 
 ### 🔧 Code Quality & Maintenance

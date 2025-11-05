@@ -254,7 +254,8 @@ class ColoredTabBar(QTabBar):
     def tabSizeHint(self, index: int):
         """Calculate tab size based on content."""
         if index not in self.tab_data:
-            return super().tabSizeHint(index)
+            # Provide a reasonable default size for tabs without data yet
+            return QSize(150, 38)
         
         data = self.tab_data[index]
         method = data['method']
@@ -518,9 +519,6 @@ class MainWindow(QMainWindow):
     
     def _init_ui(self):
         """Initialize the user interface with all components."""
-        # Create toolbar
-        self._create_toolbar()
-        
         # Create central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -560,31 +558,6 @@ class MainWindow(QMainWindow):
         """)
         self.collections_toggle_btn.clicked.connect(lambda: self._switch_left_panel('collections'))
         icon_bar_layout.addWidget(self.collections_toggle_btn)
-        
-        # Settings toggle button
-        self.settings_toggle_btn = QPushButton("⚙️")
-        self.settings_toggle_btn.setToolTip("Toggle Settings Panel")
-        self.settings_toggle_btn.setCheckable(True)
-        self.settings_toggle_btn.setChecked(False)
-        self.settings_toggle_btn.setFixedSize(50, 50)
-        self.settings_toggle_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                border: none;
-                border-radius: 0px;
-                font-size: 24px;
-                padding: 0px;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.1);
-            }
-            QPushButton:checked {
-                background: rgba(33, 150, 243, 0.15);
-                border-left: 3px solid #2196F3;
-            }
-        """)
-        self.settings_toggle_btn.clicked.connect(lambda: self._switch_left_panel('settings'))
-        icon_bar_layout.addWidget(self.settings_toggle_btn)
         
         # Git Sync toggle button
         self.git_sync_toggle_btn = QPushButton("🔄")
@@ -662,7 +635,54 @@ class MainWindow(QMainWindow):
         self.environments_toggle_btn.clicked.connect(lambda: self._switch_left_panel('environments'))
         icon_bar_layout.addWidget(self.environments_toggle_btn)
         
+        # History button (opens dialog, not a panel toggle)
+        self.history_btn = QPushButton("📋")
+        self.history_btn.setToolTip("Requests History")
+        self.history_btn.setFixedSize(50, 50)
+        self.history_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+                font-size: 24px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:pressed {
+                background: rgba(255, 255, 255, 0.15);
+            }
+        """)
+        self.history_btn.clicked.connect(self._open_history_dialog)
+        icon_bar_layout.addWidget(self.history_btn)
+        
         icon_bar_layout.addStretch()  # Push buttons to top
+        
+        # Settings toggle button (at bottom)
+        self.settings_toggle_btn = QPushButton("⚙️")
+        self.settings_toggle_btn.setToolTip("Toggle Settings Panel")
+        self.settings_toggle_btn.setCheckable(True)
+        self.settings_toggle_btn.setChecked(False)
+        self.settings_toggle_btn.setFixedSize(50, 50)
+        self.settings_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+                font-size: 24px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:checked {
+                background: rgba(33, 150, 243, 0.15);
+                border-left: 3px solid #2196F3;
+            }
+        """)
+        self.settings_toggle_btn.clicked.connect(lambda: self._switch_left_panel('settings'))
+        icon_bar_layout.addWidget(self.settings_toggle_btn)
         
         main_layout.addWidget(icon_bar)
         
@@ -721,9 +741,6 @@ class MainWindow(QMainWindow):
         print(f"[DEBUG] variable_added connected")
         print(f"[DEBUG] Variable inspector signals connected successfully")
         
-        # Connect environment change to auto-refresh variables panel
-        self.env_combo.currentIndexChanged.connect(self._on_env_change_refresh_vars)
-        
         # ==================== LEFT PANE: Environments ====================
         self.environments_pane = EnvironmentsPanel(self.db, self)
         self.environments_pane.setVisible(False)  # Hidden by default
@@ -766,17 +783,19 @@ class MainWindow(QMainWindow):
         tab_bar_layout.addWidget(self.request_tabs)
         
         # Add New Request button - independent of tabs, always visible
-        self.new_request_btn = QPushButton("+")
+        self.new_request_btn = QPushButton("+ New request")
         self.new_request_btn.setToolTip("Create new request (Ctrl+N)")
-        self.new_request_btn.setFixedSize(38, 38)  # Match tab bar height
+        self.new_request_btn.setFixedHeight(38)  # Match tab bar height
+        self.new_request_btn.setMinimumWidth(120)
         self.new_request_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
                 border: 1px solid transparent;
                 border-radius: 4px;
-                font-size: 22px;
-                font-weight: bold;
-                padding: 0px;
+                font-size: 13px;
+                font-weight: 500;
+                padding: 0px 12px;
+                text-align: left;
             }
             QPushButton:hover {
                 background: rgba(255, 255, 255, 0.1);
@@ -903,72 +922,89 @@ class MainWindow(QMainWindow):
         
         # Create status bar
         self._create_status_bar()
-    
-    def _create_toolbar(self):
-        """Create the application toolbar with environment controls."""
-        toolbar = QToolBar("Main Toolbar")
-        toolbar.setMovable(False)
-        self.addToolBar(toolbar)
         
-        # Environment label
-        toolbar.addWidget(QLabel("Environment: "))
-        
-        # Environment selector
-        self.env_combo = QComboBox()
-        self.env_combo.setMinimumWidth(200)
-        self.env_combo.addItem("No Environment", None)
-        self.env_combo.currentIndexChanged.connect(self._on_environment_changed)
-        toolbar.addWidget(self.env_combo)
-        
-        toolbar.addSeparator()
-        
-        # History button
-        history_btn = QPushButton("📋 Requests history")
-        history_btn.clicked.connect(self._open_history_dialog)
-        toolbar.addWidget(history_btn)
-        
-        toolbar.addSeparator()
-        
-        # Git sync status indicator (no button, status only)
-        self.git_sync_status_label = QLabel("Git: Not Enabled")
-        self.git_sync_status_label.setStyleSheet("color: #999; font-size: 11px; padding: 0 10px;")
-        toolbar.addWidget(self.git_sync_status_label)
-        
-        # Add spacer to push theme toggle to the right
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        spacer.setStyleSheet("background: transparent;")
-        toolbar.addWidget(spacer)
-        
-        # Theme toggle button
-        self.theme_toggle_btn = QPushButton()
-        self._update_theme_button()
-        self.theme_toggle_btn.setToolTip("Toggle dark/light theme")
-        self.theme_toggle_btn.clicked.connect(self._toggle_theme)
-        toolbar.addWidget(self.theme_toggle_btn)
-        
-        # Help hint in top right corner
-        help_hint = QLabel("💡 Press Ctrl+/ for shortcuts")
-        help_hint.setStyleSheet("color: #2196F3; font-size: 12px; padding-right: 10px;")
-        help_hint.setToolTip("Show keyboard shortcuts help")
-        toolbar.addWidget(help_hint)
+        # Connect environment change to auto-refresh variables panel (after status bar creation)
+        self.env_combo.currentIndexChanged.connect(self._on_env_change_refresh_vars)
     
     def _create_status_bar(self):
         """Create the bottom status bar with save status and Git sync info."""
         status_bar = self.statusBar()
+        status_bar.setStyleSheet("""
+            QStatusBar {
+                background: rgba(255, 255, 255, 0.03);
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
+                color: #999;
+                font-size: 11px;
+            }
+            QStatusBar QLabel {
+                color: #999;
+                font-size: 11px;
+            }
+            QStatusBar::item {
+                border: none;
+            }
+        """)
         
         # Save status widget
         self.save_status_label = QLabel("Ready")
-        self.save_status_label.setStyleSheet("padding: 0 10px;")
+        self.save_status_label.setStyleSheet("padding: 0 12px; color: #2196F3;")
         status_bar.addWidget(self.save_status_label)
         
-        # Add stretch to push items to the right
-        status_bar.addPermanentWidget(QLabel())  # Spacer
+        # Git sync status indicator
+        self.git_sync_status_label = QLabel("Git: Not Enabled")
+        self.git_sync_status_label.setStyleSheet("padding: 0 12px; color: #999;")
+        status_bar.addWidget(self.git_sync_status_label)
         
-        # Git sync status (permanent widget on right)
-        self.status_git_sync_label = QLabel("")
-        self.status_git_sync_label.setStyleSheet("padding: 0 10px;")
-        status_bar.addPermanentWidget(self.status_git_sync_label)
+        # Environment label and selector
+        env_label = QLabel("Environment:")
+        env_label.setStyleSheet("padding: 0 8px 0 12px; color: #999;")
+        status_bar.addWidget(env_label)
+        
+        self.env_combo = QComboBox()
+        self.env_combo.setMinimumWidth(150)
+        self.env_combo.setMaximumHeight(22)
+        self.env_combo.addItem("No Environment", None)
+        self.env_combo.currentIndexChanged.connect(self._on_environment_changed)
+        self.env_combo.setStyleSheet("""
+            QComboBox {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 3px;
+                padding: 2px 8px;
+                color: #fff;
+                font-size: 11px;
+            }
+            QComboBox:hover {
+                background: rgba(255, 255, 255, 0.08);
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+            QComboBox::drop-down {
+                border: none;
+                background: transparent;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #999;
+                width: 0;
+                height: 0;
+                margin-right: 4px;
+            }
+        """)
+        status_bar.addWidget(self.env_combo)
+        
+        # Add spacer - use addPermanentWidget with empty label to push right side
+        spacer_label = QLabel()
+        spacer_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        status_bar.addWidget(spacer_label)
+        
+        # Help hint (on the right side)
+        help_hint = QLabel("💡 Ctrl+/ for shortcuts")
+        help_hint.setStyleSheet("color: #2196F3; font-size: 11px; padding: 0 12px;")
+        help_hint.setToolTip("Show keyboard shortcuts help")
+        status_bar.addPermanentWidget(help_hint)
     
     def _update_save_status(self, message: str, duration: int = 3000):
         """Update the status bar with a save status message."""
@@ -979,11 +1015,11 @@ class MainWindow(QMainWindow):
     
     def _update_status_bar(self):
         """Update status bar with current state."""
-        # Update Git sync status
+        # Update Git sync status - consolidate into single label
         if self.git_workspace:
-            self.status_git_sync_label.setText(f"📁 Git: {self.git_workspace['name']}")
+            self.git_sync_status_label.setText(f"📁 Git: {self.git_workspace['name']}")
         else:
-            self.status_git_sync_label.setText("")
+            self.git_sync_status_label.setText("Git: Not Enabled")
     
     # ==================== TAB MANAGEMENT ====================
     
@@ -1263,6 +1299,9 @@ class MainWindow(QMainWindow):
         tab_bar = self.request_tabs.tabBar()
         if isinstance(tab_bar, ColoredTabBar):
             tab_bar.set_tab_data(tab_index, method, name, has_changes=False)
+            # Force tab bar to recalculate tab sizes after data is set
+            tab_bar.update()
+            self.request_tabs.update()
         
         # Store tab state
         self.tab_states[tab_index] = {
@@ -1367,6 +1406,9 @@ class MainWindow(QMainWindow):
         tab_bar = self.request_tabs.tabBar()
         if isinstance(tab_bar, ColoredTabBar):
             tab_bar.set_tab_data(index, method, name, has_changes)
+            # Force tab bar to recalculate tab sizes after data is set
+            tab_bar.update()
+            self.request_tabs.update()
         
         # Set tooltip to show full request name
         tooltip = f"{method} • {name}"
@@ -4651,6 +4693,9 @@ class MainWindow(QMainWindow):
         tab_bar = self.request_tabs.tabBar()
         if isinstance(tab_bar, ColoredTabBar):
             tab_bar.set_tab_data(tab_index, method, name, has_changes=True)
+            # Force tab bar to recalculate tab sizes after data is set
+            tab_bar.update()
+            self.request_tabs.update()
         
         # Store tab state - no request_id means it's unsaved
         self.tab_states[tab_index] = {
@@ -6296,12 +6341,8 @@ class MainWindow(QMainWindow):
     
     def _update_theme_button(self):
         """Update the theme toggle button icon based on current theme."""
-        if self.current_theme == "dark":
-            self.theme_toggle_btn.setText("☀️")  # Sun icon for switching to light
-            self.theme_toggle_btn.setToolTip("Switch to Light Theme")
-        else:
-            self.theme_toggle_btn.setText("🌙")  # Moon icon for switching to dark
-            self.theme_toggle_btn.setToolTip("Switch to Dark Theme")
+        # Theme toggle button has been removed - keeping method for compatibility
+        pass
     
     def _toggle_theme(self):
         """Toggle between light and dark themes."""
