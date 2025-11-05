@@ -175,7 +175,7 @@ def main():
     # Set application metadata
     app.setApplicationName("PostMini")
     app.setOrganizationName("PostMini")
-    app.setApplicationVersion("1.1.2")
+    app.setApplicationVersion("1.8.1")
     
     # Load custom fonts BEFORE loading stylesheets
     load_custom_fonts()
@@ -206,6 +206,11 @@ def main():
     # Create and show the main window with the database path
     main_window = MainWindow(db_path=str(app_paths.database_path))
     main_window.current_theme = current_theme  # Store current theme
+    
+    # Update script tab theme to match saved preference
+    if hasattr(main_window, 'scripts_tab'):
+        main_window.scripts_tab.set_theme(current_theme)
+    
     main_window.show()
     
     # Start the event loop

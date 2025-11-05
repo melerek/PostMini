@@ -15,12 +15,23 @@ project_root = Path(SPECPATH)
 
 # Additional data files to include
 # Format: (source_file, destination_folder_in_exe)
+# PyMiniRacer requires mini_racer.dll for JavaScript execution
+import py_mini_racer
+py_mini_racer_path = Path(py_mini_racer.__file__).parent
+mini_racer_dll = str(py_mini_racer_path / 'mini_racer.dll')
+
 datas = [
     ('styles.qss', '.'),              # Light theme stylesheet
     ('styles_dark.qss', '.'),         # Dark theme stylesheet
     ('postmini_logo.png', '.'),       # Application icon (PNG)
     ('postmini_logo.ico', '.'),       # Application icon (ICO for Windows)
     ('assets', 'assets'),             # Assets folder (icons, etc.)
+    (mini_racer_dll, 'py_mini_racer'),  # Include mini_racer.dll
+]
+
+# Binary files to include (DLLs, shared libraries)
+binaries = [
+    (mini_racer_dll, '.'),  # Also include in root for compatibility
 ]
 
 # Hidden imports (modules that PyInstaller might miss)
@@ -30,12 +41,13 @@ hiddenimports = [
     'PyQt6.QtWidgets',
     'requests',
     'sqlite3',
+    'py_mini_racer',
 ]
 
 a = Analysis(
     ['main.py'],
     pathex=[str(project_root)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

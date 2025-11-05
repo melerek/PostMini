@@ -24,12 +24,14 @@ from src.core.api_client import ApiClient, ApiResponse
 from src.core.app_paths import AppPaths
 from src.features.variable_substitution import EnvironmentManager
 from src.features.collection_io import CollectionExporter, CollectionImporter, get_safe_filename
+from src.features.script_engine import ScriptEngine, ScriptExecutionError, ScriptTimeoutError
 from src.ui.dialogs.history_dialog import HistoryDialog
 from src.ui.dialogs.code_snippet_dialog import CodeSnippetDialog
 from src.ui.dialogs.oauth_dialog import OAuthConfigDialog
 from src.features.oauth_manager import OAuthManager
 from src.ui.widgets.test_tab_widget import TestTabWidget
 from src.ui.widgets.test_results_viewer import TestResultsViewer
+from src.ui.widgets.script_tab_widget import ScriptTabWidget
 from src.ui.widgets.toast_notification import ToastManager
 from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
 from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
@@ -451,6 +453,9 @@ class MainWindow(QMainWindow):
         # Initialize database and API client
         self.db = DatabaseManager(db_path=db_path)
         self.api_client = ApiClient()
+        
+        # Initialize script engine
+        self.script_engine = ScriptEngine(timeout_ms=5000)
         
         # Initialize environment manager
         self.env_manager = EnvironmentManager()
@@ -1123,14 +1128,19 @@ class MainWindow(QMainWindow):
         # Capture response data if available
         response_data = None
         if hasattr(self, 'current_response') and self.current_response:
-            response_data = {
-                'status_code': self.current_response.status_code,
-                'headers': self.current_response.headers,
-                'text': self.current_response.text,
-                'size': self.current_response.size,
-                'elapsed_time': self.current_response.elapsed_time
-            }
-            print(f"[DEBUG] Captured response: status={response_data['status_code']}, size={response_data['size']}")
+            try:
+                response_data = {
+                    'status_code': self.current_response.status_code if hasattr(self.current_response, 'status_code') else 0,
+                    'headers': self.current_response.headers if hasattr(self.current_response, 'headers') else {},
+                    'text': self.current_response.text if hasattr(self.current_response, 'text') else '',
+                    'size': self.current_response.size if hasattr(self.current_response, 'size') else 0,
+                    'elapsed_time': self.current_response.elapsed_time if hasattr(self.current_response, 'elapsed_time') else 0
+                }
+            except AttributeError as e:
+                print(f"[ERROR] Could not capture response data: {e}")
+                response_data = None
+            if response_data:
+                print(f"[DEBUG] Captured response: status={response_data['status_code']}, size={response_data['size']}")
         
         # Capture test results if available
         test_results_data = None
@@ -1142,6 +1152,30 @@ class MainWindow(QMainWindow):
                 test_results_data = getattr(self, '_current_test_results', None)
                 if test_results_data:
                     print(f"[DEBUG] Captured test results: {test_results_data.get('summary', {})}")
+        
+        # Capture script content (pre-request and post-response scripts)
+        scripts_data = None
+        if hasattr(self, 'scripts_tab') and self.scripts_tab is not None:
+            scripts_data = {
+                'pre_request_script': self.scripts_tab.get_pre_request_script(),
+                'post_response_script': self.scripts_tab.get_post_response_script()
+            }
+            print(f"[DEBUG] Captured scripts: pre={len(scripts_data['pre_request_script'])} chars, post={len(scripts_data['post_response_script'])} chars")
+        
+        # Capture test assertions (from the Tests tab)
+        test_assertions_data = None
+        if hasattr(self, 'test_tab') and self.test_tab is not None:
+            test_assertions_data = self.test_tab.get_assertions()
+            print(f"[DEBUG] Captured test assertions: {len(test_assertions_data)} assertions")
+        
+        # Capture UI state: active tabs and view modes
+        ui_preferences = {
+            'active_inner_tab': self.inner_tabs.currentIndex() if hasattr(self, 'inner_tabs') else 0,
+            'active_response_tab': self.response_tabs.currentIndex() if hasattr(self, 'response_tabs') else 0,
+            'response_view_mode': 'pretty' if self.is_pretty_mode else 'raw',
+            'description_visible': self.description_input.isVisible() if hasattr(self, 'description_input') else False
+        }
+        print(f"[DEBUG] Captured UI preferences: inner_tab={ui_preferences['active_inner_tab']}, response_tab={ui_preferences['active_response_tab']}, view_mode={ui_preferences['response_view_mode']}")
         
         return {
             'request_id': self.current_request_id,
@@ -1156,8 +1190,11 @@ class MainWindow(QMainWindow):
             'description': self.description_input.toPlainText(),
             'request_name': self.current_request_name or 'Untitled',
             'has_changes': self.has_unsaved_changes,
-            'response': response_data,  # Add response data
-            'test_results': test_results_data  # Add test results data
+            'response': response_data,  # Response data
+            'test_results': test_results_data,  # Test results from execution
+            'scripts': scripts_data,  # Script content
+            'test_assertions': test_assertions_data,  # Test assertions (editor content)
+            'ui_preferences': ui_preferences  # UI state (active tabs, view modes)
         }
     
     def _restore_tab_state(self, state: Dict):
@@ -1200,11 +1237,64 @@ class MainWindow(QMainWindow):
             # Load description
             self.description_input.setPlainText(state.get('description', ''))
             
-            # Load test assertions from database (FIX: This was missing!)
-            if self.current_request_id:
+            # Load test assertions from saved state (if available) or database
+            test_assertions_data = state.get('test_assertions')
+            if test_assertions_data is not None:  # Check for None explicitly (empty list is valid)
+                print(f"[DEBUG] Restoring test assertions from tab state: {len(test_assertions_data)} assertions")
+                self.test_tab.load_assertions(test_assertions_data)
+                if self.current_request_id:
+                    self.test_tab.set_request_id(self.current_request_id)
+                else:
+                    self.test_tab.clear()
+            elif self.current_request_id:
+                # No saved test assertions, load from database
+                print(f"[DEBUG] Loading test assertions from database for request_id={self.current_request_id}")
                 self._load_test_assertions(self.current_request_id)
             else:
                 self.test_tab.clear()
+            
+            # Load scripts from saved state (if available)
+            scripts_data = state.get('scripts')
+            if scripts_data is not None:  # Check for None explicitly (empty dict is valid)
+                print(f"[DEBUG] Restoring scripts from tab state")
+                self.scripts_tab.load_scripts(
+                    scripts_data.get('pre_request_script', ''),
+                    scripts_data.get('post_response_script', '')
+                )
+            elif self.current_request_id:
+                # No saved script state, load from database
+                print(f"[DEBUG] Loading scripts from database for request_id={self.current_request_id}")
+                request = self.db.get_request(self.current_request_id)
+                if request:
+                    self.scripts_tab.load_scripts(
+                        request.get('pre_request_script', '') or '',
+                        request.get('post_response_script', '') or ''
+                    )
+            else:
+                # No request ID and no scripts - clear
+                self.scripts_tab.load_scripts('', '')
+            
+            # Always clear console when switching tabs
+            self.scripts_tab._clear_console()
+            
+            # Restore UI preferences (active tabs, view modes)
+            ui_preferences = state.get('ui_preferences', {})
+            if ui_preferences:
+                print(f"[DEBUG] Restoring UI preferences: {ui_preferences}")
+                
+                # Restore active inner tab (Params, Headers, Body, Tests, Scripts, etc.)
+                active_inner_tab = ui_preferences.get('active_inner_tab', 0)
+                if hasattr(self, 'inner_tabs') and 0 <= active_inner_tab < self.inner_tabs.count():
+                    self.inner_tabs.setCurrentIndex(active_inner_tab)
+                
+                # Restore description visibility
+                description_visible = ui_preferences.get('description_visible', False)
+                if hasattr(self, 'description_input'):
+                    self.description_input.setVisible(description_visible)
+                    if description_visible:
+                        self.description_toggle_btn.setText("▼ Description")
+                    else:
+                        self.description_toggle_btn.setText("▶ Description")
             
             # Clear response viewer for new requests (no response data yet)
             if state.get('is_new_request') or not self.current_request_id:
@@ -1233,6 +1323,30 @@ class MainWindow(QMainWindow):
         if response_data:
             print(f"[DEBUG] Restoring response: status={response_data.get('status_code')}, size={response_data.get('size')}")
             self._restore_response(response_data)
+            
+            # Restore response UI preferences (response tab and view mode)
+            if ui_preferences:
+                # Restore active response tab (Body, Headers, Extract Variables)
+                active_response_tab = ui_preferences.get('active_response_tab', 0)
+                if hasattr(self, 'response_tabs') and 0 <= active_response_tab < self.response_tabs.count():
+                    self.response_tabs.setCurrentIndex(active_response_tab)
+                
+                # Restore response view mode (Pretty/Raw)
+                response_view_mode = ui_preferences.get('response_view_mode', 'pretty')
+                if response_view_mode == 'pretty':
+                    self.is_pretty_mode = True
+                    if hasattr(self, 'pretty_raw_btn'):
+                        self.pretty_raw_btn.setChecked(True)
+                        self.pretty_raw_btn.setText("Pretty")
+                    if hasattr(self, 'response_body') and hasattr(self, 'current_response_pretty'):
+                        self.response_body.setPlainText(self.current_response_pretty)
+                else:
+                    self.is_pretty_mode = False
+                    if hasattr(self, 'pretty_raw_btn'):
+                        self.pretty_raw_btn.setChecked(False)
+                        self.pretty_raw_btn.setText("Raw")
+                    if hasattr(self, 'response_body') and hasattr(self, 'current_response_raw'):
+                        self.response_body.setPlainText(self.current_response_raw)
         else:
             print("[DEBUG] No response to restore")
             # Clear response viewer
@@ -1303,7 +1417,7 @@ class MainWindow(QMainWindow):
                 # Ensure request is visible in tree
                 self._ensure_request_visible_in_tree(tab_state['request_id'])
             else:
-                # Empty tab - clear editor
+                # Empty tab - clear editor (this also clears scripts and console)
                 print(f"[DEBUG] Clearing editor for empty tab {index}")
                 self._clear_request_editor()
                 # Update highlight for empty tab
@@ -1903,6 +2017,11 @@ class MainWindow(QMainWindow):
         self.test_tab = TestTabWidget()
         self.test_tab.assertions_changed.connect(self._on_tests_changed)
         self.inner_tabs.addTab(self.test_tab, "Tests")
+        
+        # Scripts tab
+        self.scripts_tab = ScriptTabWidget(theme=self.current_theme)
+        self.scripts_tab.scripts_changed.connect(self._mark_as_changed)
+        self.inner_tabs.addTab(self.scripts_tab, "Scripts")
         
         # Initialize tab counts
         self._update_tab_counts()
@@ -3463,6 +3582,13 @@ class MainWindow(QMainWindow):
             # Load test assertions
             self._load_test_assertions(request_id)
             
+            # Load scripts and clear console
+            pre_request_script = request.get('pre_request_script', '') or ''
+            post_response_script = request.get('post_response_script', '') or ''
+            self.scripts_tab.load_scripts(pre_request_script, post_response_script)
+            # Always clear console when loading a request
+            self.scripts_tab._clear_console()
+            
             # Clear test results
             self.test_results_viewer.clear()
             self._current_test_results = None  # Clear stored test results
@@ -3503,6 +3629,7 @@ class MainWindow(QMainWindow):
         self.method_combo.setCurrentText('GET')
         self.url_input.clear()
         self.test_tab.clear()
+        self.scripts_tab.clear_all()
         self.test_results_viewer.clear()
         self.params_table.clearContents()
         self.params_table.setRowCount(3)
@@ -3587,7 +3714,9 @@ class MainWindow(QMainWindow):
             'body': self.body_input.toPlainText(),
             'auth_type': self.auth_type_combo.currentText(),
             'auth_token': self.auth_token_input.text(),
-            'description': self.description_input.toPlainText()
+            'description': self.description_input.toPlainText(),
+            'pre_request_script': self.scripts_tab.get_pre_request_script(),
+            'post_response_script': self.scripts_tab.get_post_response_script()
         }
     
     def _mark_as_changed(self):
@@ -3810,7 +3939,9 @@ class MainWindow(QMainWindow):
                 body=self.body_input.toPlainText(),
                 auth_type=self.auth_type_combo.currentText(),
                 auth_token=self.auth_token_input.text(),
-                description=self.description_input.toPlainText()
+                description=self.description_input.toPlainText(),
+                pre_request_script=self.scripts_tab.get_pre_request_script(),
+                post_response_script=self.scripts_tab.get_post_response_script()
             )
             
             # Save test assertions
@@ -3931,7 +4062,9 @@ class MainWindow(QMainWindow):
                     body=self.body_input.toPlainText(),
                     auth_type=self.auth_type_combo.currentText(),
                     auth_token=self.auth_token_input.text(),
-                    description=self.description_input.toPlainText()
+                    description=self.description_input.toPlainText(),
+                    pre_request_script=self.scripts_tab.get_pre_request_script(),
+                    post_response_script=self.scripts_tab.get_post_response_script()
                 )
                 print(f"[DEBUG] Request created with ID: {request_id}")
                 
@@ -4268,6 +4401,99 @@ class MainWindow(QMainWindow):
                 print(f"  - {u}")
         print()
         
+        # ========== Execute Pre-request Script ==========
+        pre_request_script = self.scripts_tab.get_pre_request_script()
+        if pre_request_script:
+            self.scripts_tab.append_console_text(f"--- Pre-request script execution ---", "info")
+            try:
+                # Get current environment and collection variables
+                env_variables = self.env_manager.get_active_variables() if self.env_manager.has_active_environment() else {}
+                coll_variables = collection_variables if 'collection_variables' in locals() else {}
+                
+                # Execute pre-request script
+                script_result = self.script_engine.execute_pre_request_script(
+                    script=pre_request_script,
+                    url=url,
+                    method=method,
+                    headers=headers or {},
+                    body=body or "",
+                    params=params or {},
+                    environment=env_variables,
+                    collection_vars=coll_variables
+                )
+                
+                # Apply modifications from script
+                url = script_result['url']
+                method = script_result['method']
+                headers = script_result['headers']
+                body = script_result['body']
+                params = script_result['params']
+                
+                # Update environment and collection variables
+                if self.env_manager.has_active_environment():
+                    for key, value in script_result['environment'].items():
+                        if key not in env_variables or env_variables[key] != value:
+                            self.env_manager.set_variable(key, value)
+                
+                if self.current_collection_id:
+                    for key, value in script_result['collection_variables'].items():
+                        if key not in coll_variables or coll_variables[key] != value:
+                            # Update collection variable in database
+                            existing_vars = self.db.get_collection_variables_with_metadata(self.current_collection_id)
+                            var_exists = any(v['key'] == key for v in existing_vars)
+                            if var_exists:
+                                var_id = next(v['id'] for v in existing_vars if v['key'] == key)
+                                self.db.update_collection_variable(var_id, value=value)
+                            else:
+                                self.db.create_collection_variable(self.current_collection_id, key, value)
+                
+                # Display console logs
+                self.scripts_tab.append_console_output(script_result['console_logs'])
+                
+                exec_time = script_result.get('execution_time_ms', 0)
+                self.scripts_tab.append_console_text(f"✓ Pre-request script completed in {exec_time}ms", "info")
+                
+                # Update method combo if changed
+                if method != self.method_combo.currentText():
+                    self.method_combo.setCurrentText(method)
+                
+            except ScriptTimeoutError as e:
+                self.scripts_tab.append_console_text(f"⏱️ {str(e)}", "error")
+                self.toast.error("Pre-request script timed out!")
+                self.send_btn.setEnabled(True)
+                self.send_btn.setText("Send")
+                self._reset_send_button()
+                return
+            except ScriptExecutionError as e:
+                self.scripts_tab.append_console_text(f"❌ {str(e)}", "error")
+                self.toast.error(f"Pre-request script failed: {str(e)[:50]}...")
+                self.send_btn.setEnabled(True)
+                self.send_btn.setText("Send")
+                self._reset_send_button()
+                return
+            except AttributeError as e:
+                error_msg = f"Internal error: {str(e)}"
+                self.scripts_tab.append_console_text(f"❌ {error_msg}", "error")
+                self.toast.error(f"Pre-request script failed: {str(e)[:50]}...")
+                print(f"[ERROR] Pre-request script AttributeError: {e}")
+                import traceback
+                traceback.print_exc()
+                self.send_btn.setEnabled(True)
+                self.send_btn.setText("Send")
+                self._reset_send_button()
+                return
+            except Exception as e:
+                error_msg = f"Unexpected error: {str(e)}"
+                self.scripts_tab.append_console_text(f"❌ {error_msg}", "error")
+                self.toast.error(f"Pre-request script failed: {str(e)[:50]}...")
+                print(f"[ERROR] Pre-request script unexpected error: {e}")
+                import traceback
+                traceback.print_exc()
+                self.send_btn.setEnabled(True)
+                self.send_btn.setText("Send")
+                self._reset_send_button()
+                return
+        
         # Create and start request thread
         self.request_thread = RequestThread(
             self.api_client, method, url, params, headers, body, auth_type, auth_token
@@ -4295,8 +4521,13 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(1500, lambda: self._reset_send_button())
         
         # Show success toast with status code
-        status_code = response.status_code
-        time_ms = int(response.elapsed_time * 1000)
+        try:
+            status_code = response.status_code if hasattr(response, 'status_code') else response.response.status_code
+            elapsed_time = response.elapsed_time if hasattr(response, 'elapsed_time') else 0
+            time_ms = int(elapsed_time * 1000)
+        except AttributeError:
+            status_code = 0
+            time_ms = 0
         
         if 200 <= status_code < 300:
             self.toast.success(f"{status_code} OK • {time_ms}ms")
@@ -4309,6 +4540,95 @@ class MainWindow(QMainWindow):
         
         # Display response
         self._display_response(response)
+        
+        # ========== Execute Post-response Script ==========
+        post_response_script = self.scripts_tab.get_post_response_script()
+        if post_response_script:
+            self.scripts_tab.append_console_text(f"--- Post-response script execution ---", "info")
+            try:
+                # Get current environment and collection variables
+                env_variables = self.env_manager.get_active_variables() if self.env_manager.has_active_environment() else {}
+                collection_variables = {}
+                if self.current_collection_id:
+                    collection_variables = self.db.get_collection_variables(self.current_collection_id)
+                
+                # Safely get response data with fallbacks
+                try:
+                    response_body = response.text if hasattr(response, 'text') else str(response.response.text)
+                    response_headers = dict(response.headers) if hasattr(response, 'headers') else dict(response.response.headers)
+                    response_status = response.status_code if hasattr(response, 'status_code') else response.response.status_code
+                    response_time = response.elapsed_time * 1000 if hasattr(response, 'elapsed_time') else 0
+                except Exception as attr_error:
+                    self.scripts_tab.append_console_text(f"⚠️ Warning: Could not access response data: {str(attr_error)}", "warning")
+                    response_body = ""
+                    response_headers = {}
+                    response_status = 0
+                    response_time = 0
+                
+                # Execute post-response script
+                script_result = self.script_engine.execute_post_response_script(
+                    script=post_response_script,
+                    response_status=response_status,
+                    response_headers=response_headers,
+                    response_body=response_body,
+                    response_time_ms=response_time,
+                    environment=env_variables,
+                    collection_vars=collection_variables
+                )
+                
+                # Update environment variables
+                if self.env_manager.has_active_environment():
+                    for key, value in script_result['environment'].items():
+                        if key not in env_variables or env_variables[key] != value:
+                            self.env_manager.set_variable(key, value)
+                
+                # Update collection variables
+                if self.current_collection_id:
+                    for key, value in script_result['collection_variables'].items():
+                        if key not in collection_variables or collection_variables[key] != value:
+                            existing_vars = self.db.get_collection_variables_with_metadata(self.current_collection_id)
+                            var_exists = any(v['key'] == key for v in existing_vars)
+                            if var_exists:
+                                var_id = next(v['id'] for v in existing_vars if v['key'] == key)
+                                self.db.update_collection_variable(var_id, value=value)
+                            else:
+                                self.db.create_collection_variable(self.current_collection_id, key, value)
+                
+                # Display console logs
+                self.scripts_tab.append_console_output(script_result['console_logs'])
+                
+                # Display test results from pm.test() calls
+                if script_result['test_results']:
+                    self.scripts_tab.append_console_text(f"\n--- Script Tests ---", "info")
+                    for test in script_result['test_results']:
+                        if test['passed']:
+                            self.scripts_tab.append_console_text(f"  ✓ {test['name']}", "info")
+                        else:
+                            self.scripts_tab.append_console_text(f"  ✗ {test['name']}: {test['error']}", "error")
+                
+                exec_time = script_result.get('execution_time_ms', 0)
+                self.scripts_tab.append_console_text(f"✓ Post-response script completed in {exec_time}ms", "info")
+                
+            except ScriptTimeoutError as e:
+                self.scripts_tab.append_console_text(f"⏱️ {str(e)}", "error")
+                self.toast.warning("Post-response script timed out!")
+            except ScriptExecutionError as e:
+                self.scripts_tab.append_console_text(f"❌ {str(e)}", "error")
+                self.toast.warning(f"Post-response script error: {str(e)[:50]}...")
+            except AttributeError as e:
+                error_msg = f"Internal error: {str(e)}"
+                self.scripts_tab.append_console_text(f"❌ {error_msg}", "error")
+                self.toast.error(f"Script execution failed: {str(e)[:50]}...")
+                print(f"[ERROR] Post-response script AttributeError: {e}")
+                import traceback
+                traceback.print_exc()
+            except Exception as e:
+                error_msg = f"Unexpected error: {str(e)}"
+                self.scripts_tab.append_console_text(f"❌ {error_msg}", "error")
+                self.toast.error(f"Script execution failed: {str(e)[:50]}...")
+                print(f"[ERROR] Post-response script unexpected error: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Execute tests
         self._execute_tests_on_response(response)
@@ -4509,14 +4829,25 @@ class MainWindow(QMainWindow):
         """Display the HTTP response in the response viewer."""
         # Store response for later use (Raw/Pretty toggle)
         self.current_response = response
-        self.current_response_raw = response.text
+        try:
+            self.current_response_raw = response.text if hasattr(response, 'text') else str(response.response.text)
+        except AttributeError:
+            self.current_response_raw = ""
         
         # Update status badge with professional styling
-        self.status_badge.set_status(response.status_code)
+        try:
+            status_code = response.status_code if hasattr(response, 'status_code') else response.response.status_code
+            self.status_badge.set_status(status_code)
+        except AttributeError:
+            self.status_badge.set_status(0)
         self.status_badge.setVisible(True)
         
         # Determine status color and icon based on status code
-        status_code = response.status_code
+        try:
+            status_code = response.status_code if hasattr(response, 'status_code') else response.response.status_code
+        except AttributeError:
+            status_code = 0
+        
         if 200 <= status_code < 300:
             color = "#4CAF50"  # Green for success
             icon = "✓"
@@ -4542,7 +4873,11 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"{status_text}")
         self.status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 13px;")
         
-        self.time_label.setText(f"⏱ {response.elapsed_time:.2f}s")
+        try:
+            elapsed_time = response.elapsed_time if hasattr(response, 'elapsed_time') else 0
+            self.time_label.setText(f"⏱ {elapsed_time:.2f}s")
+        except AttributeError:
+            self.time_label.setText(f"⏱ 0.00s")
         self.time_label.setStyleSheet("font-weight: bold;")
         
         # Display size with warning for large responses
@@ -4556,18 +4891,29 @@ class MainWindow(QMainWindow):
             self.size_label.setStyleSheet("font-weight: bold;")
         
         # Determine content type
-        content_type = response.headers.get('content-type', response.headers.get('Content-Type', ''))
+        try:
+            headers = response.headers if hasattr(response, 'headers') else response.response.headers
+            content_type = headers.get('content-type', headers.get('Content-Type', ''))
+        except AttributeError:
+            content_type = ''
         
         # Display response body with formatting
         is_json = False
         try:
             # Try to parse and pretty-print JSON
-            json_data = json.loads(response.text)
+            try:
+                response_text = response.text if hasattr(response, 'text') else str(response.response.text)
+            except AttributeError:
+                response_text = ""
+            json_data = json.loads(response_text)
             self.current_response_pretty = json.dumps(json_data, indent=2)
             is_json = True
         except (json.JSONDecodeError, ValueError):
             # Not JSON, use raw text
-            self.current_response_pretty = response.text
+            try:
+                self.current_response_pretty = response.text if hasattr(response, 'text') else str(response.response.text)
+            except AttributeError:
+                self.current_response_pretty = ""
         
         # Display based on current mode (Pretty/Raw)
         if self.is_pretty_mode:
@@ -4586,8 +4932,13 @@ class MainWindow(QMainWindow):
             apply_syntax_highlighting(self.response_body, content_type, dark_mode)
         
         # Display response headers
-        self.response_headers_table.setRowCount(len(response.headers))
-        for i, (key, value) in enumerate(response.headers.items()):
+        try:
+            headers = response.headers if hasattr(response, 'headers') else response.response.headers
+        except AttributeError:
+            headers = {}
+        
+        self.response_headers_table.setRowCount(len(headers))
+        for i, (key, value) in enumerate(headers.items()):
             self.response_headers_table.setItem(i, 0, QTableWidgetItem(key))
             self.response_headers_table.setItem(i, 1, QTableWidgetItem(str(value)))
         
@@ -4944,6 +5295,7 @@ class MainWindow(QMainWindow):
             self.request_tabs.update()
         
         # Store tab state - no request_id means it's unsaved
+        # Include ALL fields to ensure proper clearing when switching to this tab
         self.tab_states[tab_index] = {
             'request_id': None,  # None indicates unsaved request
             'has_changes': True,  # Always has changes until first save
@@ -4962,7 +5314,20 @@ class MainWindow(QMainWindow):
                 'auth_token': '',
                 'description': '',
                 'has_changes': True,
-                'is_new_request': True  # Flag to show "Creating New Request" header
+                'is_new_request': True,  # Flag to show "Creating New Request" header
+                'response': None,  # No response yet
+                'test_results': None,  # No test results yet
+                'scripts': {  # Empty scripts
+                    'pre_request_script': '',
+                    'post_response_script': ''
+                },
+                'test_assertions': [],  # No test assertions
+                'ui_preferences': {  # Default UI preferences
+                    'active_inner_tab': 0,
+                    'active_response_tab': 0,
+                    'response_view_mode': 'pretty',
+                    'description_visible': False
+                }
             }
         }
         
@@ -5671,11 +6036,19 @@ class MainWindow(QMainWindow):
             response_size = None
             
             if response:
-                response_status = response.status_code
-                response_headers = response.headers
-                response_body = response.text
-                response_time = response.elapsed_time
-                response_size = response.size
+                try:
+                    response_status = response.status_code if hasattr(response, 'status_code') else response.response.status_code
+                    response_headers = response.headers if hasattr(response, 'headers') else response.response.headers
+                    response_body = response.text if hasattr(response, 'text') else str(response.response.text)
+                    response_time = response.elapsed_time if hasattr(response, 'elapsed_time') else 0
+                    response_size = response.size if hasattr(response, 'size') else 0
+                except AttributeError as e:
+                    print(f"[ERROR] Could not extract response data for history: {e}")
+                    response_status = 0
+                    response_headers = {}
+                    response_body = ""
+                    response_time = 0
+                    response_size = 0
             
             # Save to database
             self.db.save_request_history(
@@ -6701,6 +7074,10 @@ class MainWindow(QMainWindow):
                 self.url_input.set_theme(new_theme)
             if hasattr(self, 'body_highlighter'):
                 self.body_highlighter.set_theme(new_theme)
+            
+            # Update script tab editors
+            if hasattr(self, 'scripts_tab'):
+                self.scripts_tab.set_theme(new_theme)
             
             # Update table delegates
             for table in [self.params_table, self.headers_table]:

@@ -2,7 +2,7 @@
 ; This script creates a Windows installer for the PostMini application
 
 #define MyAppName "PostMini"
-#define MyAppVersion "1.8.0"
+#define MyAppVersion "1.8.1"
 #define MyAppPublisher "PostMini"
 #define MyAppURL "https://github.com/yourusername/postmini"
 #define MyAppExeName "PostMini.exe"
@@ -61,11 +61,11 @@ begin
   WelcomeLabel := TNewStaticText.Create(WizardForm);
   WelcomeLabel.Parent := WizardForm.WelcomePage;
   WelcomeLabel.Caption := 
-    'PostMini v1.7.0 - Professional API Testing Tool' + #13#10 + #13#10 +
-    'NEW in v1.7.0:' + #13#10 +
-    '  • Request Chaining - Extract variables from responses' + #13#10 +
-    '  • Advanced Test Reporting - Export HTML, JUnit, JSON, CSV' + #13#10 +
-    '  • Improved UX - Better table editing & tab management' + #13#10 + #13#10 +
+    'PostMini v1.8.1 - Professional API Testing Tool' + #13#10 + #13#10 +
+    'NEW in v1.8.1:' + #13#10 +
+    '  • Fixed Scripts tab dark theme colors' + #13#10 +
+    '  • Code editors now properly match dark theme' + #13#10 +
+    '  • Improved theme consistency across all UI elements' + #13#10 + #13#10 +
     'Your data will be stored locally in:' + #13#10 +
     ExpandConstant('{userappdata}\PostMini') + #13#10 + #13#10 +
     'This ensures your collections and settings are preserved across updates.';

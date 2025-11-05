@@ -7,6 +7,163 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.1] - 2025-11-05
+
+### 🐛 Bug Fixes
+
+#### Scripts Tab Dark Theme Colors Fixed
+- **Fixed script editor colors** to properly match dark theme
+  - Background: Changed from light to dark (`#252526`)
+  - Text color: Updated to match primary text (`#E0E0E0`)
+  - Border: Updated to match dark theme borders (`#2D2D2D`)
+  - Selection: Updated to match dark theme selection (`#3A79D0`)
+- **Fixed console output styling** to match dark theme consistently
+- **Added theme update on startup** to apply saved theme preference to script editors
+- **Added theme update on toggle** to immediately update script editors when changing themes
+
+#### Technical Changes
+- Modified `src/ui/widgets/code_editor.py` - Updated `_apply_theme()` with correct colors
+- Modified `src/ui/widgets/script_tab_widget.py` - Updated console styling
+- Modified `src/ui/main_window.py` - Added script tab theme update call in `_toggle_theme()`
+- Modified `main.py` - Added theme update after window initialization
+
+### 🎨 Improvements
+- **Perfect theme consistency** across all UI elements
+- **Professional appearance** with proper color matching
+- **Instant theme updates** when toggling between light and dark modes
+
+---
+
+## [1.9.0] - 2025-11-05 (Planned)
+
+### ✨ JavaScript Scripting - Pre & Post Request Scripts (MAJOR FEATURE)
+
+#### Pre-request Scripts
+- **Execute JavaScript before sending requests**
+  - Modify request URL, method, headers, body, and parameters dynamically
+  - Set environment and collection variables programmatically
+  - Generate dynamic authentication signatures (HMAC, OAuth, etc.)
+  - Implement complex conditional logic
+  - Calculate timestamps, UUIDs, and other dynamic values
+
+#### Post-response Scripts
+- **Execute JavaScript after receiving responses**
+  - Extract data from JSON responses automatically
+  - Save tokens, IDs, and other values to variables
+  - Run custom test assertions with `pm.test()`
+  - Chain requests by extracting and storing response data
+  - Implement complex validation logic beyond built-in tests
+
+#### Postman-Compatible API
+- **Full `pm` object support** for seamless migration from Postman
+  - `pm.environment.get/set()` - Environment variable management
+  - `pm.collectionVariables.get/set()` - Collection variable management
+  - `pm.globals.get/set()` - Global variable management
+  - `pm.request.url`, `pm.request.headers`, `pm.request.method` - Request modification
+  - `pm.response.code`, `pm.response.json()`, `pm.response.text()` - Response access
+  - `pm.test()` - Write custom test assertions
+  - `pm.expect()` - Chai-style assertions
+  - `console.log/info/warn/error()` - Debugging output
+
+#### Professional Script Editor
+- **Syntax-highlighted JavaScript editor**
+  - Line numbers for easy reference
+  - Auto-indentation and smart formatting
+  - Monospace font (JetBrains Mono/Consolas)
+  - Dark and light theme support
+  - Separate editors for pre-request and post-response scripts
+
+#### Script Snippets Library
+- **20+ pre-built script examples** for common tasks
+  - Pre-request: Set Timestamp, Generate UUID, HMAC Signature, Basic Auth, etc.
+  - Post-response: Extract Token, Parse JSON, Status Tests, Header Validation, etc.
+  - Quick insertion via dropdown menu
+  - Learn by example - all snippets are documented
+
+#### Console Output Panel
+- **Real-time script execution feedback**
+  - Color-coded log levels (info/warning/error)
+  - Execution time display
+  - Collapsible panel for space efficiency
+  - Clear console button
+  - Shows script errors with line numbers
+
+#### Secure Execution
+- **Sandboxed JavaScript environment using V8 engine (PyMiniRacer)**
+  - 5-second timeout protection
+  - 50MB memory limit
+  - Isolated execution context
+  - No file system or network access (except via pm.sendRequest in future)
+
+#### Database Integration
+- **Scripts persist with requests**
+  - Saved in SQLite database
+  - Automatic migration for existing databases
+  - Export/import support (scripts included in collections)
+
+### 🛠️ Technical Implementation
+
+#### New Files
+- `src/features/script_engine.py` - JavaScript execution engine (~400 lines)
+- `src/ui/widgets/code_editor.py` - Syntax-highlighted editor (~350 lines)
+- `src/ui/widgets/script_tab_widget.py` - Scripts tab UI (~450 lines)
+- `src/features/script_snippets.py` - Pre-built examples (~350 lines)
+- `tests/test_scripting.py` - Comprehensive test suite (~350 lines)
+
+#### Modified Files
+- `src/core/database.py` - Added `pre_request_script` and `post_response_script` columns
+- `src/ui/main_window.py` - Integrated Scripts tab and execution flow
+- `requirements.txt` - Added `py-mini-racer>=0.8.0` dependency
+
+### 📊 Use Cases Unlocked
+
+#### Authentication Workflows
+```javascript
+// Pre-request: Generate OAuth signature
+const timestamp = Date.now();
+pm.environment.set("timestamp", timestamp);
+const signature = generateHMAC(timestamp, secret);
+pm.request.headers.add({key: "X-Signature", value: signature});
+```
+
+#### Request Chaining
+```javascript
+// Post-response: Extract token for next request
+const token = pm.response.json().access_token;
+pm.environment.set("authToken", token);
+console.log("Token saved for next request");
+```
+
+#### Advanced Testing
+```javascript
+// Post-response: Custom validation
+pm.test("Response time is acceptable", function() {
+    pm.expect(pm.response.responseTime).to.be.below(500);
+});
+
+pm.test("Has valid user data", function() {
+    const data = pm.response.json();
+    pm.expect(data.user).to.have.property("id");
+    pm.expect(data.user.email).to.include("@");
+});
+```
+
+### 🎯 Competitive Advantages
+- ✅ **Postman script compatibility** - Copy-paste existing scripts
+- ✅ **Full-featured scripting** - Pre & post request support
+- ✅ **Modern UI** - Syntax highlighting and code editor
+- ✅ **Script snippets** - Learn by example
+- ✅ **Secure execution** - V8 sandbox with timeouts
+- ✅ **Zero-config** - Works out of the box
+
+### 📈 Impact
+- **Power users can now migrate from Postman** with their existing scripts
+- **Complex API workflows** now fully supported
+- **Professional-grade testing** with custom assertions
+- **Request chaining** for multi-step API interactions
+
+---
+
 ## [1.8.0] - 2025-11-04
 
 ### 🎨 Major UI Reorganization

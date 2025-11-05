@@ -72,7 +72,9 @@ class CollectionExporter:
                 "headers": request.get('headers'),
                 "body": request.get('body'),
                 "auth_type": request.get('auth_type', 'None'),
-                "auth_token": request.get('auth_token')
+                "auth_token": request.get('auth_token'),
+                "pre_request_script": request.get('pre_request_script'),
+                "post_response_script": request.get('post_response_script')
             }
             export_data["collection"]["requests"].append(request_data)
         
@@ -265,7 +267,9 @@ class CollectionImporter:
                     headers=request_data.get("headers"),
                     body=request_data.get("body"),
                     auth_type=request_data.get("auth_type", "None"),
-                    auth_token=request_data.get("auth_token")
+                    auth_token=request_data.get("auth_token"),
+                    pre_request_script=request_data.get("pre_request_script"),
+                    post_response_script=request_data.get("post_response_script")
                 )
                 requests_imported += 1
             

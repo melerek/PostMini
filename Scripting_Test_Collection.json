@@ -1,0 +1,173 @@
+{
+  "export_version": "1.0",
+  "export_date": "2025-11-05T12:00:00",
+  "collection": {
+    "name": "JavaScript Scripting Tests",
+    "description": "Comprehensive test collection for pre-request and post-response scripts",
+    "requests": [
+      {
+        "name": "1. Basic Pre-request Script",
+        "method": "GET",
+        "url": "https://httpbin.org/get",
+        "description": "Tests basic pre-request script that sets variables and modifies headers",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "// Set timestamp variable\nconst timestamp = Date.now();\npm.environment.set(\"requestTimestamp\", timestamp.toString());\n\n// Add custom header\npm.request.headers.add({\n    key: \"X-Request-Time\",\n    value: new Date().toISOString()\n});\n\npm.request.headers.add({\n    key: \"X-Request-ID\",\n    value: \"test-\" + Math.random().toString(36).substring(7)\n});\n\nconsole.log(\"Pre-request script executed at: \" + new Date().toISOString());\nconsole.log(\"Timestamp: \" + timestamp);",
+        "post_response_script": ""
+      },
+      {
+        "name": "2. Extract JSON Data",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/users/1",
+        "description": "Extracts user data from JSON response and saves to variables",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "",
+        "post_response_script": "// Parse JSON response\nconst user = pm.response.json();\n\n// Extract and save user data\npm.environment.set(\"userId\", user.id.toString());\npm.environment.set(\"userName\", user.name);\npm.environment.set(\"userEmail\", user.email);\npm.collectionVariables.set(\"lastUserFetched\", user.username);\n\nconsole.log(\"Extracted user data:\");\nconsole.log(\"- ID: \" + user.id);\nconsole.log(\"- Name: \" + user.name);\nconsole.log(\"- Email: \" + user.email);\n\n// Run tests\npm.test(\"Status code is 200\", function() {\n    pm.expect(pm.response.code).to.equal(200);\n});\n\npm.test(\"User has valid email\", function() {\n    pm.expect(user.email).to.include(\"@\");\n});\n\npm.test(\"Response has required fields\", function() {\n    pm.expect(user).to.have.property(\"id\");\n    pm.expect(user).to.have.property(\"name\");\n    pm.expect(user).to.have.property(\"email\");\n});"
+      },
+      {
+        "name": "3. POST with Pre-request Body Generation",
+        "method": "POST",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "description": "Generates dynamic POST body with timestamp and random data",
+        "params": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "// Generate random post data\nconst randomId = Math.floor(Math.random() * 1000);\nconst timestamp = Date.now();\n\n// Create dynamic body\nconst postData = {\n    title: \"Test Post \" + randomId,\n    body: \"This post was created at \" + new Date().toISOString(),\n    userId: 1,\n    timestamp: timestamp\n};\n\n// Set the request body\npm.request.body.raw = JSON.stringify(postData);\n\n// Store values for verification\npm.environment.set(\"lastPostTitle\", postData.title);\npm.environment.set(\"lastPostTimestamp\", timestamp.toString());\n\nconsole.log(\"Generated POST data:\");\nconsole.log(JSON.stringify(postData, null, 2));",
+        "post_response_script": "// Verify the post was created\nconst response = pm.response.json();\n\nconsole.log(\"Post created with ID: \" + response.id);\npm.environment.set(\"createdPostId\", response.id.toString());\n\npm.test(\"Post was created (status 201)\", function() {\n    pm.expect(pm.response.code).to.equal(201);\n});\n\npm.test(\"Response has ID\", function() {\n    pm.expect(response).to.have.property(\"id\");\n});\n\npm.test(\"Title matches\", function() {\n    const expectedTitle = pm.environment.get(\"lastPostTitle\");\n    pm.expect(response.title).to.equal(expectedTitle);\n});"
+      },
+      {
+        "name": "4. Request Chaining - Use Extracted Variable",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/users/{{userId}}",
+        "description": "Uses userId extracted from request #2 (demonstrates request chaining)",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "// Verify we have the userId from previous request\nconst userId = pm.environment.get(\"userId\");\n\nif (!userId) {\n    console.error(\"ERROR: userId not found! Run request #2 first.\");\n} else {\n    console.log(\"Using userId from previous request: \" + userId);\n    // URL will be substituted by environment variable\n}",
+        "post_response_script": "const user = pm.response.json();\n\npm.test(\"Successfully chained request\", function() {\n    pm.expect(pm.response.code).to.equal(200);\n});\n\npm.test(\"User ID matches\", function() {\n    const expectedId = parseInt(pm.environment.get(\"userId\"));\n    pm.expect(user.id).to.equal(expectedId);\n});\n\nconsole.log(\"✓ Request chaining successful!\");\nconsole.log(\"Fetched user: \" + user.name);"
+      },
+      {
+        "name": "5. Response Time & Size Tests",
+        "method": "GET",
+        "url": "https://httpbin.org/delay/1",
+        "description": "Tests response time and implements timeout logic",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "// Store request start time\npm.environment.set(\"requestStartTime\", Date.now().toString());\nconsole.log(\"Request started at: \" + new Date().toISOString());",
+        "post_response_script": "// Calculate total time\nconst startTime = parseInt(pm.environment.get(\"requestStartTime\"));\nconst endTime = Date.now();\nconst totalTime = endTime - startTime;\n\nconsole.log(\"Response time: \" + pm.response.responseTime + \"ms\");\nconsole.log(\"Total time: \" + totalTime + \"ms\");\n\npm.test(\"Response time is acceptable\", function() {\n    pm.expect(pm.response.responseTime).to.be.below(2000);\n});\n\npm.test(\"Response received within 5 seconds\", function() {\n    pm.expect(totalTime).to.be.below(5000);\n});\n\nif (pm.response.responseTime > 1500) {\n    console.warn(\"⚠️ Slow response: \" + pm.response.responseTime + \"ms\");\n} else {\n    console.log(\"✓ Fast response: \" + pm.response.responseTime + \"ms\");\n}"
+      },
+      {
+        "name": "6. Header Validation",
+        "method": "GET",
+        "url": "https://httpbin.org/headers",
+        "description": "Validates response headers and extracts header data",
+        "params": {},
+        "headers": {
+          "X-Test-Header": "test-value-123",
+          "X-Custom-ID": "abc-def-ghi"
+        },
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "console.log(\"Adding custom headers for validation...\");",
+        "post_response_script": "// Validate headers\npm.test(\"Content-Type is JSON\", function() {\n    const contentType = pm.response.headers.get(\"Content-Type\");\n    pm.expect(contentType).to.include(\"application/json\");\n});\n\npm.test(\"Has CORS headers\", function() {\n    const corsHeader = pm.response.headers.get(\"Access-Control-Allow-Origin\");\n    pm.expect(corsHeader).to.not.be.undefined;\n});\n\n// Extract and display all headers\nconst headers = pm.response.headers.toObject();\nconsole.log(\"Response headers:\");\nfor (const [key, value] of Object.entries(headers)) {\n    console.log(\"  \" + key + \": \" + value);\n}\n\n// Check if our custom headers were sent\nconst responseBody = pm.response.json();\nif (responseBody.headers && responseBody.headers[\"X-Test-Header\"]) {\n    console.log(\"✓ Custom header received: \" + responseBody.headers[\"X-Test-Header\"]);\n}"
+      },
+      {
+        "name": "7. Error Handling",
+        "method": "GET",
+        "url": "https://httpbin.org/status/404",
+        "description": "Demonstrates error handling in post-response scripts",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "console.log(\"Testing error handling...\");",
+        "post_response_script": "// Handle different status codes\nif (pm.response.code >= 400) {\n    console.error(\"❌ Request failed with status: \" + pm.response.code);\n    pm.environment.set(\"lastError\", pm.response.status);\n    \n    pm.test(\"Expected 404 error\", function() {\n        pm.expect(pm.response.code).to.equal(404);\n    });\n} else {\n    console.log(\"✓ Request successful\");\n    pm.environment.set(\"lastError\", \"none\");\n}\n\n// Test the error status\npm.test(\"Status is Not Found\", function() {\n    pm.expect(pm.response.status).to.equal(\"NOT FOUND\");\n});\n\nconsole.log(\"Error handling complete.\");"
+      },
+      {
+        "name": "8. Array Data Processing",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/users",
+        "description": "Processes array responses and extracts multiple items",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "console.log(\"Fetching user list...\");",
+        "post_response_script": "// Parse array response\nconst users = pm.response.json();\n\npm.test(\"Response is an array\", function() {\n    pm.expect(users).to.be.a(\"array\");\n});\n\npm.test(\"Array is not empty\", function() {\n    pm.expect(users.length).to.be.above(0);\n});\n\npm.test(\"Has at least 5 users\", function() {\n    pm.expect(users.length).to.be.at.least(5);\n});\n\n// Extract data from array\nconsole.log(\"Total users: \" + users.length);\n\n// Save first 3 user names\nconst userNames = users.slice(0, 3).map(u => u.name);\npm.environment.set(\"topUserNames\", JSON.stringify(userNames));\n\nconsole.log(\"Top 3 users:\");\nuserNames.forEach((name, index) => {\n    console.log(\"  \" + (index + 1) + \". \" + name);\n});\n\n// Count users by domain\nconst domains = {};\nusers.forEach(user => {\n    const domain = user.email.split(\"@\")[1];\n    domains[domain] = (domains[domain] || 0) + 1;\n});\n\nconsole.log(\"\\nUsers by domain:\");\nfor (const [domain, count] of Object.entries(domains)) {\n    console.log(\"  \" + domain + \": \" + count);\n}"
+      },
+      {
+        "name": "9. UUID Generation",
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "description": "Generates UUID and timestamp for request tracking",
+        "params": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "// Generate UUID\nfunction generateUUID() {\n    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n        const r = Math.random() * 16 | 0;\n        const v = c === 'x' ? r : (r & 0x3 | 0x8);\n        return v.toString(16);\n    });\n}\n\nconst requestId = generateUUID();\nconst timestamp = Date.now();\n\n// Add to headers\npm.request.headers.add({key: \"X-Request-ID\", value: requestId});\npm.request.headers.add({key: \"X-Timestamp\", value: timestamp.toString()});\n\n// Create body\nconst requestData = {\n    requestId: requestId,\n    timestamp: timestamp,\n    message: \"Test request with UUID\"\n};\n\npm.request.body.raw = JSON.stringify(requestData);\n\npm.environment.set(\"lastRequestId\", requestId);\n\nconsole.log(\"Generated Request ID: \" + requestId);\nconsole.log(\"Timestamp: \" + new Date(timestamp).toISOString());",
+        "post_response_script": "const response = pm.response.json();\n\npm.test(\"Request ID was sent\", function() {\n    pm.expect(response.headers[\"X-Request-Id\"]).to.not.be.undefined;\n});\n\npm.test(\"Body was received\", function() {\n    pm.expect(response.json).to.have.property(\"requestId\");\n});\n\nconsole.log(\"✓ UUID request tracking successful\");"
+      },
+      {
+        "name": "10. Authentication Simulation",
+        "method": "GET",
+        "url": "https://httpbin.org/bearer",
+        "description": "Simulates token-based authentication",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "// Simulate getting a token (in real scenario, this would come from login)\nlet token = pm.environment.get(\"authToken\");\n\nif (!token) {\n    // Generate fake token for demo\n    token = \"demo_token_\" + Math.random().toString(36).substring(7);\n    pm.environment.set(\"authToken\", token);\n    console.log(\"Generated new auth token: \" + token);\n} else {\n    console.log(\"Using existing auth token: \" + token);\n}\n\n// Add Bearer token to Authorization header\npm.request.headers.upsert({\n    key: \"Authorization\",\n    value: \"Bearer \" + token\n});\n\nconsole.log(\"✓ Authorization header added\");",
+        "post_response_script": "pm.test(\"Authentication successful\", function() {\n    pm.expect(pm.response.code).to.equal(200);\n});\n\nconst response = pm.response.json();\nif (response.authenticated) {\n    console.log(\"✓ Successfully authenticated\");\n    console.log(\"Token: \" + response.token);\n} else {\n    console.error(\"❌ Authentication failed\");\n}\n\npm.test(\"Response confirms authentication\", function() {\n    pm.expect(response).to.have.property(\"authenticated\");\n    pm.expect(response.authenticated).to.be.true;\n});"
+      },
+      {
+        "name": "11. Conditional Logic",
+        "method": "GET",
+        "url": "https://httpbin.org/get",
+        "description": "Demonstrates conditional logic based on environment",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "// Conditional logic based on environment\nconst environment = pm.environment.get(\"environment\") || \"development\";\n\nif (environment === \"production\") {\n    pm.request.headers.add({key: \"X-Environment\", value: \"prod\"});\n    pm.request.headers.add({key: \"X-Priority\", value: \"high\"});\n    console.log(\"🔴 Running in PRODUCTION mode\");\n} else if (environment === \"staging\") {\n    pm.request.headers.add({key: \"X-Environment\", value: \"staging\"});\n    pm.request.headers.add({key: \"X-Priority\", value: \"medium\"});\n    console.log(\"🟡 Running in STAGING mode\");\n} else {\n    pm.request.headers.add({key: \"X-Environment\", value: \"dev\"});\n    pm.request.headers.add({key: \"X-Priority\", value: \"low\"});\n    console.log(\"🟢 Running in DEVELOPMENT mode\");\n}\n\n// Add debug flag for non-production\nif (environment !== \"production\") {\n    pm.request.headers.add({key: \"X-Debug\", value: \"true\"});\n}",
+        "post_response_script": "console.log(\"Request completed in \" + pm.response.responseTime + \"ms\");\n\npm.test(\"Request successful\", function() {\n    pm.expect(pm.response.code).to.equal(200);\n});"
+      },
+      {
+        "name": "12. Complex JSON Path Extraction",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/users/1",
+        "description": "Extracts nested data from complex JSON structures",
+        "params": {},
+        "headers": {},
+        "body": "",
+        "auth_type": "None",
+        "auth_token": "",
+        "pre_request_script": "console.log(\"Fetching user with nested data...\");",
+        "post_response_script": "const user = pm.response.json();\n\n// Extract nested address data\nif (user.address) {\n    const address = user.address;\n    pm.environment.set(\"userStreet\", address.street || \"\");\n    pm.environment.set(\"userCity\", address.city || \"\");\n    pm.environment.set(\"userZipcode\", address.zipcode || \"\");\n    \n    // Extract geo coordinates\n    if (address.geo) {\n        pm.environment.set(\"userLat\", address.geo.lat || \"\");\n        pm.environment.set(\"userLng\", address.geo.lng || \"\");\n    }\n    \n    console.log(\"Extracted address:\");\n    console.log(\"  Street: \" + address.street);\n    console.log(\"  City: \" + address.city);\n    console.log(\"  Zipcode: \" + address.zipcode);\n    console.log(\"  Coordinates: (\" + address.geo.lat + \", \" + address.geo.lng + \")\");\n}\n\n// Extract company data\nif (user.company) {\n    pm.environment.set(\"userCompany\", user.company.name || \"\");\n    pm.environment.set(\"userCompanyCatchPhrase\", user.company.catchPhrase || \"\");\n    \n    console.log(\"\\nExtracted company:\");\n    console.log(\"  Name: \" + user.company.name);\n    console.log(\"  Catch Phrase: \" + user.company.catchPhrase);\n}\n\npm.test(\"Has nested address data\", function() {\n    pm.expect(user.address).to.have.property(\"street\");\n    pm.expect(user.address).to.have.property(\"city\");\n    pm.expect(user.address.geo).to.have.property(\"lat\");\n});\n\npm.test(\"Has company data\", function() {\n    pm.expect(user.company).to.have.property(\"name\");\n});"
+      }
+    ]
+  }
+}
