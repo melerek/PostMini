@@ -28,7 +28,9 @@ from src.features.script_engine import ScriptEngine, ScriptExecutionError, Scrip
 from src.ui.dialogs.history_dialog import HistoryDialog
 from src.ui.dialogs.code_snippet_dialog import CodeSnippetDialog
 from src.ui.dialogs.oauth_dialog import OAuthConfigDialog
+from src.ui.dialogs.update_dialog import UpdateAvailableDialog, UpdateProgressDialog, NoUpdateDialog
 from src.features.oauth_manager import OAuthManager
+from src.features.auto_updater import UpdateChecker, UpdateDownloader, UpdateInstaller
 from src.ui.widgets.test_tab_widget import TestTabWidget
 from src.ui.widgets.test_results_viewer import TestResultsViewer
 from src.ui.widgets.script_tab_widget import ScriptTabWidget
@@ -501,6 +503,8 @@ class MainWindow(QMainWindow):
         
         # Track active threads
         self.request_thread = None
+        self.update_checker_thread = None
+        self.update_downloader_thread = None
         
         # UI state tracking
         self.response_panel_collapsed = False
@@ -550,6 +554,10 @@ class MainWindow(QMainWindow):
         # Use QTimer to set splitter sizes AFTER the window is shown
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, self._fix_splitter_sizes)
+        
+        # Check for updates on startup (after 5 seconds) if enabled
+        if self.settings_pane.should_auto_check_updates():
+            QTimer.singleShot(5000, lambda: self._check_for_updates(silent=True))
     
     def _fix_splitter_sizes(self):
         """Fix splitter sizes after window is shown."""
@@ -754,6 +762,7 @@ class MainWindow(QMainWindow):
         # ==================== LEFT PANE: Settings ====================
         self.settings_pane = SettingsPanel(self.db)
         self.settings_pane.setVisible(False)  # Hidden by default
+        self.settings_pane.check_updates_requested.connect(self._check_for_updates)
         main_splitter.addWidget(self.settings_pane)
         
         # ==================== LEFT PANE: Git Sync ====================
@@ -7806,11 +7815,142 @@ class MainWindow(QMainWindow):
         # Pass the event to the parent class
         return super().eventFilter(obj, event)
     
+    # ==================== AUTO-UPDATE METHODS ====================
+    
+    def _check_for_updates(self, silent=False):
+        """Check for application updates."""
+        # Don't check if already checking
+        if self.update_checker_thread and self.update_checker_thread.isRunning():
+            return
+        
+        # Update UI
+        if not silent:
+            self.settings_pane.set_checking_updates(True)
+        
+        # Create and start update checker thread
+        self.update_checker_thread = UpdateChecker(silent=silent)
+        self.update_checker_thread.update_available.connect(self._on_update_available)
+        self.update_checker_thread.no_update.connect(self._on_no_update)
+        self.update_checker_thread.check_error.connect(self._on_update_check_error)
+        self.update_checker_thread.finished.connect(lambda: self.settings_pane.set_checking_updates(False))
+        self.update_checker_thread.start()
+    
+    def _on_update_available(self, update_info: dict):
+        """Handle update available."""
+        current_version = UpdateChecker.CURRENT_VERSION
+        
+        # Update settings panel status
+        latest_version = update_info.get('latest_version', 'Unknown')
+        self.settings_pane.set_update_status(
+            f"✨ Version {latest_version} available!",
+            color="#4CAF50"
+        )
+        
+        # Show update dialog
+        dialog = UpdateAvailableDialog(update_info, current_version, self)
+        if dialog.exec():
+            # User wants to download and install
+            self._start_update_download(update_info)
+    
+    def _on_no_update(self, current_version: str):
+        """Handle no update available."""
+        # Update settings panel status
+        self.settings_pane.set_update_status(
+            f"✅ You're up to date!",
+            color="#4CAF50"
+        )
+        
+        # Show dialog (only if user manually checked)
+        if not self.update_checker_thread.silent:
+            dialog = NoUpdateDialog(current_version, self)
+            dialog.exec()
+    
+    def _on_update_check_error(self, error_msg: str):
+        """Handle update check error."""
+        # Update settings panel status
+        self.settings_pane.set_update_status(
+            f"❌ Check failed: {error_msg}",
+            color="#F44336"
+        )
+        
+        # Show error dialog
+        QMessageBox.warning(
+            self,
+            "Update Check Failed",
+            f"Couldn't check for updates:\n\n{error_msg}\n\n"
+            "Please check your internet connection and try again."
+        )
+    
+    def _start_update_download(self, update_info: dict):
+        """Start downloading the update."""
+        # Show progress dialog
+        progress_dialog = UpdateProgressDialog(self)
+        progress_dialog.show()
+        
+        # Create and start downloader thread
+        self.update_downloader_thread = UpdateDownloader(
+            update_info['download_url'],
+            update_info.get('checksum', '')
+        )
+        self.update_downloader_thread.download_progress.connect(progress_dialog.update_progress)
+        self.update_downloader_thread.download_complete.connect(
+            lambda path: self._on_download_complete(path, progress_dialog)
+        )
+        self.update_downloader_thread.download_error.connect(
+            lambda err: self._on_download_error(err, progress_dialog)
+        )
+        
+        # Handle dialog cancel
+        progress_dialog.rejected.connect(self.update_downloader_thread.cancel)
+        
+        self.update_downloader_thread.start()
+    
+    def _on_download_complete(self, installer_path: str, progress_dialog: UpdateProgressDialog):
+        """Update downloaded successfully."""
+        progress_dialog.close()
+        
+        reply = QMessageBox.question(
+            self,
+            "Update Ready",
+            "The update has been downloaded successfully.\n\n"
+            "Install now?\n\n"
+            "The application will close and the installer will run.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                UpdateInstaller.install_update(installer_path)
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Installation Failed",
+                    f"Failed to start installer:\n{str(e)}"
+                )
+    
+    def _on_download_error(self, error_msg: str, progress_dialog: UpdateProgressDialog):
+        """Download failed."""
+        progress_dialog.close()
+        
+        QMessageBox.critical(
+            self,
+            "Download Failed",
+            f"Failed to download update:\n\n{error_msg}\n\n"
+            "Please try again later or download manually from the website."
+        )
+    
     def closeEvent(self, event):
         """Handle application close event."""
         # Stop any running request thread
         if self.request_thread and self.request_thread.isRunning():
             self.request_thread.wait(1000)  # Wait up to 1 second
+        
+        # Stop any running update threads
+        if self.update_checker_thread and self.update_checker_thread.isRunning():
+            self.update_checker_thread.wait(1000)
+        if self.update_downloader_thread and self.update_downloader_thread.isRunning():
+            self.update_downloader_thread.cancel()
+            self.update_downloader_thread.wait(1000)
 
         # Clean up resources
         self.db.close()

@@ -15,6 +15,9 @@ PyYAML>=6.0
 # PyMiniRacer - V8 JavaScript engine for pre/post request scripts
 py-mini-racer>=0.6.0
 
+# Packaging - Version parsing for auto-updates
+packaging>=21.0
+
 # Note: sqlite3 is part of Python's standard library and doesn't need to be installed separately
 
 # Development Dependencies (Only for building installers)
