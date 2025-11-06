@@ -7,10 +7,12 @@
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "NEW: Testing auto-update functionality",
-    "This update was downloaded automatically!",
-    "Includes all features from v1.8.4",
-    "Automatic update system working perfectly"
+    "NEW: Automatic update system",
+    "Check for updates from Settings panel",
+    "Auto-check on startup (configurable)",
+    "One-click download and install",
+    "Background download with progress tracking",
+    "FIXED: Postman folder structure import (v1.8.3)"
   ]
 }
 

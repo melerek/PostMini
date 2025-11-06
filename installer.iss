@@ -62,12 +62,15 @@ begin
   WelcomeLabel.Parent := WizardForm.WelcomePage;
   WelcomeLabel.Caption :=
     'PostMini v1.8.5 - Professional API Testing Tool' + #13#10 + #13#10 +
-    'NEW in v1.8.5 (Update Test):' + #13#10 +
-    '  • Testing auto-update functionality' + #13#10 +
-    '  • This update was downloaded automatically!' + #13#10 + #13#10 +
-    'Includes v1.8.4:' + #13#10 +
-    '  • Automatic update system' + #13#10 +
-    '  • Version display in Settings' + #13#10 + #13#10 +
+    'NEW in v1.8.5:' + #13#10 +
+    '  • NEW: Automatic update system' + #13#10 +
+    '  • Check for updates from Settings panel' + #13#10 +
+    '  • Auto-check on startup (configurable)' + #13#10 +
+    '  • One-click download and install updates' + #13#10 +
+    '  • Version display in Settings' + #13#10 +
+    '  • Background download with progress tracking' + #13#10 + #13#10 +
+    'Also includes v1.8.3 fixes:' + #13#10 +
+    '  • Postman folder structure import fixed' + #13#10 + #13#10 +
     'Your data will be stored locally in:' + #13#10 +
     ExpandConstant('{userappdata}\PostMini') + #13#10 + #13#10 +
     'This ensures your collections and settings are preserved across updates.';

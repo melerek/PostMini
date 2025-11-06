@@ -100,8 +100,10 @@ class UpdateDownloader(QThread):
             # Verify checksum if provided
             if self.expected_checksum:
                 actual_checksum = self._calculate_checksum(self.temp_file)
-                expected = self.expected_checksum.replace('sha256:', '')
-                if not actual_checksum.endswith(expected):
+                # Normalize both checksums for comparison (remove prefix if present)
+                expected_hash = self.expected_checksum.replace('sha256:', '').upper()
+                actual_hash = actual_checksum.replace('sha256:', '').upper()
+                if actual_hash != expected_hash:
                     self.download_error.emit("Checksum verification failed. Downloaded file may be corrupted.")
                     return
             
