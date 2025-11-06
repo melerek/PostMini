@@ -1,16 +1,16 @@
 {
-  "latest_version": "1.8.4",
+  "latest_version": "1.8.5",
   "release_date": "2025-11-06",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.8.3/PostMini_Setup_v1.8.3.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.8.3",
-  "checksum": "sha256:abc123def456...",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.8.5/PostMini_Setup_v1.8.5.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.8.5",
+  "checksum": "sha256:9E92E85BAF966AE8942C93528A839379A83165B8A8D08E0EE8EF526B72EC318F",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "FIXED: Postman folder structure import",
-    "Folders now import with proper hierarchy",
-    "Clean request names without concatenation",
-    "Supports deeply nested folder structures"
+    "NEW: Testing auto-update functionality",
+    "This update was downloaded automatically!",
+    "Includes all features from v1.8.4",
+    "Automatic update system working perfectly"
   ]
 }
 
