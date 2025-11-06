@@ -1,18 +1,21 @@
 {
-  "latest_version": "1.8.5",
+  "latest_version": "1.8.6",
   "release_date": "2025-11-06",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.8.5/PostMini_Setup_v1.8.5.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.8.5",
-  "checksum": "sha256:BE4D2A282C022089CE3BD6F320327FFB65611321BC6168A52314EA9CDEE1C942",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.8.6/PostMini_Setup_v1.8.6.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.8.6",
+  "checksum": "sha256:122CD154106E50B664EE9C62CA382B56F4F81BF02AFECBE8AE6279AB96E7A8DA",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "NEW: Automatic update system",
-    "Check for updates from Settings panel",
-    "Auto-check on startup (configurable)",
-    "One-click download and install",
-    "Background download with progress tracking",
-    "FIXED: Postman folder structure import (v1.8.3)"
+    "NEW: Temporary tabs (single-click preview, double-click permanent)",
+    "NEW: Keyboard shortcuts for panels (Alt+C, E, V, G, H, R)",
+    "NEW: History panel as overlay (Alt+H)",
+    "NEW: Add collection variables from Variables panel",
+    "IMPROVED: Tab widths optimized for better space usage",
+    "IMPROVED: Modern 'Recent' button design",
+    "IMPROVED: Simplified tooltips with shortcuts",
+    "FIXED: Recent button hover cutoff",
+    "FIXED: Signal blocking during request load"
   ]
 }
 

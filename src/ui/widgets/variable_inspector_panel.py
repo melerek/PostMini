@@ -8,10 +8,11 @@ Allows editing and deleting environment and extracted variables.
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTreeWidget, QTreeWidgetItem, QMenu, QInputDialog,
-    QMessageBox, QStyledItemDelegate, QStyle, QApplication
+    QMessageBox, QStyledItemDelegate, QStyle, QApplication, QComboBox,
+    QDialog, QFormLayout, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent
-from PyQt6.QtGui import QColor, QCursor, QFont
+from PyQt6.QtGui import QColor, QCursor, QFont, QAction
 from typing import Dict, List, Optional
 
 
@@ -38,11 +39,13 @@ class VariableInspectorPanel(QWidget):
     variable_edited = pyqtSignal(str, str, str)  # scope, name, new_value
     variable_deleted = pyqtSignal(str, str)  # scope, name - MUST match handler signature!
     variable_added = pyqtSignal(str, str)  # name, value
+    collection_variable_added = pyqtSignal(int, str, str)  # collection_id, name, value
     refresh_requested = pyqtSignal()  # Request parent to refresh data
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_environment_id = None
+        self.db = None  # Will be set by parent
         self._init_ui()
         print(f"[DEBUG] VariableInspectorPanel initialized, parent: {parent}")
     
@@ -62,12 +65,71 @@ class VariableInspectorPanel(QWidget):
         """)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 12, 12, 12)
+        header_layout.setSpacing(8)
         
         title = QLabel("{{}} Variables")
         title.setStyleSheet("font-size: 13px; font-weight: 600; border: none;")
         header_layout.addWidget(title)
         
         header_layout.addStretch()
+        
+        # Add button with dropdown menu in header
+        self.add_var_btn = QPushButton("+ Add")
+        self.add_var_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 12px;
+                font-weight: 500;
+                color: #fff;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border-color: rgba(255, 255, 255, 0.25);
+            }
+            QPushButton::menu-indicator {
+                width: 0px;
+            }
+        """)
+        self.add_var_btn.setToolTip("Add variable")
+        
+        # Create dropdown menu with proper styling
+        add_menu = QMenu(self.add_var_btn)
+        add_menu.setStyleSheet("""
+            QMenu {
+                background-color: #2b2b2b;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QMenu::item {
+                background-color: transparent;
+                color: #ffffff;
+                padding: 8px 32px 8px 12px;
+                border-radius: 3px;
+            }
+            QMenu::item:selected {
+                background-color: rgba(33, 150, 243, 0.2);
+            }
+            QMenu::item:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        """)
+        
+        # Add menu actions
+        add_env_var_action = QAction("Add Environment Variable", self)
+        add_env_var_action.triggered.connect(self._add_environment_variable)
+        add_menu.addAction(add_env_var_action)
+        
+        add_coll_var_action = QAction("Add Collection Variable", self)
+        add_coll_var_action.triggered.connect(self._add_collection_variable)
+        add_menu.addAction(add_coll_var_action)
+        
+        # Attach menu to button
+        self.add_var_btn.setMenu(add_menu)
+        header_layout.addWidget(self.add_var_btn)
         
         layout.addWidget(header)
         
@@ -84,7 +146,7 @@ class VariableInspectorPanel(QWidget):
         info_label.setStyleSheet("color: #999; font-size: 11px;")
         content_layout.addWidget(info_label)
         
-        # Search box with Add button
+        # Search box
         search_layout = QHBoxLayout()
         search_layout.setSpacing(8)
         search_label = QLabel("🔍")
@@ -94,30 +156,6 @@ class VariableInspectorPanel(QWidget):
         self.search_input.setPlaceholderText("Filter variables...")
         self.search_input.textChanged.connect(self._filter_variables)
         search_layout.addWidget(self.search_input)
-        
-        # Add Variable button
-        self.add_var_btn = QPushButton("➕")
-        self.add_var_btn.setToolTip("Add variable to current environment")
-        self.add_var_btn.setFixedSize(32, 32)
-        self.add_var_btn.setStyleSheet("""
-            QPushButton {
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                background: rgba(33, 150, 243, 0.2);
-                border-radius: 4px;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background: rgba(33, 150, 243, 0.4);
-            }
-            QPushButton:disabled {
-                background: rgba(100, 100, 100, 0.2);
-                border-color: rgba(100, 100, 100, 0.3);
-                color: #666;
-            }
-        """)
-        self.add_var_btn.clicked.connect(self._add_variable)
-        self.add_var_btn.setEnabled(False)  # Disabled by default
-        search_layout.addWidget(self.add_var_btn)
         
         content_layout.addLayout(search_layout)
         
@@ -170,13 +208,7 @@ class VariableInspectorPanel(QWidget):
         self.current_environment_id = environment_id
         total_count = 0
         
-        # Enable/disable Add button based on whether environment is selected
-        if environment_id:
-            self.add_var_btn.setEnabled(True)
-            self.add_var_btn.setToolTip(f"Add variable to environment: {environment_name}")
-        else:
-            self.add_var_btn.setEnabled(False)
-            self.add_var_btn.setToolTip("Select an environment to add variables")
+        # Store current environment for later use in add variable dialogs
         
         # Extracted variables (highest priority)
         if extracted_vars:
@@ -498,22 +530,44 @@ class VariableInspectorPanel(QWidget):
             if visible_children > 0 and search_text:
                 parent.setExpanded(True)
     
-    def _add_variable(self):
-        """Add a new variable to the current environment."""
-        if not self.current_environment_id:
-            QMessageBox.warning(self, "No Environment", "Please select an environment first.")
+    def _add_environment_variable(self):
+        """Add a new variable to an environment."""
+        if not self.db:
+            QMessageBox.warning(self, "Error", "Database not available.")
             return
         
-        # Create a dialog for adding variable
-        from PyQt6.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
+        # Get all environments
+        try:
+            environments = self.db.get_all_environments()
+            if not environments:
+                QMessageBox.warning(self, "No Environments", 
+                                  "Please create an environment first before adding variables.")
+                return
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load environments: {str(e)}")
+            return
         
+        # Create dialog
         dialog = QDialog(self)
         dialog.setWindowTitle("Add Environment Variable")
-        dialog.setMinimumWidth(400)
+        dialog.setMinimumWidth(450)
         
         layout = QVBoxLayout(dialog)
-        
         form_layout = QFormLayout()
+        
+        # Environment selection
+        env_combo = QComboBox()
+        for env in environments:
+            env_combo.addItem(env['name'], env['id'])
+        
+        # Set current environment as default if available
+        if self.current_environment_id:
+            for i in range(env_combo.count()):
+                if env_combo.itemData(i) == self.current_environment_id:
+                    env_combo.setCurrentIndex(i)
+                    break
+        
+        form_layout.addRow("Environment:", env_combo)
         
         # Name input
         name_input = QLineEdit()
@@ -539,6 +593,7 @@ class VariableInspectorPanel(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             name = name_input.text().strip()
             value = value_input.text().strip()
+            env_id = env_combo.currentData()
             
             if not name:
                 QMessageBox.warning(self, "Invalid Input", "Variable name cannot be empty.")
@@ -547,6 +602,80 @@ class VariableInspectorPanel(QWidget):
             # Emit signal to parent to add to database
             self.variable_added.emit(name, value)
             self.status_label.setText(f"✓ Added: {name}")
+    
+    def _add_collection_variable(self):
+        """Add a new variable to a collection."""
+        if not self.db:
+            QMessageBox.warning(self, "Error", "Database not available.")
+            return
+        
+        # Get all collections
+        try:
+            collections = self.db.get_all_collections()
+            if not collections:
+                QMessageBox.warning(self, "No Collections", 
+                                  "Please create a collection first before adding variables.")
+                return
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load collections: {str(e)}")
+            return
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Collection Variable")
+        dialog.setMinimumWidth(450)
+        
+        layout = QVBoxLayout(dialog)
+        form_layout = QFormLayout()
+        
+        # Collection selection
+        coll_combo = QComboBox()
+        for coll in collections:
+            coll_combo.addItem(coll['name'], coll['id'])
+        
+        # Try to set current collection as default if parent has current_collection_id
+        parent_window = self.parent()
+        if parent_window and hasattr(parent_window, 'current_collection_id') and parent_window.current_collection_id:
+            for i in range(coll_combo.count()):
+                if coll_combo.itemData(i) == parent_window.current_collection_id:
+                    coll_combo.setCurrentIndex(i)
+                    break
+        
+        form_layout.addRow("Collection:", coll_combo)
+        
+        # Name input
+        name_input = QLineEdit()
+        name_input.setPlaceholderText("e.g., baseUrl, apiKey")
+        form_layout.addRow("Variable Name:", name_input)
+        
+        # Value input
+        value_input = QLineEdit()
+        value_input.setPlaceholderText("e.g., https://api.example.com")
+        form_layout.addRow("Value:", value_input)
+        
+        layout.addLayout(form_layout)
+        
+        # Buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Show dialog
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            name = name_input.text().strip()
+            value = value_input.text().strip()
+            coll_id = coll_combo.currentData()
+            
+            if not name:
+                QMessageBox.warning(self, "Invalid Input", "Variable name cannot be empty.")
+                return
+            
+            # Emit signal to parent with collection_id
+            self.collection_variable_added.emit(coll_id, name, value)
+            self.status_label.setText(f"✓ Added: {name} to collection")
     
     def eventFilter(self, obj, event):
         """Event filter to change cursor on hover over editable value cells."""

@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.6] - 2025-11-06
+
+### ✨ New Features
+
+#### Temporary Tabs (Preview Mode)
+- **Single-click** opens requests in temporary tab (italic text, auto-closes when opening another)
+- **Double-click** opens in permanent tab
+- Temporary tab converts to permanent when editing, sending, or saving
+- Similar to VS Code's file preview behavior
+- More efficient tab management for browsing large collections
+
+#### Keyboard Shortcuts for Panel Toggles
+- **Alt+C** - Toggle Collections panel
+- **Alt+E** - Toggle Environments panel
+- **Alt+V** - Toggle Variables panel
+- **Alt+G** - Toggle Git Sync panel
+- **Alt+H** - Toggle History panel
+- **Alt+R** - Toggle Recent Requests panel
+- All tooltips updated to show shortcuts
+
+#### History Panel as Overlay
+- History converted from modal dialog to right-side overlay panel
+- 800px wide with smooth animations
+- Non-blocking workflow (doesn't interrupt current work)
+- Mutual exclusion with Recent Requests panel
+- Keyboard shortcut: Alt+H
+
+#### Add Collection Variables from Variables Panel
+- New "Add Collection Variable" option in Variables panel
+- Dropdown menu on "+ Add" button
+- Choose collection from list when adding variable
+- Streamlined variable management workflow
+
+### 🎨 UI/UX Improvements
+
+#### Tab Header Width Optimization
+- Reduced left padding from 12px to 8px
+- Reduced min-width from 60px to 40px
+- Max-width limited to 250px (was 300px)
+- Tabs now fit text content with ~8px space from edge
+- More tabs visible simultaneously
+- Less wasted horizontal space
+
+#### Modernized "Recent" Button
+- Changed from emoji "🕐" to text-based "Recent"
+- Matches style of "New request" button
+- Fixed hover cutoff issue
+- Better readability and accessibility
+- Consistent 35px height with tab bar
+
+#### Simplified Tooltips
+- Removed redundant "Toggle" and "Panel" text
+- Added keyboard shortcuts in brackets
+- Examples:
+  - "Collections [Alt+C]" (was "Toggle Collections Panel")
+  - "Git Sync [Alt+G]" (was "Toggle Git Sync Panel")
+  - "Request History [Alt+H]" (was "Requests History")
+- Cleaner, more informative, faster to read
+
+#### Removed Bullet Separator in Tabs
+- Tab labels now: "GET New Request" (was "GET • New Request")
+- Cleaner appearance with 8px space between method and name
+- More space for request names
+- Modern minimalist design
+
+### 🐛 Bug Fixes
+
+#### Fixed Recent Button Hover Cutoff
+- Converted from fixed emoji button to flexible text-based button
+- Proper sizing prevents rendering artifacts
+- Perfect hover effects without cutoff
+
+#### Improved Signal Blocking During Load
+- Added signal blocking for test_tab and scripts_tab during request load
+- Prevents false "modified" state when loading saved requests
+- No more accidental unsaved changes prompts
+
+#### History Panel Mutual Exclusion
+- History and Recent Requests panels now properly hide each other
+- Only one right-side overlay visible at a time
+- Cleaner UI without overlapping panels
+
+### 🔧 Technical Changes
+- Modified `src/ui/main_window.py` - Added temporary tabs, keyboard shortcuts, updated tooltips and buttons (~500+ lines)
+- Modified `src/ui/widgets/variable_inspector_panel.py` - Added collection variable support (~200 lines)
+- Added `src/ui/widgets/history_panel_widget.py` - New history panel widget (437 lines)
+- Modified `styles.qss` and `styles_dark.qss` - Updated tab dimensions (6 lines)
+- Updated version to 1.8.6 in all files
+
+---
+
 ## [1.8.2] - 2025-11-05
 
 ### 🎨 UI Improvements

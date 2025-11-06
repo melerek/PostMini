@@ -25,8 +25,8 @@ from src.core.app_paths import AppPaths
 from src.features.variable_substitution import EnvironmentManager
 from src.features.collection_io import CollectionExporter, CollectionImporter, get_safe_filename
 from src.features.script_engine import ScriptEngine, ScriptExecutionError, ScriptTimeoutError
-from src.ui.dialogs.history_dialog import HistoryDialog
 from src.ui.dialogs.code_snippet_dialog import CodeSnippetDialog
+from src.ui.widgets.history_panel_widget import HistoryPanelWidget
 from src.ui.dialogs.oauth_dialog import OAuthConfigDialog
 from src.ui.dialogs.update_dialog import UpdateAvailableDialog, UpdateProgressDialog, NoUpdateDialog
 from src.features.oauth_manager import OAuthManager
@@ -253,12 +253,13 @@ class ColoredTabBar(QTabBar):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
     
-    def set_tab_data(self, index: int, method: str, name: str, has_changes: bool = False):
+    def set_tab_data(self, index: int, method: str, name: str, has_changes: bool = False, is_temporary: bool = False):
         """Store tab data for custom rendering."""
         self.tab_data[index] = {
             'method': method,
             'name': name,
-            'has_changes': has_changes
+            'has_changes': has_changes,
+            'is_temporary': is_temporary
         }
         self.update()
     
@@ -371,6 +372,7 @@ class ColoredTabBar(QTabBar):
             method = data['method']
             name = data['name']
             has_changes = data['has_changes']
+            is_temporary = data.get('is_temporary', False)
             
             # Get tab rect
             rect = self.tabRect(index)
@@ -411,22 +413,17 @@ class ColoredTabBar(QTabBar):
             
             # Calculate width of method text
             method_width = painter.fontMetrics().horizontalAdvance(method_upper)
-            x += method_width + 8
+            x += method_width
             
-            # Draw bullet separator
-            if is_selected:
-                painter.setPen(QPen(QColor('#FFFFFF' if is_dark_theme else '#212121')))
-            elif is_hovered:
-                painter.setPen(QPen(QColor('#CCCCCC' if is_dark_theme else '#212121')))
-            else:
-                painter.setPen(QPen(QColor('#969696' if is_dark_theme else '#616161')))
-            font.setBold(False)
-            font.setPointSize(9)
-            painter.setFont(font)
-            painter.drawText(x, y, "•")
-            x += painter.fontMetrics().horizontalAdvance("•") + 8
+            # Add 8px space between method and name (no bullet separator)
+            x += 8
             
             # Draw name (truncate if needed)
+            # Set italic font for temporary tabs
+            if is_temporary:
+                font.setItalic(True)
+                painter.setFont(font)
+            
             max_name_width = rect.width() - (x - rect.x()) - 30  # Reserve space for close button
             name_display = name
             name_width = painter.fontMetrics().horizontalAdvance(name)
@@ -447,6 +444,11 @@ class ColoredTabBar(QTabBar):
                 painter.setPen(QPen(QColor('#969696' if is_dark_theme else '#616161')))  # Muted for inactive
             
             painter.drawText(x, y, name_display)
+            
+            # Reset italic font for next tab
+            if is_temporary:
+                font.setItalic(False)
+                painter.setFont(font)
             x += painter.fontMetrics().horizontalAdvance(name_display) + 6
             
             # Draw unsaved indicator
@@ -601,7 +603,7 @@ class MainWindow(QMainWindow):
         
         # Collections toggle button
         self.collections_toggle_btn = QPushButton("📁")
-        self.collections_toggle_btn.setToolTip("Toggle Collections Panel")
+        self.collections_toggle_btn.setToolTip("Collections [Alt+C]")
         self.collections_toggle_btn.setCheckable(True)
         self.collections_toggle_btn.setChecked(True)  # Visible by default
         self.collections_toggle_btn.setFixedSize(50, 50)
@@ -626,7 +628,7 @@ class MainWindow(QMainWindow):
         
         # Git Sync toggle button
         self.git_sync_toggle_btn = QPushButton("🔄")
-        self.git_sync_toggle_btn.setToolTip("Toggle Git Sync Panel")
+        self.git_sync_toggle_btn.setToolTip("Git Sync [Alt+G]")
         self.git_sync_toggle_btn.setCheckable(True)
         self.git_sync_toggle_btn.setChecked(False)
         self.git_sync_toggle_btn.setFixedSize(50, 50)
@@ -651,7 +653,7 @@ class MainWindow(QMainWindow):
         
         # Variable Inspector toggle button
         self.variable_inspector_toggle_btn = QPushButton("{{}}")
-        self.variable_inspector_toggle_btn.setToolTip("Toggle Variable Inspector Panel")
+        self.variable_inspector_toggle_btn.setToolTip("Variables [Alt+V]")
         self.variable_inspector_toggle_btn.setCheckable(True)
         self.variable_inspector_toggle_btn.setChecked(False)
         self.variable_inspector_toggle_btn.setFixedSize(50, 50)
@@ -677,7 +679,7 @@ class MainWindow(QMainWindow):
         
         # Environments toggle button
         self.environments_toggle_btn = QPushButton("🌍")
-        self.environments_toggle_btn.setToolTip("Toggle Environments Panel")
+        self.environments_toggle_btn.setToolTip("Environments [Alt+E]")
         self.environments_toggle_btn.setCheckable(True)
         self.environments_toggle_btn.setChecked(False)
         self.environments_toggle_btn.setFixedSize(50, 50)
@@ -700,9 +702,11 @@ class MainWindow(QMainWindow):
         self.environments_toggle_btn.clicked.connect(lambda: self._switch_left_panel('environments'))
         icon_bar_layout.addWidget(self.environments_toggle_btn)
         
-        # History button (opens dialog, not a panel toggle)
+        # History button (toggle history panel)
         self.history_btn = QPushButton("📋")
-        self.history_btn.setToolTip("Requests History")
+        self.history_btn.setToolTip("Request History [Alt+H]")
+        self.history_btn.setCheckable(True)
+        self.history_btn.setChecked(False)
         self.history_btn.setFixedSize(50, 50)
         self.history_btn.setStyleSheet("""
             QPushButton {
@@ -715,18 +719,19 @@ class MainWindow(QMainWindow):
             QPushButton:hover {
                 background: rgba(255, 255, 255, 0.1);
             }
-            QPushButton:pressed {
-                background: rgba(255, 255, 255, 0.15);
+            QPushButton:checked {
+                background: rgba(33, 150, 243, 0.15);
+                border-left: 3px solid #2196F3;
             }
         """)
-        self.history_btn.clicked.connect(self._open_history_dialog)
+        self.history_btn.clicked.connect(self._toggle_history_panel)
         icon_bar_layout.addWidget(self.history_btn)
         
         icon_bar_layout.addStretch()  # Push buttons to top
         
         # Settings toggle button (at bottom)
         self.settings_toggle_btn = QPushButton("⚙️")
-        self.settings_toggle_btn.setToolTip("Toggle Settings Panel")
+        self.settings_toggle_btn.setToolTip("Settings")
         self.settings_toggle_btn.setCheckable(True)
         self.settings_toggle_btn.setChecked(False)
         self.settings_toggle_btn.setFixedSize(50, 50)
@@ -778,6 +783,7 @@ class MainWindow(QMainWindow):
         # ==================== LEFT PANE: Variable Inspector ====================
         self.variable_inspector_pane = VariableInspectorPanel(self)
         self.variable_inspector_pane.setVisible(False)  # Hidden by default
+        self.variable_inspector_pane.db = self.db  # Set database reference
         main_splitter.addWidget(self.variable_inspector_pane)
         
         # Connect variable inspector panel signals
@@ -805,9 +811,12 @@ class MainWindow(QMainWindow):
         
         self.variable_inspector_pane.variable_added.connect(self._on_variable_added)
         print(f"[DEBUG] variable_added connected")
+        self.variable_inspector_pane.collection_variable_added.connect(self._on_collection_variable_added)
+        print(f"[DEBUG] collection_variable_added connected")
         
         # Connect variable changes to update environments panel variable counts
         self.variable_inspector_pane.variable_added.connect(self._update_environments_var_counts)
+        self.variable_inspector_pane.collection_variable_added.connect(lambda c, n, v: self._update_environments_var_counts())
         self.variable_inspector_pane.variable_edited.connect(lambda s, n, v: self._update_environments_var_counts())
         self.variable_inspector_pane.variable_deleted.connect(lambda s, n: self._update_environments_var_counts())
         print(f"[DEBUG] Variable inspector signals connected to environments panel updates")
@@ -882,25 +891,28 @@ class MainWindow(QMainWindow):
         tab_bar_layout.addWidget(self.new_request_btn)
         
         # Add Recent button - independent of tabs, always visible
-        self.recent_requests_btn = QPushButton("🕐")
-        self.recent_requests_btn.setToolTip("Toggle recent requests panel")
+        self.recent_requests_btn = QPushButton("Recent")
+        self.recent_requests_btn.setToolTip("Recent [Alt+R]")
         self.recent_requests_btn.setCheckable(True)
-        self.recent_requests_btn.setFixedSize(38, 38)  # Match tab bar height (reduced from 42)
+        self.recent_requests_btn.setFixedHeight(35)  # Match tab bar height
+        self.recent_requests_btn.setMinimumWidth(70)
         self.recent_requests_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
                 border: 1px solid transparent;
-                border-radius: 4px;
-                font-size: 18px;
-                padding: 0px;
+                border-radius: 3px;
+                font-size: 13px;
+                font-weight: 500;
+                padding: 0px 10px;
+                text-align: center;
             }
             QPushButton:hover {
                 background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.15);
             }
             QPushButton:checked {
-                background: rgba(33, 150, 243, 0.2);
-                border: 1px solid #2196F3;
+                background: rgba(33, 150, 243, 0.15);
+                border: 1px solid rgba(33, 150, 243, 0.4);
             }
         """)
         self.recent_requests_btn.clicked.connect(self._toggle_recent_requests)
@@ -929,12 +941,15 @@ class MainWindow(QMainWindow):
         # Hide the tab widget content area (we'll show workspace below)
         # No inline style - will use stylesheet
         
-        # Tab state storage: {tab_index: {request_id, ui_state, has_changes}}
+        # Tab state storage: {tab_index: {request_id, ui_state, has_changes, is_temporary}}
         self.tab_states = {}
         self.next_untitled_num = 1
         self.previous_tab_index = None  # Track previous tab for state saving
         self._last_double_click_time = 0  # Track last double-click to prevent duplicates
         self._last_double_click_request_id = None
+        self._last_single_click_time = 0  # Track last single-click to prevent duplicates
+        self._last_single_click_request_id = None
+        self.temporary_tab_index = None  # Track the current temporary tab (only one can exist)
         
         # Don't create any initial tab - start with empty state
         # Tabs will be created when user opens a request
@@ -998,6 +1013,35 @@ class MainWindow(QMainWindow):
         shadow.setColor(QColor(0, 0, 0, 180))
         shadow.setOffset(-3, 0)
         self.recent_requests_widget.setGraphicsEffect(shadow)
+        
+        # ==================== RIGHT PANE: History Panel (OVERLAY) ====================
+        # Create the history panel widget as an overlay on top of center_container
+        self.history_panel_widget = HistoryPanelWidget(self.db)
+        self.history_panel_widget.replay_requested.connect(self._replay_from_history)
+        self.history_panel_widget.close_btn.clicked.connect(self._toggle_history_panel)  # Connect close button
+        
+        # Set parent to center_container to make it an overlay
+        self.history_panel_widget.setParent(center_container)
+        self.history_panel_widget.setVisible(False)  # Hidden by default
+        
+        # Raise the widget to ensure it's on top
+        self.history_panel_widget.raise_()
+        
+        # Apply styling for overlay appearance with shadow effect
+        self.history_panel_widget.setStyleSheet("""
+            HistoryPanelWidget {
+                background: #1E1E1E;
+                border-left: 2px solid rgba(33, 150, 243, 0.3);
+                border-radius: 0px;
+            }
+        """)
+        
+        # Add a drop shadow effect for better visual separation
+        history_shadow = QGraphicsDropShadowEffect()
+        history_shadow.setBlurRadius(20)
+        history_shadow.setColor(QColor(0, 0, 0, 180))
+        history_shadow.setOffset(-3, 0)
+        self.history_panel_widget.setGraphicsEffect(history_shadow)
         
         # Set splitter sizes for ALL widgets (including hidden ones)
         # Splitter now has 6 widgets: collections(0), settings(1), git(2), variables(3), environments(4), center(5)
@@ -1235,6 +1279,8 @@ class MainWindow(QMainWindow):
         self.auth_type_combo.blockSignals(True)
         self.auth_token_input.blockSignals(True)
         self.description_input.blockSignals(True)
+        self.test_tab.blockSignals(True)
+        self.scripts_tab.blockSignals(True)
         
         try:
             # Load basic info
@@ -1339,6 +1385,8 @@ class MainWindow(QMainWindow):
             self.auth_type_combo.blockSignals(False)
             self.auth_token_input.blockSignals(False)
             self.description_input.blockSignals(False)
+            self.test_tab.blockSignals(False)
+            self.scripts_tab.blockSignals(False)
         
         # Update tab counts after restoration (FIX: Update counts for all inner tabs)
         self._update_tab_counts()
@@ -1505,6 +1553,67 @@ class MainWindow(QMainWindow):
         # Update collections tree highlighting after closing tab
         self._update_current_request_highlight()
     
+    def _close_temporary_tab(self):
+        """Close the current temporary tab without confirmation."""
+        if self.temporary_tab_index is not None and self.temporary_tab_index in self.tab_states:
+            temp_index = self.temporary_tab_index
+            
+            # Remove tab
+            self.request_tabs.removeTab(temp_index)
+            
+            # Remove from state storage
+            if temp_index in self.tab_states:
+                del self.tab_states[temp_index]
+            
+            # Reindex remaining tabs
+            new_states = {}
+            for i, state in self.tab_states.items():
+                if i > temp_index:
+                    new_states[i - 1] = state
+                else:
+                    new_states[i] = state
+            self.tab_states = new_states
+            
+            # Clear temporary tab tracking
+            self.temporary_tab_index = None
+            
+            # If temporary tab was removed and there are other tabs, adjust temporary_tab_index
+            # for any tabs that were after it
+            if self.temporary_tab_index is not None and self.temporary_tab_index > temp_index:
+                self.temporary_tab_index -= 1
+            
+            # If no tabs left, show empty state
+            if self.request_tabs.count() == 0:
+                print(f"[DEBUG] No tabs left after closing temporary tab, switching to empty state")
+                self.center_stack.setCurrentWidget(self.no_request_empty_state)
+                self._clear_request_editor()
+    
+    def _convert_temporary_to_persistent(self):
+        """Convert the current temporary tab to persistent."""
+        current_index = self.request_tabs.currentIndex()
+        if (current_index >= 0 and 
+            current_index in self.tab_states and 
+            self.tab_states[current_index].get('is_temporary', False)):
+            
+            # Mark as persistent
+            self.tab_states[current_index]['is_temporary'] = False
+            
+            # Update tab bar display
+            tab_bar = self.request_tabs.tabBar()
+            if isinstance(tab_bar, ColoredTabBar) and current_index in tab_bar.tab_data:
+                data = tab_bar.tab_data[current_index]
+                tab_bar.set_tab_data(
+                    current_index,
+                    data['method'],
+                    data['name'],
+                    data['has_changes'],
+                    is_temporary=False
+                )
+            
+            # Clear temporary tab tracking if this was the temporary tab
+            if self.temporary_tab_index == current_index:
+                self.temporary_tab_index = None
+    
     def _close_all_tabs_except(self, keep_index: int):
         """Close all tabs except the specified one."""
         # Check for unsaved changes in any tab (except the one we're keeping)
@@ -1646,9 +1755,9 @@ class MainWindow(QMainWindow):
         # Show tabs view
         self.center_stack.setCurrentWidget(self.tabs_container)
     
-    def _open_request_in_new_tab(self, request_id: int):
+    def _open_request_in_new_tab(self, request_id: int, is_temporary: bool = False):
         """Open an existing request in a new tab."""
-        print(f"[DEBUG] _open_request_in_new_tab called with request_id={request_id}")
+        print(f"[DEBUG] _open_request_in_new_tab called with request_id={request_id}, is_temporary={is_temporary}")
         
         # Check if this request is already open in a tab
         existing_tab = self._find_tab_with_request(request_id)
@@ -1658,7 +1767,31 @@ class MainWindow(QMainWindow):
             self.request_tabs.setCurrentIndex(existing_tab)
             print(f"[DEBUG] Switching center_stack to tabs_container (request already open)")
             self.center_stack.setCurrentWidget(self.tabs_container)
+            # If it was supposed to be persistent (double-click), make it persistent
+            if not is_temporary and existing_tab in self.tab_states:
+                if self.tab_states[existing_tab].get('is_temporary', False):
+                    print(f"[DEBUG] Converting temporary tab {existing_tab} to permanent")
+                    self.tab_states[existing_tab]['is_temporary'] = False
+                    # Update tab bar to remove italic styling
+                    tab_bar = self.request_tabs.tabBar()
+                    if isinstance(tab_bar, ColoredTabBar):
+                        state = self.tab_states[existing_tab]
+                        tab_bar.set_tab_data(
+                            existing_tab,
+                            state.get('method', 'GET'),
+                            state.get('name', 'Untitled'),
+                            state.get('has_changes', False),
+                            is_temporary=False
+                        )
+                    self._update_tab_title(existing_tab)
+                    if self.temporary_tab_index == existing_tab:
+                        self.temporary_tab_index = None
             return
+        
+        # If opening in temporary mode and a temporary tab already exists, close it
+        if is_temporary and self.temporary_tab_index is not None:
+            print(f"[DEBUG] Closing existing temporary tab {self.temporary_tab_index}")
+            self._close_temporary_tab()
         
         # Load the request data from database
         request_data = self.db.get_request(request_id)
@@ -1666,7 +1799,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", "Failed to load request!")
             return
         
-        # Save current tab state first
+        # Save current tab state first (if not closing a temporary tab)
         current_index = self.request_tabs.currentIndex()
         print(f"[DEBUG] Current tab index before creating new tab: {current_index}")
         if current_index >= 0 and current_index in self.tab_states:
@@ -1691,9 +1824,14 @@ class MainWindow(QMainWindow):
             'has_changes': False,
             'name': name,
             'method': method,
+            'is_temporary': is_temporary,
             'ui_state': {}  # Will be populated when tab is activated
         }
-        print(f"[DEBUG] Stored tab state for index {tab_index}, all tab_states keys: {list(self.tab_states.keys())}")
+        print(f"[DEBUG] Stored tab state for index {tab_index}, is_temporary={is_temporary}, all tab_states keys: {list(self.tab_states.keys())}")
+        
+        # Track temporary tab
+        if is_temporary:
+            self.temporary_tab_index = tab_index
         
         # Unblock signals
         self.request_tabs.blockSignals(False)
@@ -1723,11 +1861,12 @@ class MainWindow(QMainWindow):
         method = state.get('method', 'GET')
         name = state.get('name', 'Untitled')
         has_changes = state.get('has_changes', False)
+        is_temporary = state.get('is_temporary', False)
         
         # Update tab data for custom rendering
         tab_bar = self.request_tabs.tabBar()
         if isinstance(tab_bar, ColoredTabBar):
-            tab_bar.set_tab_data(index, method, name, has_changes)
+            tab_bar.set_tab_data(index, method, name, has_changes, is_temporary)
             # Force tab bar to recalculate tab sizes after data is set
             tab_bar.update()
             self.request_tabs.update()
@@ -1771,6 +1910,31 @@ class MainWindow(QMainWindow):
         # Show keyboard shortcuts help (Ctrl+/)
         help_shortcut = QShortcut(QKeySequence("Ctrl+/"), self)
         help_shortcut.activated.connect(self._show_shortcuts_help)
+        
+        # Panel toggle shortcuts (Alt+key)
+        # Alt+E - Toggle Environments panel
+        env_shortcut = QShortcut(QKeySequence("Alt+E"), self)
+        env_shortcut.activated.connect(lambda: self._switch_left_panel('environments'))
+        
+        # Alt+C - Toggle Collections panel
+        collections_shortcut = QShortcut(QKeySequence("Alt+C"), self)
+        collections_shortcut.activated.connect(lambda: self._switch_left_panel('collections'))
+        
+        # Alt+H - Toggle History panel
+        history_shortcut = QShortcut(QKeySequence("Alt+H"), self)
+        history_shortcut.activated.connect(self._toggle_history_panel)
+        
+        # Alt+V - Toggle Variables (Variable Inspector) panel
+        variables_shortcut = QShortcut(QKeySequence("Alt+V"), self)
+        variables_shortcut.activated.connect(lambda: self._switch_left_panel('variable_inspector'))
+        
+        # Alt+G - Toggle Git Sync panel
+        git_shortcut = QShortcut(QKeySequence("Alt+G"), self)
+        git_shortcut.activated.connect(lambda: self._switch_left_panel('git_sync'))
+        
+        # Alt+R - Toggle Recent requests panel
+        recent_shortcut = QShortcut(QKeySequence("Alt+R"), self)
+        recent_shortcut.activated.connect(self._toggle_recent_requests)
     
     def _create_collections_pane(self) -> QWidget:
         """Create the left pane containing the collections tree."""
@@ -1789,11 +1953,98 @@ class MainWindow(QMainWindow):
         """)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 12, 12, 12)
+        header_layout.setSpacing(8)
         
         title = QLabel("📁 Collections")
         title.setStyleSheet("font-size: 13px; font-weight: 600; border: none;")
         header_layout.addWidget(title)
         header_layout.addStretch()
+        
+        # Add Collection button in header
+        add_collection_btn = QPushButton("+ Add")
+        add_collection_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 12px;
+                font-weight: 500;
+                color: #fff;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border-color: rgba(255, 255, 255, 0.25);
+            }
+        """)
+        add_collection_btn.setToolTip("Add a new collection")
+        add_collection_btn.clicked.connect(self._add_collection)
+        header_layout.addWidget(add_collection_btn)
+        
+        # Import button with dropdown menu in header
+        import_menu_btn = QPushButton("📥 Import")
+        import_menu_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 12px;
+                font-weight: 500;
+                color: #fff;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border-color: rgba(255, 255, 255, 0.25);
+            }
+            QPushButton::menu-indicator {
+                width: 0px;
+            }
+        """)
+        import_menu_btn.setToolTip("Import collections, cURL commands, or OpenAPI specs")
+        
+        # Create dropdown menu with proper styling
+        import_menu = QMenu(import_menu_btn)
+        import_menu.setStyleSheet("""
+            QMenu {
+                background-color: #2b2b2b;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QMenu::item {
+                background-color: transparent;
+                color: #ffffff;
+                padding: 8px 32px 8px 12px;
+                border-radius: 3px;
+            }
+            QMenu::item:selected {
+                background-color: rgba(33, 150, 243, 0.2);
+            }
+            QMenu::item:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        """)
+        
+        # Add menu actions
+        import_collection_action = QAction("📄 Import Collection (JSON)", self)
+        import_collection_action.setToolTip("Import a collection from JSON file")
+        import_collection_action.triggered.connect(self._import_collection)
+        import_menu.addAction(import_collection_action)
+        
+        import_curl_action = QAction("🔗 Import cURL Command", self)
+        import_curl_action.setToolTip("Import a cURL command as a new request")
+        import_curl_action.triggered.connect(self._import_curl)
+        import_menu.addAction(import_curl_action)
+        
+        import_openapi_action = QAction("📋 Import OpenAPI/Swagger", self)
+        import_openapi_action.setToolTip("Import OpenAPI/Swagger specification")
+        import_openapi_action.triggered.connect(self._import_openapi)
+        import_menu.addAction(import_openapi_action)
+        
+        # Attach menu to button
+        import_menu_btn.setMenu(import_menu)
+        header_layout.addWidget(import_menu_btn)
         
         layout.addWidget(header)
         
@@ -1815,43 +2066,6 @@ class MainWindow(QMainWindow):
         self.collections_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.collections_tree.customContextMenuRequested.connect(self._show_tree_context_menu)
         layout.addWidget(self.collections_tree)
-        
-        # Bottom button row - Compact layout with dropdown
-        button_layout = QHBoxLayout()
-        
-        add_collection_btn = QPushButton("Add Collection")
-        add_collection_btn.setToolTip("Add a new collection")
-        add_collection_btn.clicked.connect(self._add_collection)
-        button_layout.addWidget(add_collection_btn)
-        
-        # Import button with dropdown menu
-        import_menu_btn = QPushButton("📥 Import")
-        import_menu_btn.setToolTip("Import collections, cURL commands, or OpenAPI specs")
-        
-        # Create dropdown menu
-        import_menu = QMenu(import_menu_btn)
-        
-        # Add menu actions
-        import_collection_action = QAction("📄 Import Collection (JSON)", self)
-        import_collection_action.setToolTip("Import a collection from JSON file")
-        import_collection_action.triggered.connect(self._import_collection)
-        import_menu.addAction(import_collection_action)
-        
-        import_curl_action = QAction("🔗 Import cURL Command", self)
-        import_curl_action.setToolTip("Import a cURL command as a new request")
-        import_curl_action.triggered.connect(self._import_curl)
-        import_menu.addAction(import_curl_action)
-        
-        import_openapi_action = QAction("📋 Import OpenAPI/Swagger", self)
-        import_openapi_action.setToolTip("Import OpenAPI/Swagger specification")
-        import_openapi_action.triggered.connect(self._import_openapi)
-        import_menu.addAction(import_openapi_action)
-        
-        # Attach menu to button
-        import_menu_btn.setMenu(import_menu)
-        button_layout.addWidget(import_menu_btn)
-        
-        layout.addLayout(button_layout)
         
         return pane
     
@@ -3026,22 +3240,22 @@ class MainWindow(QMainWindow):
             # Single-click on collection or folder - toggle expansion
             item.setExpanded(not item.isExpanded())
         elif item_type == 'request':
-            # Single-click on request - open it in new tab
+            # Single-click on request - open it in temporary tab
             request_id = data['id']
             current_time = time.time()
             
             # Ignore if this is a duplicate click within 300ms (debounce)
-            if (current_time - self._last_double_click_time < 0.3 and 
-                request_id == self._last_double_click_request_id):
-                print(f"[DEBUG] Ignoring duplicate click on request {request_id}")
+            if (current_time - self._last_single_click_time < 0.3 and 
+                request_id == self._last_single_click_request_id):
+                print(f"[DEBUG] Ignoring duplicate single-click on request {request_id}")
                 return
             
-            # Update last click tracking
-            self._last_double_click_time = current_time
-            self._last_double_click_request_id = request_id
+            # Update last single-click tracking (use separate variables from double-click)
+            self._last_single_click_time = current_time
+            self._last_single_click_request_id = request_id
             
-            print(f"[DEBUG] Single-click on request {request_id}, opening in new tab")
-            self._open_request_in_new_tab(request_id)
+            print(f"[DEBUG] Single-click on request {request_id}, opening in temporary tab")
+            self._open_request_in_new_tab(request_id, is_temporary=True)
     
     def _on_tree_item_double_clicked(self, item: QTreeWidgetItem, column: int):
         """Handle double-click on tree item - open request in new tab or toggle collection/folder."""
@@ -3066,19 +3280,26 @@ class MainWindow(QMainWindow):
             request_id = data['id']
             current_time = time.time()
             
-            # Ignore if this is a duplicate double-click within 500ms
-            if (current_time - self._last_double_click_time < 0.5 and 
-                request_id == self._last_double_click_request_id):
-                print(f"[DEBUG] Ignoring duplicate double-click on request {request_id}")
-                return
+            # Check if this request is already open in a temporary tab
+            existing_tab = self._find_tab_with_request(request_id)
+            is_temp_tab = (existing_tab >= 0 and 
+                          existing_tab in self.tab_states and 
+                          self.tab_states[existing_tab].get('is_temporary', False))
+            
+            # Only ignore duplicate double-clicks if NOT converting a temporary tab to permanent
+            if not is_temp_tab:
+                if (current_time - self._last_double_click_time < 0.5 and 
+                    request_id == self._last_double_click_request_id):
+                    print(f"[DEBUG] Ignoring duplicate double-click on request {request_id}")
+                    return
             
             # Update last double-click tracking
             self._last_double_click_time = current_time
             self._last_double_click_request_id = request_id
             
-            # Double-click on request - open in new tab (or switch to existing tab)
-            print(f"[DEBUG] Double-click on request {request_id}, calling _open_request_in_new_tab")
-            self._open_request_in_new_tab(request_id)
+            # Double-click on request - open in persistent tab (or switch to existing tab and make it persistent)
+            print(f"[DEBUG] Double-click on request {request_id}, calling _open_request_in_new_tab with is_temporary=False")
+            self._open_request_in_new_tab(request_id, is_temporary=False)
     
     def _on_tree_item_expanded(self, item: QTreeWidgetItem):
         """Handle folder expansion - change icon to open folder."""
@@ -3670,36 +3891,16 @@ class MainWindow(QMainWindow):
     # ==================== Request Editor Management ====================
     
     def _load_request(self, request_id: int):
-        """Load a request's details into the editor.
+        """Load a request's details into the editor in temporary mode.
         If the request is already open in a tab, switch to that tab.
-        Otherwise, create a new tab or load into the current tab."""
+        Otherwise, open it in a new temporary tab."""
         try:
-            # Check if this request is already open in any tab
-            for tab_index, state in self.tab_states.items():
-                if state.get('request_id') == request_id:
-                    # Request is already open - switch to that tab
-                    self.request_tabs.setCurrentIndex(tab_index)
-                    # Make sure we're showing the tabs view
-                    self.center_stack.setCurrentWidget(self.tabs_container)
-                    # Track in recent requests
-                    self.recent_requests_widget.add_request(request_id)
-                    return
+            # Open the request in temporary tab mode (will switch if already open)
+            # This also handles loading the request data via _on_tab_changed
+            self._open_request_in_new_tab(request_id, is_temporary=True)
             
-            # Request not open - check if current tab is empty or create new tab
-            current_tab_index = self.request_tabs.currentIndex()
-            current_state = self.tab_states.get(current_tab_index, {})
-            
-            # If no tabs exist (currentIndex = -1) or current tab has a request_id, create a new tab
-            if current_tab_index < 0 or current_state.get('request_id'):
-                tab_index = self._create_new_tab()
-                self.request_tabs.setCurrentIndex(tab_index)
-            # Otherwise, load into the current empty tab
-            
-            # Make sure we're showing the tabs view
-            self.center_stack.setCurrentWidget(self.tabs_container)
-            
-            # Load the request data into the current tab
-            self._load_request_data(request_id)
+            # Track in recent requests
+            self.recent_requests_widget.add_request(request_id)
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load request: {str(e)}")
@@ -3713,6 +3914,19 @@ class MainWindow(QMainWindow):
             if not request:
                 QMessageBox.warning(self, "Warning", "Request not found!")
                 return
+            
+            # Block all signals during restoration to prevent marking as modified
+            print(f"[DEBUG] Blocking signals for _load_request_data")
+            self.method_combo.blockSignals(True)
+            self.url_input.blockSignals(True)
+            self.params_table.blockSignals(True)
+            self.headers_table.blockSignals(True)
+            self.body_input.blockSignals(True)
+            self.auth_type_combo.blockSignals(True)
+            self.auth_token_input.blockSignals(True)
+            self.description_input.blockSignals(True)
+            self.test_tab.blockSignals(True)
+            self.scripts_tab.blockSignals(True)
             
             # Store current request info for later use
             self.current_request_id = request_id
@@ -3804,6 +4018,19 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load request: {str(e)}")
+        finally:
+            # Always unblock signals after loading
+            print(f"[DEBUG] Unblocking signals after _load_request_data")
+            self.method_combo.blockSignals(False)
+            self.url_input.blockSignals(False)
+            self.params_table.blockSignals(False)
+            self.headers_table.blockSignals(False)
+            self.body_input.blockSignals(False)
+            self.auth_type_combo.blockSignals(False)
+            self.auth_token_input.blockSignals(False)
+            self.description_input.blockSignals(False)
+            self.test_tab.blockSignals(False)
+            self.scripts_tab.blockSignals(False)
     
     def _clear_request_editor(self):
         """Clear all fields in the request editor."""
@@ -4087,6 +4314,9 @@ class MainWindow(QMainWindow):
     
     def _save_request(self):
         """Save the current request to the database."""
+        # Convert temporary tab to persistent when saving request
+        self._convert_temporary_to_persistent()
+        
         # Check if this is a new unsaved request
         current_tab_index = self.request_tabs.currentIndex()
         is_new_request = False
@@ -4328,6 +4558,9 @@ class MainWindow(QMainWindow):
     
     def _send_request(self):
         """Execute the HTTP request and display the response."""
+        # Convert temporary tab to persistent when sending request
+        self._convert_temporary_to_persistent()
+        
         url = self.url_input.text().strip()
         if not url:
             self.toast.warning("Please enter a URL!")
@@ -5341,6 +5574,11 @@ class MainWindow(QMainWindow):
         is_visible = self.recent_requests_widget.isVisible()
         
         if not is_visible:
+            # Hide history panel if visible (mutual exclusion)
+            if self.history_panel_widget.isVisible():
+                self.history_panel_widget.setVisible(False)
+                self.history_btn.setChecked(False)
+            
             # Show the overlay - position it on the right side of center_container
             container_width = self.center_container.width()
             overlay_width = 350  # Fixed width for the overlay
@@ -5461,7 +5699,12 @@ class MainWindow(QMainWindow):
             self.current_left_panel = panel_name
     
     def _create_new_request(self):
-        """Create a new unsaved request."""
+        """Create a new unsaved request in temporary mode."""
+        # If a temporary tab already exists, close it
+        if self.temporary_tab_index is not None:
+            print(f"[DEBUG] Closing existing temporary tab {self.temporary_tab_index} before creating new request")
+            self._close_temporary_tab()
+        
         # Save current tab state first
         current_index = self.request_tabs.currentIndex()
         if current_index >= 0 and current_index in self.tab_states:
@@ -5475,10 +5718,10 @@ class MainWindow(QMainWindow):
         # Add new tab with empty widget
         tab_index = self.request_tabs.addTab(QWidget(), "")
         
-        # Set tab data for custom rendering
+        # Set tab data for custom rendering (as temporary)
         tab_bar = self.request_tabs.tabBar()
         if isinstance(tab_bar, ColoredTabBar):
-            tab_bar.set_tab_data(tab_index, method, name, has_changes=True)
+            tab_bar.set_tab_data(tab_index, method, name, has_changes=True, is_temporary=True)
             # Force tab bar to recalculate tab sizes after data is set
             tab_bar.update()
             self.request_tabs.update()
@@ -5490,6 +5733,7 @@ class MainWindow(QMainWindow):
             'has_changes': True,  # Always has changes until first save
             'name': name,
             'method': method,
+            'is_temporary': True,  # New requests start as temporary
             'ui_state': {
                 'request_id': None,
                 'collection_id': None,
@@ -5522,6 +5766,10 @@ class MainWindow(QMainWindow):
         
         # Set tooltip
         self.request_tabs.setTabToolTip(tab_index, f"{method} • {name} (unsaved)")
+        
+        # Track as temporary tab
+        self.temporary_tab_index = tab_index
+        print(f"[DEBUG] Created new request in temporary tab {tab_index}")
         
         # Clear the current request highlight (no request selected in collections)
         self._clear_current_request_highlight()
@@ -6262,11 +6510,37 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Failed to save history: {e}")
     
-    def _open_history_dialog(self):
-        """Open the request history dialog."""
-        dialog = HistoryDialog(self.db, self)
-        dialog.replay_requested.connect(self._replay_from_history)
-        dialog.exec()
+    def _toggle_history_panel(self):
+        """Toggle the history panel visibility with overlay positioning."""
+        is_visible = self.history_panel_widget.isVisible()
+        
+        if not is_visible:
+            # Hide recent requests panel if visible (mutual exclusion)
+            if self.recent_requests_widget.isVisible():
+                self.recent_requests_widget.setVisible(False)
+                self.recent_requests_btn.setChecked(False)
+            
+            # Show the history overlay - position it on the right side of center_container
+            container_width = self.center_container.width()
+            overlay_width = 800  # Width for history panel as specified
+            
+            # Position the overlay on the right side, full height
+            self.history_panel_widget.setGeometry(
+                container_width - overlay_width,  # X position (right-aligned)
+                0,  # Y position (top)
+                overlay_width,  # Width
+                self.center_container.height()  # Height (full height of container)
+            )
+            self.history_panel_widget.setVisible(True)
+            self.history_panel_widget.raise_()  # Ensure it's on top
+            
+            # Load history data when opening
+            self.history_panel_widget.load_history()
+        else:
+            # Hide the overlay
+            self.history_panel_widget.setVisible(False)
+        
+        self.history_btn.setChecked(not is_visible)
     
     def _show_variable_inspector(self):
         """Show the variable inspector dialog."""
@@ -6531,6 +6805,40 @@ class MainWindow(QMainWindow):
             traceback.print_exc()
             self.toast.error(f"Failed to add: {str(e)}")
     
+    def _on_collection_variable_added(self, collection_id: int, name: str, value: str):
+        """Handle adding a new variable to a collection."""
+        try:
+            print(f"[DEBUG] Adding collection variable: collection_id={collection_id}, name={name}, value={value}")
+            
+            # Check if variable already exists
+            existing_vars = self.db.get_collection_variables_with_metadata(collection_id)
+            if any(var['name'] == name for var in existing_vars):
+                reply = QMessageBox.question(
+                    self,
+                    "Variable Exists",
+                    f"Collection variable '{name}' already exists.\n\nOverwrite?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.No:
+                    return
+                # Delete existing variable
+                self.db.delete_collection_variable(collection_id, name)
+            
+            # Add the variable to the collection
+            self.db.create_collection_variable(collection_id, name, value)
+            print(f"[DEBUG] Added collection variable to database")
+            self.toast.success(f"Added collection variable: {name}")
+            
+            # Refresh panel
+            print(f"[DEBUG] Refreshing variables panel")
+            self._refresh_variable_inspector_panel()
+        except Exception as e:
+            print(f"[ERROR] Error adding collection variable: {e}")
+            import traceback
+            traceback.print_exc()
+            self.toast.error(f"Failed to add collection variable: {str(e)}")
+    
     def _update_environments_var_counts(self):
         """Update variable counts in the environments panel without full refresh."""
         if hasattr(self, 'environments_pane'):
@@ -6645,6 +6953,16 @@ class MainWindow(QMainWindow):
 <tr><td><b>Delete</b></td><td>Delete selected item</td></tr>
 </table>
 
+<h3>Panel Toggles:</h3>
+<table cellpadding="5">
+<tr><td><b>Alt+C</b></td><td>Toggle Collections panel</td></tr>
+<tr><td><b>Alt+E</b></td><td>Toggle Environments panel</td></tr>
+<tr><td><b>Alt+V</b></td><td>Toggle Variables panel</td></tr>
+<tr><td><b>Alt+G</b></td><td>Toggle Git Sync panel</td></tr>
+<tr><td><b>Alt+H</b></td><td>Toggle History panel</td></tr>
+<tr><td><b>Alt+R</b></td><td>Toggle Recent Requests panel</td></tr>
+</table>
+
 <h3>Navigation:</h3>
 <table cellpadding="5">
 <tr><td><b>Ctrl+L</b></td><td>Focus URL bar</td></tr>
@@ -6679,8 +6997,13 @@ class MainWindow(QMainWindow):
         msg_box.exec()
     
     def _replay_from_history(self, history_entry: Dict):
-        """Replay a request from history."""
+        """Replay a request from history in a persistent tab."""
         try:
+            # If a temporary tab exists, close it (replay is an intentional action)
+            if self.temporary_tab_index is not None:
+                print(f"[DEBUG] Closing temporary tab {self.temporary_tab_index} before replaying from history")
+                self._close_temporary_tab()
+            
             # Get or create a tab for this request
             current_tab_index = self.request_tabs.currentIndex()
             
@@ -6691,10 +7014,10 @@ class MainWindow(QMainWindow):
                     # Use current empty tab
                     tab_index = current_tab_index
                 else:
-                    # Create a new tab
+                    # Create a new persistent tab
                     tab_index = self._create_new_tab()
             else:
-                # Create a new tab
+                # Create a new persistent tab
                 tab_index = self._create_new_tab()
             
             # Switch to the tab
@@ -6799,8 +7122,8 @@ class MainWindow(QMainWindow):
             clipboard = QApplication.clipboard()
             clipboard.setText(curl_command)
             
-            # Show success toast
-            self.toast_manager.show_toast("✅ Copied to clipboard", "cURL command copied successfully!")
+            # Show success message
+            QMessageBox.information(self, "✅ Copied to clipboard", "cURL command copied successfully!")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to copy as cURL: {str(e)}")

@@ -511,9 +511,9 @@ QTabWidget#requestTabs QTabBar {
 }
 
 QTabWidget#requestTabs QTabBar::tab {
-    padding: 8px 28px 8px 12px;  /* Right padding for close button */
-    min-width: 60px;
-    max-width: 300px;  /* Allow wider tabs if needed */
+    padding: 8px 28px 8px 8px;  /* Reduced padding, right padding for close button */
+    min-width: 40px;
+    max-width: 250px;  /* Maximum width limit */
 }
 
 /* Method Combo */
