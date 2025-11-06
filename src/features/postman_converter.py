@@ -158,7 +158,7 @@ class PostmanConverter:
             postman_data: Postman collection dictionary
             
         Returns:
-            Our internal collection format
+            Our internal collection format with folders and requests
         """
         info = postman_data.get('info', {})
         
@@ -169,39 +169,72 @@ class PostmanConverter:
             "collection": {
                 "name": info.get('name', 'Imported Collection'),
                 "description": info.get('description', ''),
-                "requests": []
+                "folders": [],  # List of folders with hierarchy info
+                "requests": []  # List of requests with folder_path info
             }
         }
         
-        # Convert each Postman item to our format
+        # Convert each Postman item to our format (recursively)
         items = postman_data.get('item', [])
-        for item in items:
-            # Handle folders (nested items)
-            if 'item' in item:
-                # It's a folder, process all requests inside
-                for sub_item in item['item']:
-                    request = PostmanConverter._convert_postman_item_to_request(sub_item, item.get('name'))
-                    if request:
-                        internal_format["collection"]["requests"].append(request)
-            else:
-                # It's a direct request
-                request = PostmanConverter._convert_postman_item_to_request(item)
-                if request:
-                    internal_format["collection"]["requests"].append(request)
+        PostmanConverter._process_items_recursively(
+            items, 
+            internal_format["collection"]["folders"],
+            internal_format["collection"]["requests"],
+            folder_path=[]
+        )
         
         return internal_format
     
     @staticmethod
-    def _convert_postman_item_to_request(item: Dict, folder_prefix: Optional[str] = None) -> Optional[Dict]:
+    def _process_items_recursively(items: List[Dict], folders_list: List[Dict], 
+                                   requests_list: List[Dict], folder_path: List[str]):
+        """
+        Recursively process Postman items and extract all folders and requests.
+        
+        Args:
+            items: List of Postman items (can be folders or requests)
+            folders_list: List to append folder definitions to
+            requests_list: List to append converted requests to
+            folder_path: Current folder path as list of folder names (e.g., ["v6", "internal"])
+        """
+        for item in items:
+            # Check if this is a folder (has nested items)
+            if 'item' in item and isinstance(item['item'], list):
+                # It's a folder
+                folder_name = item.get('name', 'Unnamed Folder')
+                current_path = folder_path + [folder_name]
+                
+                # Add folder definition
+                folders_list.append({
+                    'name': folder_name,
+                    'path': folder_path.copy(),  # Parent path (list of parent folder names)
+                    'full_path': current_path.copy()  # Full path including this folder
+                })
+                
+                # Recursively process items inside this folder
+                PostmanConverter._process_items_recursively(
+                    item['item'], 
+                    folders_list, 
+                    requests_list, 
+                    current_path
+                )
+            else:
+                # It's a request, convert it
+                request = PostmanConverter._convert_postman_item_to_request(item, folder_path)
+                if request:
+                    requests_list.append(request)
+    
+    @staticmethod
+    def _convert_postman_item_to_request(item: Dict, folder_path: List[str]) -> Optional[Dict]:
         """
         Convert a Postman item to our internal request format.
         
         Args:
             item: Postman item dictionary
-            folder_prefix: Optional folder name to prefix to request name
+            folder_path: List of folder names representing the path (e.g., ["v6", "internal"])
             
         Returns:
-            Our internal request format, or None if invalid
+            Our internal request format with folder_path, or None if invalid
         """
         request_data = item.get('request')
         if not request_data:
@@ -211,6 +244,7 @@ class PostmanConverter:
         if isinstance(request_data, str):
             return {
                 "name": item.get('name', 'Unnamed Request'),
+                "folder_path": folder_path.copy(),  # Store folder path as list
                 "method": "GET",
                 "url": request_data,
                 "params": None,
@@ -220,10 +254,8 @@ class PostmanConverter:
                 "auth_token": None
             }
         
-        # Build request name with folder prefix if provided
+        # Get request name (without folder prefix - folders are handled separately)
         name = item.get('name', 'Unnamed Request')
-        if folder_prefix:
-            name = f"{folder_prefix} / {name}"
         
         # Extract URL
         url_data = request_data.get('url', {})
@@ -255,16 +287,16 @@ class PostmanConverter:
             elif mode == 'formdata':
                 # Convert form data to JSON
                 form_data = {}
-                for item in body_data.get('formdata', []):
-                    if not item.get('disabled', False):
-                        form_data[item.get('key', '')] = item.get('value', '')
+                for item_data in body_data.get('formdata', []):
+                    if not item_data.get('disabled', False):
+                        form_data[item_data.get('key', '')] = item_data.get('value', '')
                 body = json.dumps(form_data)
             elif mode == 'urlencoded':
                 # Convert urlencoded to JSON
                 urlencoded_data = {}
-                for item in body_data.get('urlencoded', []):
-                    if not item.get('disabled', False):
-                        urlencoded_data[item.get('key', '')] = item.get('value', '')
+                for item_data in body_data.get('urlencoded', []):
+                    if not item_data.get('disabled', False):
+                        urlencoded_data[item_data.get('key', '')] = item_data.get('value', '')
                 body = json.dumps(urlencoded_data)
         
         # Extract authentication
@@ -278,21 +310,22 @@ class PostmanConverter:
             if auth_type_postman == 'bearer':
                 auth_type = "Bearer Token"
                 bearer_data = auth_data.get('bearer', [])
-                for item in bearer_data:
-                    if item.get('key') == 'token':
-                        auth_token = item.get('value', '')
+                for bearer_item in bearer_data:
+                    if bearer_item.get('key') == 'token':
+                        auth_token = bearer_item.get('value', '')
                         break
             elif auth_type_postman == 'apikey':
                 # Map API key to Bearer Token
                 auth_type = "Bearer Token"
                 apikey_data = auth_data.get('apikey', [])
-                for item in apikey_data:
-                    if item.get('key') == 'value':
-                        auth_token = item.get('value', '')
+                for apikey_item in apikey_data:
+                    if apikey_item.get('key') == 'value':
+                        auth_token = apikey_item.get('value', '')
                         break
         
         return {
             "name": name,
+            "folder_path": folder_path.copy(),  # Store folder path as list
             "method": request_data.get('method', 'GET'),
             "url": url,
             "params": params if params else None,

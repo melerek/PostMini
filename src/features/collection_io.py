@@ -215,7 +215,7 @@ class CollectionImporter:
                          rename_if_exists: bool = False,
                          skip_if_exists: bool = False) -> Tuple[bool, str, Optional[int]]:
         """
-        Import a single collection.
+        Import a single collection with folders support.
         
         Args:
             data: Dictionary containing collection data
@@ -255,9 +255,34 @@ class CollectionImporter:
             # Create collection
             collection_id = self.db.create_collection(collection_name)
             
-            # Import all requests
+            # Create folders first (if present) and build a mapping of paths to folder IDs
+            folder_map = {}  # Maps tuple of folder path to folder_id
+            
+            if "folders" in collection_data:
+                # Sort folders by depth (shorter paths first) to create parents before children
+                folders = sorted(collection_data["folders"], key=lambda f: len(f.get('path', [])))
+                
+                for folder_info in folders:
+                    folder_name = folder_info['name']
+                    parent_path = tuple(folder_info.get('path', []))  # Convert to tuple for dict key
+                    full_path = tuple(folder_info.get('full_path', []))
+                    
+                    # Get parent folder ID if this is a nested folder
+                    parent_id = folder_map.get(parent_path, None)
+                    
+                    # Create folder
+                    folder_id = self.db.create_folder(collection_id, folder_name, parent_id=parent_id)
+                    
+                    # Store in map for children to reference
+                    folder_map[full_path] = folder_id
+            
+            # Import all requests and link them to their folders
             requests_imported = 0
             for request_data in collection_data["requests"]:
+                # Determine folder_id for this request
+                folder_path = tuple(request_data.get("folder_path", []))  # Convert to tuple for dict key
+                folder_id = folder_map.get(folder_path, None)
+                
                 self.db.create_request(
                     collection_id=collection_id,
                     name=request_data["name"],
@@ -268,12 +293,17 @@ class CollectionImporter:
                     body=request_data.get("body"),
                     auth_type=request_data.get("auth_type", "None"),
                     auth_token=request_data.get("auth_token"),
+                    folder_id=folder_id,  # Link to folder
                     pre_request_script=request_data.get("pre_request_script"),
                     post_response_script=request_data.get("post_response_script")
                 )
                 requests_imported += 1
             
-            message = f"Imported collection '{collection_name}' with {requests_imported} request(s)"
+            folders_imported = len(folder_map)
+            if folders_imported > 0:
+                message = f"Imported collection '{collection_name}' with {folders_imported} folder(s) and {requests_imported} request(s)"
+            else:
+                message = f"Imported collection '{collection_name}' with {requests_imported} request(s)"
             return True, message, collection_id
             
         except Exception as e:

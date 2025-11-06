@@ -275,6 +275,156 @@ def test_file_export_import():
             os.unlink(temp_file)
 
 
+def test_deeply_nested_postman_import():
+    """Test importing Postman collections with deeply nested folders (3+ levels)."""
+    print("Testing Deeply Nested Postman Import...")
+    
+    # Create a Postman collection with 3 levels of folder nesting
+    postman_data = {
+        "info": {
+            "_postman_id": "test-nested-123",
+            "name": "Deeply Nested Collection",
+            "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+        },
+        "item": [
+            {
+                "name": "Level1",
+                "item": [
+                    {
+                        "name": "Level2",
+                        "item": [
+                            {
+                                "name": "Level3",
+                                "item": [
+                                    {
+                                        "name": "Deep Request 1",
+                                        "request": {
+                                            "method": "GET",
+                                            "header": [],
+                                            "url": "https://api.example.com/deep/endpoint1"
+                                        }
+                                    },
+                                    {
+                                        "name": "Deep Request 2",
+                                        "request": {
+                                            "method": "POST",
+                                            "header": [
+                                                {
+                                                    "key": "Content-Type",
+                                                    "value": "application/json"
+                                                }
+                                            ],
+                                            "body": {
+                                                "mode": "raw",
+                                                "raw": '{"test": "data"}'
+                                            },
+                                            "url": "https://api.example.com/deep/endpoint2"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "Level2b",
+                        "item": [
+                            {
+                                "name": "Another Deep Request",
+                                "request": {
+                                    "method": "DELETE",
+                                    "header": [],
+                                    "url": "https://api.example.com/resource/123"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+    
+    # Convert to internal format
+    internal_format = PostmanConverter.from_postman_format(postman_data)
+    
+    # Verify conversion
+    folders = internal_format['collection']['folders']
+    requests = internal_format['collection']['requests']
+    
+    print(f"  [OK] Found {len(folders)} folders in nested structure")
+    print(f"  [OK] Found {len(requests)} requests in nested structure")
+    
+    # Should have 4 folders total (Level1, Level2, Level3, Level2b)
+    assert len(folders) == 4, f"Expected 4 folders, got {len(folders)}"
+    print("  [OK] Correct number of folders extracted")
+    
+    # Should have 3 requests total
+    assert len(requests) == 3, f"Expected 3 requests, got {len(requests)}"
+    print("  [OK] Correct number of requests imported")
+    
+    # Check that folders are extracted correctly
+    expected_folders = [
+        {'name': 'Level1', 'depth': 0},
+        {'name': 'Level2', 'depth': 1},
+        {'name': 'Level3', 'depth': 2},
+        {'name': 'Level2b', 'depth': 1},
+    ]
+    
+    for expected in expected_folders:
+        found = any(
+            f['name'] == expected['name'] and len(f['path']) == expected['depth']
+            for f in folders
+        )
+        assert found, f"Folder '{expected['name']}' at depth {expected['depth']} not found"
+    
+    print("  [OK] All folders extracted correctly")
+    
+    # Check that request names are clean (no folder prefix)
+    expected_request_names = ["Deep Request 1", "Deep Request 2", "Another Deep Request"]
+    for expected_name in expected_request_names:
+        found = any(req['name'] == expected_name for req in requests)
+        assert found, f"Request '{expected_name}' not found in imported requests"
+    
+    print("  [OK] Request names are clean (no folder concatenation)")
+    
+    # Check that requests have folder_path information
+    for req in requests:
+        assert 'folder_path' in req, f"Request '{req['name']}' missing folder_path"
+        assert isinstance(req['folder_path'], list), f"folder_path should be a list"
+    
+    print("  [OK] All requests have folder_path information")
+    
+    # Verify request details
+    request1 = next(r for r in requests if "Deep Request 1" in r['name'])
+    assert request1['method'] == "GET"
+    assert request1['url'] == "https://api.example.com/deep/endpoint1"
+    assert request1['folder_path'] == ['Level1', 'Level2', 'Level3']
+    print("  [OK] Request details and folder paths preserved correctly")
+    
+    # Test with database import
+    db = DatabaseManager(":memory:")
+    importer = CollectionImporter(db)
+    success, message, collection_id = importer.import_collection(internal_format)
+    
+    assert success, f"Database import failed: {message}"
+    print(f"  [OK] Successfully imported to database: {message}")
+    
+    # Verify folders in database
+    db_folders = db.get_folders_by_collection(collection_id)
+    assert len(db_folders) == 4, f"Expected 4 folders in DB, got {len(db_folders)}"
+    print("  [OK] All folders created in database")
+    
+    # Verify in database
+    db_requests = db.get_requests_by_collection(collection_id)
+    assert len(db_requests) == 3
+    
+    # Check that all requests are linked to folders
+    requests_with_folders = sum(1 for r in db_requests if r['folder_id'] is not None)
+    assert requests_with_folders == 3, f"Expected all 3 requests in folders, got {requests_with_folders}"
+    print("  [OK] All requests linked to folders in database")
+    
+    return True
+
+
 def main():
     print("=" * 60)
     print("Postman Collection Format v2.1 Compatibility Tests")
@@ -288,6 +438,7 @@ def main():
         results.append(("Format Detection", test_format_detection()))
         results.append(("Roundtrip Conversion", test_roundtrip_conversion()))
         results.append(("File Export/Import", test_file_export_import()))
+        results.append(("Deeply Nested Import", test_deeply_nested_postman_import()))
         
         print("\n" + "=" * 60)
         print("Test Results Summary")
@@ -307,6 +458,7 @@ def main():
             print("  - Automatic format detection")
             print("  - Data integrity in roundtrip conversion")
             print("  - File-based export/import")
+            print("  - Deeply nested folder structures (3+ levels)")
             return 0
         else:
             print("\n[FAILED] Some tests failed!")
