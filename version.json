@@ -3,7 +3,7 @@
   "release_date": "2025-11-06",
   "download_url": "https://github.com/melerek/PostMini/releases/download/v1.8.5/PostMini_Setup_v1.8.5.exe",
   "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.8.5",
-  "checksum": "sha256:9E92E85BAF966AE8942C93528A839379A83165B8A8D08E0EE8EF526B72EC318F",
+  "checksum": "sha256:BE4D2A282C022089CE3BD6F320327FFB65611321BC6168A52314EA9CDEE1C942",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
