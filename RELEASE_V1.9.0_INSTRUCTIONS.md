@@ -197,12 +197,15 @@ Thank you for using PostMini! This release represents significant improvements t
 
 ### Checksums (for verification)
 
-**File:** `PostMini_Setup_v1.9.0.exe`
+**File:** `PostMini_Setup_v1.9.0.exe`  
+**SHA256:** `507AE526568FBB7C211E660C697DF1DCC36AEF8A564B0D8E4D13080AF46A37F6`
 
 You can verify the integrity of your download:
 ```powershell
 Get-FileHash PostMini_Setup_v1.9.0.exe -Algorithm SHA256
 ```
+
+Expected hash: `507AE526568FBB7C211E660C697DF1DCC36AEF8A564B0D8E4D13080AF46A37F6`
 
 ---
 

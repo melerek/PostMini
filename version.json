@@ -3,7 +3,7 @@
   "release_date": "2025-11-13",
   "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.0/PostMini_Setup_v1.9.0.exe",
   "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.0",
-  "checksum": "sha256:TBD",
+  "checksum": "sha256:507AE526568FBB7C211E660C697DF1DCC36AEF8A564B0D8E4D13080AF46A37F6",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
