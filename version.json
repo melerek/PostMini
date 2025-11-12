@@ -1,21 +1,21 @@
 {
-  "latest_version": "1.8.6",
-  "release_date": "2025-11-06",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.8.6/PostMini_Setup_v1.8.6.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.8.6",
-  "checksum": "sha256:122CD154106E50B664EE9C62CA382B56F4F81BF02AFECBE8AE6279AB96E7A8DA",
+  "latest_version": "1.9.0",
+  "release_date": "2025-11-13",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.0/PostMini_Setup_v1.9.0.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.0",
+  "checksum": "sha256:TBD",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "NEW: Temporary tabs (single-click preview, double-click permanent)",
-    "NEW: Keyboard shortcuts for panels (Alt+C, E, V, G, H, R)",
-    "NEW: History panel as overlay (Alt+H)",
-    "NEW: Add collection variables from Variables panel",
-    "IMPROVED: Tab widths optimized for better space usage",
-    "IMPROVED: Modern 'Recent' button design",
-    "IMPROVED: Simplified tooltips with shortcuts",
-    "FIXED: Recent button hover cutoff",
-    "FIXED: Signal blocking during request load"
+    "NEW: Environment Import/Export with full Postman compatibility",
+    "NEW: Import environments from Postman format (auto-detection)",
+    "NEW: Export to Postman Environment Format or Internal Format",
+    "NEW: Secret variable handling (include values or replace with placeholders)",
+    "NEW: Bulk import/export multiple environments",
+    "NEW: Smart duplicate name conflict resolution",
+    "NEW: Comprehensive Environment Import/Export Guide",
+    "IMPROVED: Seamless migration between Postman and PostMini",
+    "IMPROVED: Team collaboration across different tools"
   ]
 }
 

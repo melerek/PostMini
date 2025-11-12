@@ -7,11 +7,14 @@ Allows users to create, edit, and manage environment configurations.
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-    QDialog, QDialogButtonBox, QScrollArea, QFrame
+    QDialog, QDialogButtonBox, QScrollArea, QFrame, QFileDialog,
+    QRadioButton
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon
 from typing import Optional
+
+from src.features.environment_io import EnvironmentExporter, EnvironmentImporter
 
 
 class AddEnvironmentDialog(QDialog):
@@ -71,11 +74,121 @@ class EnvironmentListItem(QWidget):
     delete_clicked = pyqtSignal(int)  # environment_id
     variables_clicked = pyqtSignal(int)  # environment_id - to switch to variables panel
     
-    def __init__(self, env_id: int, name: str, var_count: int, parent=None):
+    def __init__(self, env_id: int, name: str, var_count: int, theme: str = 'dark', parent=None):
         super().__init__(parent)
         self.env_id = env_id
         self.count_label = None  # Store reference for updates
+        self.theme = theme
         self._init_ui(name, var_count)
+    
+    def set_theme(self, theme: str):
+        """Update button styles based on theme."""
+        self.theme = theme
+        self._update_button_styles()
+    
+    def _update_button_styles(self):
+        """Update button styles based on current theme."""
+        if self.theme == 'dark':
+            # Dark theme styles (original)
+            self.vars_btn.setStyleSheet("""
+                QPushButton {
+                    border: 1px solid rgba(33, 150, 243, 0.3);
+                    border-radius: 3px;
+                    background: rgba(33, 150, 243, 0.1);
+                    font-size: 11px;
+                    color: #64B5F6;
+                    padding: 0px 10px;
+                }
+                QPushButton:hover {
+                    background: rgba(33, 150, 243, 0.2);
+                    border-color: rgba(33, 150, 243, 0.5);
+                    color: #90CAF9;
+                }
+            """)
+            
+            self.edit_btn.setStyleSheet("""
+                QPushButton {
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 3px;
+                    background: transparent;
+                    font-size: 11px;
+                    color: #ccc;
+                    padding: 0px 10px;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.08);
+                    border-color: rgba(255, 255, 255, 0.25);
+                    color: #fff;
+                }
+            """)
+            
+            self.delete_btn.setStyleSheet("""
+                QPushButton {
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 3px;
+                    background: transparent;
+                    font-size: 11px;
+                    color: #ccc;
+                    padding: 0px 10px;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 80, 80, 0.15);
+                    border-color: rgba(255, 80, 80, 0.3);
+                    color: #ff6b6b;
+                }
+            """)
+        else:
+            # Light theme styles - better contrast
+            self.vars_btn.setStyleSheet("""
+                QPushButton {
+                    border: 1px solid #1976D2;
+                    border-radius: 3px;
+                    background: #E3F2FD;
+                    font-size: 11px;
+                    color: #1565C0;
+                    font-weight: 500;
+                    padding: 0px 10px;
+                }
+                QPushButton:hover {
+                    background: #BBDEFB;
+                    border-color: #1565C0;
+                    color: #0D47A1;
+                }
+            """)
+            
+            self.edit_btn.setStyleSheet("""
+                QPushButton {
+                    border: 1px solid #9E9E9E;
+                    border-radius: 3px;
+                    background: #FFFFFF;
+                    font-size: 11px;
+                    color: #424242;
+                    font-weight: 500;
+                    padding: 0px 10px;
+                }
+                QPushButton:hover {
+                    background: #F5F5F5;
+                    border-color: #616161;
+                    color: #212121;
+                }
+            """)
+            
+            self.delete_btn.setStyleSheet("""
+                QPushButton {
+                    border: 1px solid #E57373;
+                    border-radius: 3px;
+                    background: #FFEBEE;
+                    font-size: 11px;
+                    color: #C62828;
+                    font-weight: 500;
+                    padding: 0px 10px;
+                }
+                QPushButton:hover {
+                    background: #FFCDD2;
+                    border-color: #D32F2F;
+                    color: #B71C1C;
+                }
+            """)
     
     def _init_ui(self, name: str, var_count: int):
         """Initialize the item UI."""
@@ -108,70 +221,28 @@ class EnvironmentListItem(QWidget):
         layout.addStretch()
         
         # Variables button - switch to variables panel with this environment
-        vars_btn = QPushButton("Variables")
-        vars_btn.setFixedHeight(26)
-        vars_btn.setToolTip("View and manage variables for this environment")
-        vars_btn.setStyleSheet("""
-            QPushButton {
-                border: 1px solid rgba(33, 150, 243, 0.3);
-                border-radius: 3px;
-                background: rgba(33, 150, 243, 0.1);
-                font-size: 11px;
-                color: #64B5F6;
-                padding: 0px 10px;
-            }
-            QPushButton:hover {
-                background: rgba(33, 150, 243, 0.2);
-                border-color: rgba(33, 150, 243, 0.5);
-                color: #90CAF9;
-            }
-        """)
-        vars_btn.clicked.connect(lambda: self.variables_clicked.emit(self.env_id))
-        layout.addWidget(vars_btn)
+        self.vars_btn = QPushButton("Variables")
+        self.vars_btn.setFixedHeight(26)
+        self.vars_btn.setToolTip("View and manage variables for this environment")
+        self.vars_btn.clicked.connect(lambda: self.variables_clicked.emit(self.env_id))
+        layout.addWidget(self.vars_btn)
         
         # Edit button - flat style with text
-        edit_btn = QPushButton("Edit")
-        edit_btn.setFixedHeight(26)
-        edit_btn.setToolTip("Rename environment")
-        edit_btn.setStyleSheet("""
-            QPushButton {
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 3px;
-                background: transparent;
-                font-size: 11px;
-                color: #ccc;
-                padding: 0px 10px;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.08);
-                border-color: rgba(255, 255, 255, 0.25);
-                color: #fff;
-            }
-        """)
-        edit_btn.clicked.connect(lambda: self.edit_clicked.emit(self.env_id))
-        layout.addWidget(edit_btn)
+        self.edit_btn = QPushButton("Edit")
+        self.edit_btn.setFixedHeight(26)
+        self.edit_btn.setToolTip("Rename environment")
+        self.edit_btn.clicked.connect(lambda: self.edit_clicked.emit(self.env_id))
+        layout.addWidget(self.edit_btn)
         
         # Delete button - flat style with text
-        delete_btn = QPushButton("Delete")
-        delete_btn.setFixedHeight(26)
-        delete_btn.setToolTip("Delete environment")
-        delete_btn.setStyleSheet("""
-            QPushButton {
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 3px;
-                background: transparent;
-                font-size: 11px;
-                color: #ccc;
-                padding: 0px 10px;
-            }
-            QPushButton:hover {
-                background: rgba(255, 80, 80, 0.15);
-                border-color: rgba(255, 80, 80, 0.3);
-                color: #ff6b6b;
-            }
-        """)
-        delete_btn.clicked.connect(lambda: self.delete_clicked.emit(self.env_id))
-        layout.addWidget(delete_btn)
+        self.delete_btn = QPushButton("Delete")
+        self.delete_btn.setFixedHeight(26)
+        self.delete_btn.setToolTip("Delete environment")
+        self.delete_btn.clicked.connect(lambda: self.delete_clicked.emit(self.env_id))
+        layout.addWidget(self.delete_btn)
+        
+        # Apply theme-specific button styles
+        self._update_button_styles()
         
         # Set transparent background for the widget itself
         self.setStyleSheet("background: transparent;")
@@ -192,6 +263,7 @@ class EnvironmentsPanel(QWidget):
     def __init__(self, db, parent=None):
         super().__init__(parent)
         self.db = db
+        self.current_theme = 'dark'  # Default theme
         self._init_ui()
         self.refresh()
     
@@ -219,25 +291,25 @@ class EnvironmentsPanel(QWidget):
         header_layout.addWidget(header_label)
         header_layout.addStretch()
         
+        # Import button in header
+        self.import_btn = QPushButton("📥 Import")
+        self.import_btn.setToolTip("Import environment from file")
+        self.import_btn.clicked.connect(self._import_environment)
+        header_layout.addWidget(self.import_btn)
+        
+        # Export button in header
+        self.export_btn = QPushButton("📤 Export")
+        self.export_btn.setToolTip("Export selected environment to file")
+        self.export_btn.clicked.connect(self._export_environment)
+        header_layout.addWidget(self.export_btn)
+        
         # Add button in header
-        add_btn = QPushButton("+ Add")
-        add_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 12px;
-                font-weight: 500;
-                color: #fff;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border-color: rgba(255, 255, 255, 0.25);
-            }
-        """)
-        add_btn.clicked.connect(self._add_environment)
-        header_layout.addWidget(add_btn)
+        self.add_btn = QPushButton("+ Add")
+        self.add_btn.clicked.connect(self._add_environment)
+        header_layout.addWidget(self.add_btn)
+        
+        # Apply initial theme to header buttons
+        self._update_header_button_styles()
         
         main_layout.addWidget(header_widget)
         
@@ -340,8 +412,8 @@ class EnvironmentsPanel(QWidget):
         main_layout.addWidget(scroll_area)
         
         self.setLayout(main_layout)
-        self.setMinimumWidth(250)
-        self.setMaximumWidth(400)
+        self.setMinimumWidth(200)
+        self.setMaximumWidth(450)
     
     def refresh(self):
         """Reload environments from database."""
@@ -361,7 +433,7 @@ class EnvironmentsPanel(QWidget):
                 var_count = len(variables) if variables else 0
                 
                 # Create custom widget
-                item_widget = EnvironmentListItem(env['id'], env['name'], var_count)
+                item_widget = EnvironmentListItem(env['id'], env['name'], var_count, self.current_theme)
                 item_widget.edit_clicked.connect(self._edit_environment)
                 item_widget.delete_clicked.connect(self._delete_environment)
                 item_widget.variables_clicked.connect(self._open_variables_panel)
@@ -375,6 +447,61 @@ class EnvironmentsPanel(QWidget):
                 # Add to list
                 self.env_list.addItem(list_item)
                 self.env_list.setItemWidget(list_item, item_widget)
+    
+    def set_theme(self, theme: str):
+        """Update theme for all environment list items."""
+        self.current_theme = theme
+        
+        # Update header buttons
+        self._update_header_button_styles()
+        
+        # Update all existing list items
+        for i in range(self.env_list.count()):
+            item = self.env_list.item(i)
+            widget = self.env_list.itemWidget(item)
+            if widget and isinstance(widget, EnvironmentListItem):
+                widget.set_theme(theme)
+    
+    def _update_header_button_styles(self):
+        """Update header button styles based on current theme."""
+        if self.current_theme == 'dark':
+            # Dark theme - original styles
+            button_style = """
+                QPushButton {
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    color: #fff;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.12);
+                    border-color: rgba(255, 255, 255, 0.25);
+                }
+            """
+        else:
+            # Light theme - better contrast
+            button_style = """
+                QPushButton {
+                    background: #FFFFFF;
+                    border: 1px solid #9E9E9E;
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    color: #212121;
+                }
+                QPushButton:hover {
+                    background: #F5F5F5;
+                    border-color: #616161;
+                }
+            """
+        
+        self.import_btn.setStyleSheet(button_style)
+        self.export_btn.setStyleSheet(button_style)
+        self.add_btn.setStyleSheet(button_style)
     
     def _filter_environments(self):
         """Filter environments based on search text."""
@@ -519,4 +646,176 @@ class EnvironmentsPanel(QWidget):
                     variables = env.get('variables', {})
                     var_count = len(variables) if variables else 0
                     widget.update_variable_count(var_count)
+    
+    def _import_environment(self):
+        """Import an environment from a file."""
+        # Ask user to select file
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Environment",
+            "",
+            "JSON Files (*.json);;All Files (*.*)"
+        )
+        
+        if not file_path:
+            return  # User cancelled
+        
+        try:
+            # Create importer and import
+            importer = EnvironmentImporter(self.db)
+            success, message, env_id = importer.import_environment_from_file(file_path)
+            
+            if success:
+                # Refresh the list
+                self.refresh()
+                
+                # Show success message
+                QMessageBox.information(
+                    self,
+                    "Import Successful",
+                    f"{message}\n\n"
+                    "The environment has been imported successfully."
+                )
+                
+                # Emit signal if needed
+                if env_id:
+                    self.environment_created.emit(env_id)
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Import Failed",
+                    f"Failed to import environment:\n\n{message}"
+                )
+        
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Import Error",
+                f"An error occurred during import:\n\n{str(e)}"
+            )
+    
+    def _export_environment(self):
+        """Export selected environment to a file."""
+        # Get selected environment
+        selected_items = self.env_list.selectedItems()
+        
+        if not selected_items:
+            QMessageBox.information(
+                self,
+                "No Selection",
+                "Please select an environment to export."
+            )
+            return
+        
+        # Get the environment ID from the selected item
+        selected_item = selected_items[0]
+        env_id = selected_item.data(Qt.ItemDataRole.UserRole)
+        
+        if not env_id:
+            return
+        
+        # Get environment details
+        env = self.db.get_environment(env_id)
+        if not env:
+            QMessageBox.warning(self, "Warning", "Environment not found!")
+            return
+        
+        # Ask user for export format
+        format_dialog = QDialog(self)
+        format_dialog.setWindowTitle("Select Export Format")
+        format_dialog.setModal(True)
+        format_dialog.resize(400, 220)
+        
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("Choose export format:"))
+        
+        internal_radio = QRadioButton("Internal Format (PostMini)")
+        internal_radio.setChecked(True)
+        internal_radio.setToolTip("PostMini's native environment format")
+        layout.addWidget(internal_radio)
+        
+        postman_radio = QRadioButton("Postman Environment Format")
+        postman_radio.setToolTip("Compatible with Postman and other API tools")
+        layout.addWidget(postman_radio)
+        
+        layout.addWidget(QLabel(""))  # Spacer
+        layout.addWidget(QLabel("Secret Variables:"))
+        
+        secrets_checkbox = QRadioButton("Include actual values")
+        secrets_checkbox.setChecked(True)
+        secrets_checkbox.setToolTip("Export with actual secret values")
+        layout.addWidget(secrets_checkbox)
+        
+        secrets_placeholder = QRadioButton("Replace with placeholders")
+        secrets_placeholder.setToolTip("Replace secret values with placeholders for sharing")
+        layout.addWidget(secrets_placeholder)
+        
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(format_dialog.accept)
+        buttons.rejected.connect(format_dialog.reject)
+        layout.addWidget(buttons)
+        
+        format_dialog.setLayout(layout)
+        
+        if format_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        
+        # Determine format and secret handling
+        export_format = 'postman' if postman_radio.isChecked() else 'internal'
+        include_secrets = secrets_checkbox.isChecked()
+        
+        # Generate safe filename
+        safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' 
+                          for c in env['name'])
+        safe_name = safe_name.strip().replace(' ', '_')
+        
+        # Ask user where to save
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Environment",
+            safe_name,
+            "JSON Files (*.json);;All Files (*.*)"
+        )
+        
+        if not file_path:
+            return  # User cancelled
+        
+        try:
+            # Create exporter and export
+            exporter = EnvironmentExporter(self.db)
+            success = exporter.export_environment_to_file(
+                env_id,
+                file_path,
+                format=export_format,
+                include_secrets=include_secrets
+            )
+            
+            if success:
+                format_name = "Postman Environment Format" if export_format == 'postman' else "Internal Format"
+                secret_info = "with actual values" if include_secrets else "with placeholders"
+                
+                QMessageBox.information(
+                    self,
+                    "Export Successful",
+                    f"Environment '{env['name']}' exported successfully!\n\n"
+                    f"Format: {format_name}\n"
+                    f"Secrets: {secret_info}\n"
+                    f"Location: {file_path}"
+                )
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Export Failed",
+                    f"Failed to export environment '{env['name']}'."
+                )
+        
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"An error occurred during export:\n\n{str(e)}"
+            )
+
 

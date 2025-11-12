@@ -1,14 +1,14 @@
 # PostMini - Desktop API Client
 
-**Version 1.8.2** | Professional API Testing Tool | MIT License
+**Version 1.9.0** | Professional API Testing Tool | MIT License
 
-A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, **request chaining**, **variable extraction**, OAuth 2.0, API testing with advanced reporting, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
+A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, **environment import/export with Postman compatibility**, **request chaining**, **variable extraction**, OAuth 2.0, API testing with advanced reporting, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.8.2-brightgreen)
+![Version](https://img.shields.io/badge/version-1.9.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Tests](https://img.shields.io/badge/tests-365%2B%20passing-success)
+![Tests](https://img.shields.io/badge/tests-374%2B%20passing-success)
 
 ---
 
@@ -29,6 +29,7 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 | **Data Storage** | **100% Local** | Cloud |
 | **Open Source** | **✅ MIT License** | ❌ Closed |
 | **Git Integration** | **Native** | Limited |
+| **Environment Import/Export** | **✅ Postman Compatible** | ✅ |
 
 💰 **Save $17,640** over 3 years for a 10-person team!
 
@@ -38,7 +39,17 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 
 ## Features
 
-### ✨ What's New in V1.8.2
+### ✨ What's New in V1.9.0
+- **🌍 Environment Import/Export**: Full Postman compatibility for seamless migration
+  - **Import** environments from Postman format (automatic detection)
+  - **Export** to Postman Environment Format or PostMini Internal Format
+  - **Secret handling** - Include actual values or replace with placeholders for sharing
+  - **Bulk operations** - Import/export multiple environments at once
+  - **Smart conflict resolution** - Handles duplicate environment names automatically
+  - Perfect for team collaboration across Postman and PostMini
+  - [Read the Environment Import/Export Guide](docs/guides/ENVIRONMENT_IMPORT_EXPORT_GUIDE.md)
+
+### Previous Updates (V1.8.2)
 - **🎨 UI Refinements**: Improved button layout and visual clarity
   - Fixed Send/Save button spacing for better visual separation
   - Added border to Save button right edge for clearer button boundaries
@@ -154,6 +165,7 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 - **Polished UI**: Focus states, hover effects, improved spacing and readability
 
 ### Core Features
+- **Environment Import/Export**: 🆕 v1.9.0 - Full Postman compatibility for seamless migration and team collaboration
 - **Request Chaining & Variable Extraction**: 🆕 v1.7.0 - Extract values from responses and use in subsequent requests (`{{extracted.variableName}}`)
 - **Advanced Test Reporting**: 🆕 v1.7.0 - Export test results as HTML, JUnit XML, JSON, or CSV
 - **Multi-Request Tabs**: 🆕 v1.5.0 - Open and work on multiple requests simultaneously with full state persistence
@@ -165,7 +177,7 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 - **Dark Mode**: 🆕 v1.1.2 - Beautiful dark theme with one-click toggle and persistence!
 - **Application Icon**: 🆕 v1.1.2 - Professional branding in window and taskbar
 - **cURL Import/Export**: 🆕 v1.1.2 - Paste cURL commands to create requests instantly!
-- **Export/Import Collections**: Share collections with your team via JSON files
+- **Export/Import Collections**: Share collections with your team via JSON files (Postman v2.1 compatible)
 - **Request History**: Track, review, and replay all API requests
 - **Code Generation**: Generate code in 7 languages (curl, Python, JS, Node, React, C#)
 - **OAuth 2.0 Support**: Full OAuth 2.0 with Authorization Code, Client Credentials, and Password Grant flows

@@ -461,7 +461,7 @@ class MainWindow(QMainWindow):
     Main application window with collections tree, request editor, and response viewer.
     """
     
-    def __init__(self, db_path: str = "api_client.db"):
+    def __init__(self, db_path: str = "api_client.db", theme: str = 'dark'):
         super().__init__()
         
         # Initialize database and API client
@@ -490,7 +490,7 @@ class MainWindow(QMainWindow):
         self.git_sync_timer.setInterval(30000)  # Refresh every 30 seconds
         
         # Theme management
-        self.current_theme = 'light'  # Will be set by main.py
+        self.current_theme = theme  # Initialize with provided theme
         
         # Track current selection
         self.current_collection_id = None
@@ -498,6 +498,7 @@ class MainWindow(QMainWindow):
         self.current_request_name = None
         self.current_collection_name = None
         self.current_folder_id = None  # Track current folder
+        self._current_description = ""  # Track current request description (popup-based)
         
         # Track unsaved changes
         self.has_unsaved_changes = False
@@ -522,7 +523,7 @@ class MainWindow(QMainWindow):
         
         # Setup UI
         self.setWindowTitle("PostMini - Desktop API Client")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setGeometry(100, 100, 1400, 750)  # Reduced height for better fit on 1920x1080 screens
         
         self._init_ui()
         
@@ -549,6 +550,12 @@ class MainWindow(QMainWindow):
         self._load_environments()
         self._load_extracted_variables()  # Load extracted variables into env_manager
         self._init_git_sync()
+        
+        # Initialize button styles for current theme (must be after UI is created)
+        self._update_collection_header_button_styles()
+        self._update_tab_bar_button_styles()
+        self._update_save_button_style()
+        self._update_env_combo_style()
         
         # Initialize method combo styling
         self._update_method_style('GET')
@@ -784,6 +791,7 @@ class MainWindow(QMainWindow):
         self.variable_inspector_pane = VariableInspectorPanel(self)
         self.variable_inspector_pane.setVisible(False)  # Hidden by default
         self.variable_inspector_pane.db = self.db  # Set database reference
+        self.variable_inspector_pane.set_theme(self.current_theme)  # Set initial theme
         main_splitter.addWidget(self.variable_inspector_pane)
         
         # Connect variable inspector panel signals
@@ -826,6 +834,7 @@ class MainWindow(QMainWindow):
         # ==================== LEFT PANE: Environments ====================
         self.environments_pane = EnvironmentsPanel(self.db, self)
         self.environments_pane.setVisible(False)  # Hidden by default
+        self.environments_pane.set_theme(self.current_theme)  # Set initial theme
         main_splitter.addWidget(self.environments_pane)
         
         # Connect environment panel signals
@@ -845,7 +854,7 @@ class MainWindow(QMainWindow):
         
         # Create horizontal container for tab bar + recent button (always visible)
         tab_bar_container = QWidget()
-        tab_bar_container.setMaximumHeight(35)  # Cursor-style height
+        tab_bar_container.setMaximumHeight(35)  # Restored for proper button display
         tab_bar_container.setMinimumHeight(35)
         tab_bar_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         tab_bar_layout = QHBoxLayout(tab_bar_container)
@@ -860,7 +869,7 @@ class MainWindow(QMainWindow):
         self.request_tabs.setDocumentMode(True)
         self.request_tabs.tabCloseRequested.connect(self._close_tab)
         self.request_tabs.currentChanged.connect(self._on_tab_changed)
-        self.request_tabs.setMaximumHeight(35)  # Cursor-style tab height
+        self.request_tabs.setMaximumHeight(35)  # Restored for proper button display
         self.request_tabs.setObjectName("requestTabs")  # For specific styling
         tab_bar_layout.addWidget(self.request_tabs)
         
@@ -869,24 +878,6 @@ class MainWindow(QMainWindow):
         self.new_request_btn.setToolTip("Create new request (Ctrl+N)")
         self.new_request_btn.setFixedHeight(35)  # Match tab bar height
         self.new_request_btn.setMinimumWidth(120)
-        self.new_request_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                border: 1px solid transparent;
-                border-radius: 4px;
-                font-size: 13px;
-                font-weight: 500;
-                padding: 0px 12px;
-                text-align: left;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-            }
-            QPushButton:pressed {
-                background: rgba(33, 150, 243, 0.3);
-            }
-        """)
         self.new_request_btn.clicked.connect(self._create_new_request)
         tab_bar_layout.addWidget(self.new_request_btn)
         
@@ -896,27 +887,11 @@ class MainWindow(QMainWindow):
         self.recent_requests_btn.setCheckable(True)
         self.recent_requests_btn.setFixedHeight(35)  # Match tab bar height
         self.recent_requests_btn.setMinimumWidth(70)
-        self.recent_requests_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                border: 1px solid transparent;
-                border-radius: 3px;
-                font-size: 13px;
-                font-weight: 500;
-                padding: 0px 10px;
-                text-align: center;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-            }
-            QPushButton:checked {
-                background: rgba(33, 150, 243, 0.15);
-                border: 1px solid rgba(33, 150, 243, 0.4);
-            }
-        """)
         self.recent_requests_btn.clicked.connect(self._toggle_recent_requests)
         tab_bar_layout.addWidget(self.recent_requests_btn)
+        
+        # Apply initial theme to these buttons
+        self._update_tab_bar_button_styles()
         
         # Add tab bar container to the top of center area (always visible, fixed height)
         center_container_layout.addWidget(tab_bar_container, 0)  # Stretch factor 0 = fixed height
@@ -1111,46 +1086,33 @@ class MainWindow(QMainWindow):
         self.env_combo.setMaximumHeight(22)
         self.env_combo.addItem("No Environment", None)
         self.env_combo.currentIndexChanged.connect(self._on_environment_changed)
-        self.env_combo.setStyleSheet("""
-            QComboBox {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 3px;
-                padding: 2px 8px;
-                color: #fff;
-                font-size: 11px;
-            }
-            QComboBox:hover {
-                background: rgba(255, 255, 255, 0.08);
-                border-color: rgba(255, 255, 255, 0.2);
-            }
-            QComboBox::drop-down {
-                border: none;
-                background: transparent;
-                width: 20px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 5px solid #999;
-                width: 0;
-                height: 0;
-                margin-right: 4px;
-            }
-        """)
         status_bar.addWidget(self.env_combo)
+        
+        # Apply initial theme to environment combo
+        self._update_env_combo_style()
         
         # Add spacer - use addPermanentWidget with empty label to push right side
         spacer_label = QLabel()
         spacer_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         status_bar.addWidget(spacer_label)
         
+        # Theme toggle button (on the right side, before help hint)
+        self.theme_toggle_btn = QPushButton()
+        self.theme_toggle_btn.setFixedSize(28, 22)
+        self.theme_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.theme_toggle_btn.clicked.connect(self._toggle_theme)
+        self.theme_toggle_btn.setToolTip("Toggle light/dark theme")
+        self._update_theme_button()
+        status_bar.addPermanentWidget(self.theme_toggle_btn)
+        
         # Help hint (on the right side)
         help_hint = QLabel("💡 Ctrl+/ for shortcuts")
         help_hint.setStyleSheet("color: #2196F3; font-size: 11px; padding: 0 12px;")
         help_hint.setToolTip("Show keyboard shortcuts help")
         status_bar.addPermanentWidget(help_hint)
+        
+        # Set initial icon bar hover colors based on current theme
+        self._update_icon_bar_hover_colors()
     
     def _update_save_status(self, message: str, duration: int = 3000):
         """Update the status bar with a save status message."""
@@ -1241,8 +1203,8 @@ class MainWindow(QMainWindow):
         ui_preferences = {
             'active_inner_tab': self.inner_tabs.currentIndex() if hasattr(self, 'inner_tabs') else 0,
             'active_response_tab': self.response_tabs.currentIndex() if hasattr(self, 'response_tabs') else 0,
-            'response_view_mode': 'pretty' if self.is_pretty_mode else 'raw',
-            'description_visible': self.description_input.isVisible() if hasattr(self, 'description_input') else False
+            'response_view_mode': 'pretty' if self.is_pretty_mode else 'raw'
+            # Removed description_visible - description now accessed via popup button
         }
         print(f"[DEBUG] Captured UI preferences: inner_tab={ui_preferences['active_inner_tab']}, response_tab={ui_preferences['active_response_tab']}, view_mode={ui_preferences['response_view_mode']}")
         
@@ -1256,7 +1218,7 @@ class MainWindow(QMainWindow):
             'body': self.body_input.toPlainText(),
             'auth_type': self.auth_type_combo.currentText(),
             'auth_token': self.auth_token_input.text(),
-            'description': self.description_input.toPlainText(),
+            'description': self._current_description,  # Use string instead of widget
             'request_name': self.current_request_name or 'Untitled',
             'has_changes': self.has_unsaved_changes,
             'response': response_data,  # Response data
@@ -1278,7 +1240,7 @@ class MainWindow(QMainWindow):
         self.body_input.blockSignals(True)
         self.auth_type_combo.blockSignals(True)
         self.auth_token_input.blockSignals(True)
-        self.description_input.blockSignals(True)
+        # description_input removed - now using _current_description string
         self.test_tab.blockSignals(True)
         self.scripts_tab.blockSignals(True)
         
@@ -1306,7 +1268,8 @@ class MainWindow(QMainWindow):
             self.auth_token_input.setText(state.get('auth_token', ''))
             
             # Load description
-            self.description_input.setPlainText(state.get('description', ''))
+            self._current_description = state.get('description', '')
+            self._update_description_button_style()
             
             # Load test assertions from saved state (if available) or database
             test_assertions_data = state.get('test_assertions')
@@ -1358,14 +1321,7 @@ class MainWindow(QMainWindow):
                 if hasattr(self, 'inner_tabs') and 0 <= active_inner_tab < self.inner_tabs.count():
                     self.inner_tabs.setCurrentIndex(active_inner_tab)
                 
-                # Restore description visibility
-                description_visible = ui_preferences.get('description_visible', False)
-                if hasattr(self, 'description_input'):
-                    self.description_input.setVisible(description_visible)
-                    if description_visible:
-                        self.description_toggle_btn.setText("▼ Description")
-                    else:
-                        self.description_toggle_btn.setText("▶ Description")
+                # Description visibility removed - description now accessed via popup button
             
             # Clear response viewer for new requests (no response data yet)
             if state.get('is_new_request') or not self.current_request_id:
@@ -1384,7 +1340,7 @@ class MainWindow(QMainWindow):
             self.body_input.blockSignals(False)
             self.auth_type_combo.blockSignals(False)
             self.auth_token_input.blockSignals(False)
-            self.description_input.blockSignals(False)
+            # description_input removed - now using _current_description string
             self.test_tab.blockSignals(False)
             self.scripts_tab.blockSignals(False)
         
@@ -1437,17 +1393,27 @@ class MainWindow(QMainWindow):
                 )
                 # Store for future captures
                 self._current_test_results = test_results_data
+                
+                # Show test results tab when restoring test results
+                if hasattr(self, 'test_results_tab_index'):
+                    self.response_tabs.setTabVisible(self.test_results_tab_index, True)
             except Exception as e:
                 print(f"[DEBUG] Failed to restore test results: {e}")
                 # If restoration fails, just clear
                 self.test_results_viewer.clear()
                 self._current_test_results = None
+                # Hide test results tab if restoration failed
+                if hasattr(self, 'test_results_tab_index'):
+                    self.response_tabs.setTabVisible(self.test_results_tab_index, False)
         else:
             print("[DEBUG] No test results to restore")
             # No test results - clear the viewer
             if hasattr(self, 'test_results_viewer') and self.test_results_viewer is not None:
                 self.test_results_viewer.clear()
             self._current_test_results = None
+            # Hide test results tab when no results
+            if hasattr(self, 'test_results_tab_index'):
+                self.response_tabs.setTabVisible(self.test_results_tab_index, False)
     
     def _on_tab_changed(self, index: int):
         """Handle tab switching."""
@@ -1961,50 +1927,17 @@ class MainWindow(QMainWindow):
         header_layout.addStretch()
         
         # Add Collection button in header
-        add_collection_btn = QPushButton("+ Add")
-        add_collection_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 12px;
-                font-weight: 500;
-                color: #fff;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border-color: rgba(255, 255, 255, 0.25);
-            }
-        """)
-        add_collection_btn.setToolTip("Add a new collection")
-        add_collection_btn.clicked.connect(self._add_collection)
-        header_layout.addWidget(add_collection_btn)
+        self.add_collection_btn = QPushButton("+ Add")
+        self.add_collection_btn.setToolTip("Add a new collection")
+        self.add_collection_btn.clicked.connect(self._add_collection)
+        header_layout.addWidget(self.add_collection_btn)
         
         # Import button with dropdown menu in header
-        import_menu_btn = QPushButton("📥 Import")
-        import_menu_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 12px;
-                font-weight: 500;
-                color: #fff;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border-color: rgba(255, 255, 255, 0.25);
-            }
-            QPushButton::menu-indicator {
-                width: 0px;
-            }
-        """)
-        import_menu_btn.setToolTip("Import collections, cURL commands, or OpenAPI specs")
+        self.import_collection_menu_btn = QPushButton("📥 Import")
+        self.import_collection_menu_btn.setToolTip("Import collections, cURL commands, or OpenAPI specs")
         
         # Create dropdown menu with proper styling
-        import_menu = QMenu(import_menu_btn)
+        import_menu = QMenu(self.import_collection_menu_btn)
         import_menu.setStyleSheet("""
             QMenu {
                 background-color: #2b2b2b;
@@ -2043,8 +1976,11 @@ class MainWindow(QMainWindow):
         import_menu.addAction(import_openapi_action)
         
         # Attach menu to button
-        import_menu_btn.setMenu(import_menu)
-        header_layout.addWidget(import_menu_btn)
+        self.import_collection_menu_btn.setMenu(import_menu)
+        header_layout.addWidget(self.import_collection_menu_btn)
+        
+        # Apply initial theme to collection header buttons
+        self._update_collection_header_button_styles()
         
         layout.addWidget(header)
         
@@ -2102,22 +2038,23 @@ class MainWindow(QMainWindow):
         """Create the request editor section."""
         editor = QWidget()
         layout = QVBoxLayout(editor)
-        layout.setSpacing(8)
+        layout.setSpacing(2)  # Minimal spacing for compact layout
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove margins for tight fit
         
         # Dynamic request title header (fixed height, no stretch) - ENHANCED
         # Create a container for the title label and rename button
         title_container = QWidget()
-        title_container.setMaximumHeight(40)
-        title_container.setMinimumHeight(40)
+        title_container.setMaximumHeight(32)
+        title_container.setMinimumHeight(32)
         title_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         title_layout = QHBoxLayout(title_container)
-        title_layout.setContentsMargins(10, 5, 10, 5)
-        title_layout.setSpacing(6)  # Smaller spacing for inline appearance
+        title_layout.setContentsMargins(8, 3, 8, 3)  # Reduced margins for compact layout
+        title_layout.setSpacing(4)  # Reduced spacing
         title_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)  # Vertical center alignment
         
         self.request_title_label = QLabel("New Request (not saved)")
         self.request_title_label.setObjectName("requestTitleLabel")
-        self.request_title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        self.request_title_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))  # Reduced font size
         self.request_title_label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)  # Changed to Minimum so it doesn't expand
         self.request_title_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Vertical center
         title_layout.addWidget(self.request_title_label)
@@ -2134,6 +2071,20 @@ class MainWindow(QMainWindow):
         self._update_rename_button_style()
         title_layout.addWidget(self.rename_request_btn, 0, Qt.AlignmentFlag.AlignVCenter)  # Add with vertical center alignment
         
+        # Add description button with comment icon - inline with text
+        self.description_btn = QPushButton("💬")  # Comment icon
+        self.description_btn.setObjectName("descriptionBtn")
+        self.description_btn.setFixedSize(22, 22)  # Same size as rename button
+        self.description_btn.setToolTip("Add/edit description (empty)")
+        self.description_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.description_btn.setVisible(False)  # Hidden by default, shown when request is loaded
+        self.description_btn.clicked.connect(self._edit_description)
+        # Theme-aware styling will be applied via method
+        self._update_description_button_style()
+        title_layout.addWidget(self.description_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        # Description is tracked via self._current_description (initialized in __init__)
+        
         # Add stretch to push everything to the left
         title_layout.addStretch()
         
@@ -2142,8 +2093,8 @@ class MainWindow(QMainWindow):
         # Method and URL row (fixed height, no stretch)
         # Wrap in a container widget to enforce fixed height
         url_container = QWidget()
-        url_container.setMaximumHeight(48)  # Increased from 40 to 48 for better presence
-        url_container.setMinimumHeight(48)
+        url_container.setMaximumHeight(40)  # Reduced for better screen fit
+        url_container.setMinimumHeight(40)
         url_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         url_layout = QHBoxLayout(url_container)
         url_layout.setContentsMargins(0, 0, 0, 0)
@@ -2154,7 +2105,7 @@ class MainWindow(QMainWindow):
         self.method_combo.addItems(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'])
         self.method_combo.setObjectName("methodCombo")  # For stylesheet targeting
         self.method_combo.setMaximumWidth(100)
-        self.method_combo.setMinimumHeight(38)  # Match other controls
+        self.method_combo.setMinimumHeight(32)  # Reduced for compact layout
         self.method_combo.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         # Apply method-specific colors via styleSheet update on change
         self.method_combo.currentTextChanged.connect(self._update_method_style)
@@ -2164,7 +2115,7 @@ class MainWindow(QMainWindow):
         self.url_input = HighlightedLineEdit(theme=self.current_theme)
         self.url_input.setPlaceholderText("Enter request URL or paste text")
         self.url_input.returnPressed.connect(self._send_request)  # Enter key sends request
-        self.url_input.setMinimumHeight(38)  # Make URL input taller
+        self.url_input.setMinimumHeight(32)  # Reduced for compact layout
         self.url_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         url_layout.addWidget(self.url_input)
@@ -2176,7 +2127,7 @@ class MainWindow(QMainWindow):
         self.send_btn.setProperty("class", "primary")
         self.send_btn.setProperty("primary", "true")  # For QSS targeting
         self.send_btn.setMinimumWidth(100)  # Increased from 80
-        self.send_btn.setMinimumHeight(38)  # Explicit height
+        self.send_btn.setMinimumHeight(32)  # Reduced for compact layout
         self.send_btn.clicked.connect(self._send_request)
         self.send_btn.setToolTip("Send request (Ctrl+Enter)")
         self.send_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -2197,34 +2148,17 @@ class MainWindow(QMainWindow):
         
         # Save button with rounded corners only on the left
         self.save_btn = QPushButton("Save")
-        self.save_btn.setFixedSize(80, 38)
+        self.save_btn.setFixedSize(80, 32)  # Reduced for compact layout
         self.save_btn.clicked.connect(self._save_request)
         self.save_btn.setToolTip("Save request (Ctrl+S)")
-        self.save_btn.setStyleSheet("""
-            QPushButton {
-                border: 1px solid #444444;
-                border-top-left-radius: 4px;
-                border-bottom-left-radius: 4px;
-                border-top-right-radius: 0px;
-                border-bottom-right-radius: 0px;
-                background-color: transparent;
-                color: #E0E0E0;
-                padding: 0px;
-                margin: 0px;
-            }
-            QPushButton:hover {
-                background-color: #2A2A2A;
-                border-color: #555555;
-            }
-            QPushButton:pressed {
-                background-color: #2D2D2D;
-            }
-        """)
         button_group_layout.addWidget(self.save_btn)
+        
+        # Apply initial theme to save button
+        self._update_save_button_style()
         
         # Menu button with down arrow
         self.menu_btn = QPushButton("▼")
-        self.menu_btn.setFixedSize(28, 38)
+        self.menu_btn.setFixedSize(28, 32)  # Reduced for compact layout
         self.menu_btn.setToolTip("More options")
         self.menu_btn.setStyleSheet("""
             QPushButton {
@@ -2285,9 +2219,7 @@ class MainWindow(QMainWindow):
         self.method_combo.currentIndexChanged.connect(self._update_request_title)  # Update title when method changes
         self.url_input.textChanged.connect(self._mark_as_changed)
         
-        # Description section (collapsible)
-        self.description_widget = self._create_description_section()
-        layout.addWidget(self.description_widget, 0)  # Stretch factor 0 = fixed height
+        # Description section has been removed - now accessed via popup button in header
         
         # Create collapsible container for request tabs
         self.request_tabs_container = QWidget()
@@ -2301,6 +2233,7 @@ class MainWindow(QMainWindow):
         
         self.request_tabs_toggle_btn = QPushButton("▼ Request")
         self.request_tabs_toggle_btn.setFlat(True)
+        self.request_tabs_toggle_btn.setFixedHeight(28)  # Fixed height for compact layout
         self.request_tabs_toggle_btn.setStyleSheet("""
             QPushButton {
                 text-align: left;
@@ -2320,23 +2253,25 @@ class MainWindow(QMainWindow):
         
         request_tabs_layout.addLayout(request_header_layout)
         
-        # Add spacing between toggle button and tabs
-        request_tabs_layout.addSpacing(4)
+        # No spacing between toggle button and tabs for compact layout
         
         # Tabs for Params, Headers, Authorization, Body (this should expand)
         self.inner_tabs = QTabWidget()
         self.inner_tabs.setObjectName("innerTabs")  # For specific styling
-        # Remove maximum height constraint - let it expand to fill available space
+        # Set minimum height to allow window resizing when request tabs are collapsed
+        self.inner_tabs.setMinimumHeight(80)  # Small minimum for collapsed state
         self.inner_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Params tab
         self.params_table = self._create_key_value_table()
         self.params_table.itemChanged.connect(self._update_tab_counts)
+        self.params_table.itemChanged.connect(lambda: self._auto_add_table_rows(self.params_table))
         self.inner_tabs.addTab(self.params_table, "Params")
         
         # Headers tab
         self.headers_table = self._create_key_value_table()
         self.headers_table.itemChanged.connect(self._update_tab_counts)
+        self.headers_table.itemChanged.connect(lambda: self._auto_add_table_rows(self.headers_table))
         self.inner_tabs.addTab(self.headers_table, "Headers")
         
         # Authorization tab
@@ -2383,43 +2318,35 @@ class MainWindow(QMainWindow):
     def _create_response_viewer(self) -> QWidget:
         """Create the response viewer section."""
         viewer = QWidget()
+        # Hide response viewer initially until we have a response
+        viewer.setVisible(False)
         layout = QVBoxLayout(viewer)
         
-        # Title row with collapse icon
-        title_layout = QHBoxLayout()
-        title_layout.setContentsMargins(0, 0, 0, 0)
+        # Status info row with collapse button integrated
+        status_layout = QHBoxLayout()
         
-        # Collapse button (clickable with hover effect)
-        self.response_collapse_btn = QPushButton("▼ Response")
+        # Collapse button on the left side (clickable with hover effect)
+        self.response_collapse_btn = QPushButton("▼")
         self.response_collapse_btn.setFlat(True)
         self.response_collapse_btn.setStyleSheet("""
             QPushButton {
-                text-align: left;
-                padding: 4px 8px;
+                text-align: center;
+                padding: 2px 6px;
                 border: none;
                 background: transparent;
                 color: #9E9E9E;
-                font-weight: normal;
+                font-weight: bold;
+                font-size: 12px;
             }
             QPushButton:hover {
                 background-color: rgba(100, 100, 100, 0.2);
+                border-radius: 3px;
             }
         """)
         self.response_collapse_btn.clicked.connect(self._toggle_response_panel)
         self.response_collapse_btn.setToolTip("Collapse/Expand response panel")
-        title_layout.addWidget(self.response_collapse_btn)
-        
-        title_layout.addStretch()
-        
-        layout.addLayout(title_layout)
-        
-        # Create collapsible content container
-        self.response_content_widget = QWidget()
-        response_content_layout = QVBoxLayout(self.response_content_widget)
-        response_content_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Status info row
-        status_layout = QHBoxLayout()
+        self.response_collapse_btn.setFixedSize(24, 24)
+        status_layout.addWidget(self.response_collapse_btn)
         
         # Use StatusBadge widget for professional status display
         self.status_badge = StatusBadge()
@@ -2449,7 +2376,13 @@ class MainWindow(QMainWindow):
         self.copy_response_btn.setMaximumWidth(150)
         status_layout.addWidget(self.copy_response_btn)
         
-        response_content_layout.addLayout(status_layout)
+        layout.addLayout(status_layout)
+        
+        # Create collapsible content container
+        self.response_content_widget = QWidget()
+        self.response_content_widget.setMinimumHeight(80)  # Small minimum for collapsed state
+        response_content_layout = QVBoxLayout(self.response_content_widget)
+        response_content_layout.setContentsMargins(0, 0, 0, 0)
         
         # Tabs for Body and Headers
         self.response_tabs = QTabWidget()
@@ -2548,7 +2481,7 @@ class MainWindow(QMainWindow):
         # Add padding to body widget
         body_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.response_tabs.addTab(body_widget, "Body")
+        self.response_tabs.addTab(body_widget, "Response Body")
         
         # Headers tab
         self.response_headers_table = QTableWidget()
@@ -2557,7 +2490,7 @@ class MainWindow(QMainWindow):
         self.response_headers_table.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Stretch
         )
-        self.response_tabs.addTab(self.response_headers_table, "Headers")
+        self.response_tabs.addTab(self.response_headers_table, "Response Headers")
         
         # Request Details tab
         self.request_details_viewer = QTextEdit()
@@ -2568,13 +2501,15 @@ class MainWindow(QMainWindow):
         # Variable Extraction tab
         self.variable_extraction_widget = VariableExtractionWidget()
         self.variable_extraction_widget.variable_extracted.connect(self._on_variable_extracted)
-        self.response_tabs.addTab(self.variable_extraction_widget, "Extract Variables")
+        self.response_tabs.addTab(self.variable_extraction_widget, "Extract Variables from Response")
+        
+        # Test Results tab - moved from collapsible panel to tab
+        self.test_results_viewer = TestResultsViewer()
+        self.test_results_tab_index = self.response_tabs.addTab(self.test_results_viewer, "Test Results")
+        # Hide test results tab by default - will be shown when tests are run
+        self.response_tabs.setTabVisible(self.test_results_tab_index, False)
         
         response_content_layout.addWidget(self.response_tabs)
-        
-        # Test results viewer
-        self.test_results_viewer = TestResultsViewer()
-        response_content_layout.addWidget(self.test_results_viewer)
         
         layout.addWidget(self.response_content_widget)
         
@@ -2586,7 +2521,7 @@ class MainWindow(QMainWindow):
         table.setColumnCount(2)
         table.setHorizontalHeaderLabels(['Key', 'Value'])
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        table.setRowCount(3)  # Start with 3 empty rows (reduced for better space)
+        table.setRowCount(1)  # Start with just 1 empty row (dynamic expansion will handle the rest)
         
         # Apply custom delegate with variable highlighting
         delegate = NoPaddingDelegate(table, self.current_theme)
@@ -2604,63 +2539,9 @@ class MainWindow(QMainWindow):
         # Remove max height constraint so table anchors to parent panel properly
         return table
     
-    def _create_description_section(self) -> QWidget:
-        """Create a collapsible description/notes section."""
-        container = QWidget()
-        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        
-        # Header with collapse/expand button
-        header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.description_toggle_btn = QPushButton("▶ Description")
-        self.description_toggle_btn.setFlat(True)
-        self.description_toggle_btn.setStyleSheet("""
-            QPushButton {
-                text-align: left;
-                padding: 4px 8px;
-                border: none;
-                background: transparent;
-                color: #9E9E9E;  /* Secondary text for form labels */
-                font-weight: normal;
-            }
-            QPushButton:hover {
-                background-color: rgba(100, 100, 100, 0.2);
-            }
-        """)
-        self.description_toggle_btn.clicked.connect(self._toggle_description)
-        header_layout.addWidget(self.description_toggle_btn)
-        header_layout.addStretch()
-        
-        layout.addLayout(header_layout)
-        
-        # Description text area (initially collapsed)
-        self.description_input = QTextEdit()
-        self.description_input.setPlaceholderText("Add notes or description for this request...")
-        self.description_input.setMaximumHeight(100)
-        self.description_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.description_input.textChanged.connect(self._mark_as_changed)
-        self.description_input.setVisible(False)  # Start collapsed
-        layout.addWidget(self.description_input)
-        
-        return container
+    # _create_description_section removed - description now accessed via popup button in header
     
-    def _toggle_description(self):
-        """Toggle the visibility of the description section."""
-        # Use testAttribute to check explicit visibility state (works even when parent is hidden)
-        from PyQt6.QtCore import Qt
-        is_visible = self.description_input.testAttribute(Qt.WidgetAttribute.WA_WState_ExplicitShowHide) and \
-                    not self.description_input.testAttribute(Qt.WidgetAttribute.WA_WState_Hidden)
-        self.description_input.setVisible(not is_visible)
-        
-        # Update button text
-        if is_visible:
-            self.description_toggle_btn.setText("▶ Description")
-        else:
-            self.description_toggle_btn.setText("▼ Description")
+    # _toggle_description removed - no longer needed
     
     def _toggle_request_tabs(self):
         """Toggle the visibility of the request tabs section."""
@@ -2672,13 +2553,18 @@ class MainWindow(QMainWindow):
             # Collapsing - give more space to response
             self.request_tabs_toggle_btn.setText("▶ Request")
             # When collapsed, set minimal height for the container
-            self.request_tabs_container.setMaximumHeight(30)
+            self.request_tabs_container.setMaximumHeight(28)  # Match button height
             
             # Adjust splitter to give most space to response
-            # Fixed parts in request editor: title (40px) + URL bar (~60px) + description header + request header
+            # Fixed parts in request editor when collapsed:
+            # - Title header: 32px (fixed height)
+            # - URL bar: 40px (fixed height)
+            # - Request toggle button: 28px (fixed height)
+            # - Layout spacing: ~4px (2px * 2 spacing between elements)
+            # Total: ~104px
             total_height = sum(self.request_response_splitter.sizes())
-            request_fixed_height = 200  # Conservative estimate for fixed height elements
-            response_height = max(total_height - request_fixed_height, total_height * 0.7)  # At least 70% to response
+            request_fixed_height = 110  # Accurate measurement of fixed elements
+            response_height = max(total_height - request_fixed_height, total_height * 0.85)  # At least 85% to response
             self.request_response_splitter.setSizes([int(total_height - response_height), int(response_height)])
         else:
             # Expanding - restore normal proportions
@@ -3924,7 +3810,7 @@ class MainWindow(QMainWindow):
             self.body_input.blockSignals(True)
             self.auth_type_combo.blockSignals(True)
             self.auth_token_input.blockSignals(True)
-            self.description_input.blockSignals(True)
+            # description_input removed - now using _current_description string
             self.test_tab.blockSignals(True)
             self.scripts_tab.blockSignals(True)
             
@@ -3965,14 +3851,8 @@ class MainWindow(QMainWindow):
             
             # Load description
             description = request.get('description', '') or ''
-            self.description_input.setPlainText(description)
-            # Auto-expand description if it has content
-            if description.strip():
-                self.description_input.setVisible(True)
-                self.description_toggle_btn.setText("▼ Description")
-            else:
-                self.description_input.setVisible(False)
-                self.description_toggle_btn.setText("▶ Description")
+            self._current_description = description
+            self._update_description_button_style()
             
             # Load test assertions
             self._load_test_assertions(request_id)
@@ -3987,6 +3867,9 @@ class MainWindow(QMainWindow):
             # Clear test results
             self.test_results_viewer.clear()
             self._current_test_results = None  # Clear stored test results
+            # Hide test results tab when loading a new request
+            if hasattr(self, 'test_results_tab_index'):
+                self.response_tabs.setTabVisible(self.test_results_tab_index, False)
             
             # Clear response viewer - fresh request has no response yet
             self._clear_response_viewer()
@@ -4028,7 +3911,7 @@ class MainWindow(QMainWindow):
             self.body_input.blockSignals(False)
             self.auth_type_combo.blockSignals(False)
             self.auth_token_input.blockSignals(False)
-            self.description_input.blockSignals(False)
+            # description_input removed - now using _current_description string
             self.test_tab.blockSignals(False)
             self.scripts_tab.blockSignals(False)
     
@@ -4039,16 +3922,18 @@ class MainWindow(QMainWindow):
         self.test_tab.clear()
         self.scripts_tab.clear_all()
         self.test_results_viewer.clear()
+        # Hide test results tab when clearing
+        if hasattr(self, 'test_results_tab_index'):
+            self.response_tabs.setTabVisible(self.test_results_tab_index, False)
         self.params_table.clearContents()
-        self.params_table.setRowCount(3)
+        self.params_table.setRowCount(1)  # Reset to 1 empty row
         self.headers_table.clearContents()
-        self.headers_table.setRowCount(3)
+        self.headers_table.setRowCount(1)  # Reset to 1 empty row
         self.body_input.clear()
         self.auth_type_combo.setCurrentText('None')
         self.auth_token_input.clear()
-        self.description_input.clear()
-        self.description_input.setVisible(False)
-        self.description_toggle_btn.setText("▶ Description")
+        self._current_description = ""  # Clear description string
+        self._update_description_button_style()  # Update button to show empty state
         self.timeout_input.setText("30")
         self.verify_ssl_checkbox.setChecked(True)
         self._clear_response_viewer()
@@ -4068,10 +3953,11 @@ class MainWindow(QMainWindow):
         
         # Handle None or empty data
         if not data:
-            table.setRowCount(3)
+            table.setRowCount(1)  # Reset to 1 empty row
             return
         
-        table.setRowCount(max(3, len(data) + 2))
+        # Set exact number of rows needed: data rows + 1 empty row
+        table.setRowCount(len(data) + 1)
         
         for i, (key, value) in enumerate(data.items()):
             table.setItem(i, 0, QTableWidgetItem(key))
@@ -4122,7 +4008,7 @@ class MainWindow(QMainWindow):
             'body': self.body_input.toPlainText(),
             'auth_type': self.auth_type_combo.currentText(),
             'auth_token': self.auth_token_input.text(),
-            'description': self.description_input.toPlainText(),
+            'description': self._current_description,  # Use string instead of widget
             'pre_request_script': self.scripts_tab.get_pre_request_script(),
             'post_response_script': self.scripts_tab.get_post_response_script()
         }
@@ -4220,6 +4106,41 @@ class MainWindow(QMainWindow):
         self.inner_tabs.setTabText(2, auth_label)
         self.inner_tabs.setTabText(4, tests_label)
     
+    def _auto_add_table_rows(self, table: QTableWidget):
+        """Dynamically manage table rows: show only filled rows + 1 empty row (no sorting during editing)."""
+        # Block signals to prevent recursive calls
+        table.blockSignals(True)
+        
+        try:
+            # Count filled rows and collect empty row indices
+            filled_count = 0
+            empty_rows_to_remove = []
+            
+            for row in range(table.rowCount()):
+                key_item = table.item(row, 0)
+                value_item = table.item(row, 1)
+                key_text = key_item.text().strip() if key_item else ""
+                value_text = value_item.text().strip() if value_item else ""
+                
+                # If either key or value has content, it's filled
+                if key_text or value_text:
+                    filled_count += 1
+                else:
+                    empty_rows_to_remove.append(row)
+            
+            # Remove all empty rows except keep one at the end
+            if len(empty_rows_to_remove) > 1:
+                # Remove empty rows from bottom to top (to maintain indices)
+                for row in reversed(empty_rows_to_remove[:-1]):
+                    table.removeRow(row)
+            elif len(empty_rows_to_remove) == 0:
+                # No empty rows exist, add one at the end
+                table.insertRow(table.rowCount())
+        
+        finally:
+            # Re-enable signals
+            table.blockSignals(False)
+    
     def _update_request_title(self):
         """Update the request title label to show current state with breadcrumb (Postman-style)."""
         # Check if this is a new unsaved request
@@ -4239,6 +4160,7 @@ class MainWindow(QMainWindow):
             )
             self.request_title_label.setProperty("saved", "false")
             self.rename_request_btn.setVisible(False)
+            self.description_btn.setVisible(False)  # Hide description button for new requests
         elif self.current_request_id and self.current_request_name:
             # Saved request - show full breadcrumb with colored method
             method = self.method_combo.currentText()
@@ -4279,16 +4201,18 @@ class MainWindow(QMainWindow):
             self.request_title_label.setText(title_html)
             self.request_title_label.setProperty("saved", "true")
             
-            # Show rename button for saved requests
+            # Show rename and description buttons for saved requests
             self.rename_request_btn.setVisible(True)
+            self.description_btn.setVisible(True)
         else:
             # New unsaved request
             new_request_color = "#9E9E9E" if self.current_theme == 'light' else "#999999"
             self.request_title_label.setText(f"<span style='color: {new_request_color}; font-style: italic;'>New Request (not saved)</span>")
             self.request_title_label.setProperty("saved", "false")
             
-            # Hide rename button for unsaved requests
+            # Hide rename and description buttons for unsaved requests
             self.rename_request_btn.setVisible(False)
+            self.description_btn.setVisible(False)
         
         # Force style refresh
         self.request_title_label.style().unpolish(self.request_title_label)
@@ -4350,7 +4274,7 @@ class MainWindow(QMainWindow):
                 body=self.body_input.toPlainText(),
                 auth_type=self.auth_type_combo.currentText(),
                 auth_token=self.auth_token_input.text(),
-                description=self.description_input.toPlainText(),
+                description=self._current_description,  # Use string instead of widget
                 pre_request_script=self.scripts_tab.get_pre_request_script(),
                 post_response_script=self.scripts_tab.get_post_response_script()
             )
@@ -4473,7 +4397,7 @@ class MainWindow(QMainWindow):
                     body=self.body_input.toPlainText(),
                     auth_type=self.auth_type_combo.currentText(),
                     auth_token=self.auth_token_input.text(),
-                    description=self.description_input.toPlainText(),
+                    description=self._current_description,  # Use string instead of widget
                     pre_request_script=self.scripts_tab.get_pre_request_script(),
                     post_response_script=self.scripts_tab.get_post_response_script()
                 )
@@ -5213,6 +5137,15 @@ class MainWindow(QMainWindow):
     
     def _display_response(self, response: ApiResponse):
         """Display the HTTP response in the response viewer."""
+        # Make response viewer visible when we have a response
+        if hasattr(self, 'request_response_splitter'):
+            response_viewer = self.request_response_splitter.widget(1)
+            if response_viewer and not response_viewer.isVisible():
+                response_viewer.setVisible(True)
+                # Ensure panel is expanded when showing response
+                if hasattr(self, 'response_panel_collapsed') and self.response_panel_collapsed:
+                    self._toggle_response_panel()
+        
         # Store response for later use (Raw/Pretty toggle)
         self.current_response = response
         try:
@@ -5334,6 +5267,12 @@ class MainWindow(QMainWindow):
     
     def _clear_response_viewer(self):
         """Clear the response viewer."""
+        # Hide response viewer when clearing
+        if hasattr(self, 'request_response_splitter'):
+            response_viewer = self.request_response_splitter.widget(1)
+            if response_viewer:
+                response_viewer.setVisible(False)
+        
         self.status_badge.setVisible(False)
         self.status_label.setText("Status: -")
         self.time_label.setText("Time: -")
@@ -5361,6 +5300,9 @@ class MainWindow(QMainWindow):
         # Clear test results viewer
         if hasattr(self, 'test_results_viewer') and self.test_results_viewer is not None:
             self.test_results_viewer.clear()
+        # Hide test results tab when clearing response
+        if hasattr(self, 'test_results_tab_index'):
+            self.response_tabs.setTabVisible(self.test_results_tab_index, False)
     
     def _update_request_details_viewer(self):
         """Update the request details viewer with the current request information."""
@@ -5547,14 +5489,14 @@ class MainWindow(QMainWindow):
             
             # Hide content and adjust splitter to minimal response panel size
             self.response_content_widget.hide()
-            self.response_collapse_btn.setText("▶ Response")
+            self.response_collapse_btn.setText("▶")  # Right arrow when collapsed
             
-            # Get total height and set response panel to minimal height (60px for header)
+            # Get total height and set response panel to minimal height (40px for status bar only)
             total_height = sum(self.request_response_splitter.sizes())
-            self.request_response_splitter.setSizes([total_height - 60, 60])
+            self.request_response_splitter.setSizes([total_height - 40, 40])
         else:
             self.response_content_widget.show()
-            self.response_collapse_btn.setText("▼ Response")
+            self.response_collapse_btn.setText("▼")  # Down arrow when expanded
             
             # Restore previous sizes or use default proportions
             if hasattr(self, 'splitter_sizes_before_collapse'):
@@ -7437,6 +7379,13 @@ class MainWindow(QMainWindow):
             
             # Display results
             self.test_results_viewer.display_results(display_results, summary)
+            print(f"[DEBUG] Test results displayed: {len(display_results)} results, Summary: {summary}")
+            
+            # Show test results tab when tests are run
+            if hasattr(self, 'test_results_tab_index'):
+                self.response_tabs.setTabVisible(self.test_results_tab_index, True)
+                # Switch to test results tab to show the results
+                self.response_tabs.setCurrentIndex(self.test_results_tab_index)
             
             # Store test results for tab state persistence
             self._current_test_results = {
@@ -7609,8 +7558,55 @@ class MainWindow(QMainWindow):
     
     def _update_theme_button(self):
         """Update the theme toggle button icon based on current theme."""
-        # Theme toggle button has been removed - keeping method for compatibility
-        pass
+        if not hasattr(self, 'theme_toggle_btn'):
+            return
+        
+        if self.current_theme == 'dark':
+            # Dark theme active - show sun icon (click to go to light)
+            self.theme_toggle_btn.setText("☀️")
+            self.theme_toggle_btn.setToolTip("Switch to light theme")
+            
+            # Dark theme button style
+            self.theme_toggle_btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 3px;
+                    color: #fff;
+                    font-size: 14px;
+                    padding: 0;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    border-color: rgba(255, 255, 255, 0.2);
+                }
+                QPushButton:pressed {
+                    background: rgba(255, 255, 255, 0.15);
+                }
+            """)
+        else:
+            # Light theme active - show moon icon (click to go to dark)
+            self.theme_toggle_btn.setText("🌙")
+            self.theme_toggle_btn.setToolTip("Switch to dark theme")
+            
+            # Light theme button style
+            self.theme_toggle_btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(0, 0, 0, 0.05);
+                    border: 1px solid rgba(0, 0, 0, 0.15);
+                    border-radius: 3px;
+                    color: #424242;
+                    font-size: 14px;
+                    padding: 0;
+                }
+                QPushButton:hover {
+                    background: rgba(0, 0, 0, 0.08);
+                    border-color: rgba(0, 0, 0, 0.25);
+                }
+                QPushButton:pressed {
+                    background: rgba(0, 0, 0, 0.12);
+                }
+            """)
     
     def _toggle_theme(self):
         """Toggle between light and dark themes."""
@@ -7629,7 +7625,27 @@ class MainWindow(QMainWindow):
             # Apply new stylesheet
             QApplication.instance().setStyleSheet(stylesheet)
             self.current_theme = new_theme
+            
+            # Process events to ensure stylesheet is fully applied before we override inline styles
+            QApplication.processEvents()
+            
             self._update_theme_button()
+            
+            # Update icon bar button hover colors for the new theme
+            # MUST be called AFTER stylesheet is applied to override any stylesheet rules
+            self._update_icon_bar_hover_colors()
+            
+            # Update collection panel header buttons
+            self._update_collection_header_button_styles()
+            
+            # Update tab bar buttons (New Request, Recent)
+            self._update_tab_bar_button_styles()
+            
+            # Update save button
+            self._update_save_button_style()
+            
+            # Update environment combo
+            self._update_env_combo_style()
             
             # Update rename button style for new theme
             self._update_rename_button_style()
@@ -7647,6 +7663,14 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'scripts_tab'):
                 self.scripts_tab.set_theme(new_theme)
             
+            # Update environments panel
+            if hasattr(self, 'environments_pane'):
+                self.environments_pane.set_theme(new_theme)
+            
+            # Update variable inspector panel
+            if hasattr(self, 'variable_inspector_pane'):
+                self.variable_inspector_pane.set_theme(new_theme)
+            
             # Update table delegates
             for table in [self.params_table, self.headers_table]:
                 if hasattr(table, '_custom_delegate'):
@@ -7662,6 +7686,304 @@ class MainWindow(QMainWindow):
                 "Theme Error",
                 f"Failed to load {new_theme} theme stylesheet."
             )
+    
+    def _update_icon_bar_hover_colors(self):
+        """Update icon bar button hover colors based on current theme."""
+        # Determine hover color based on theme
+        if self.current_theme == 'dark':
+            hover_color = "rgba(255, 255, 255, 0.1)"
+        else:
+            hover_color = "rgba(0, 0, 0, 0.08)"
+        
+        # Update each button with the current hover color
+        buttons = [
+            (self.collections_toggle_btn, "24px", False),
+            (self.git_sync_toggle_btn, "24px", False),
+            (self.variable_inspector_toggle_btn, "18px", True),
+            (self.environments_toggle_btn, "24px", False),
+            (self.history_btn, "24px", False),
+            (self.settings_toggle_btn, "24px", False),
+        ]
+        
+        for button, font_size, is_bold in buttons:
+            weight_line = "font-weight: bold;" if is_bold else ""
+            # Force clear existing stylesheet first, then apply new one
+            button.setStyleSheet("")
+            button.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    border: none;
+                    border-radius: 0px;
+                    font-size: {font_size};
+                    {weight_line}
+                    padding: 0px;
+                    width: 50px;
+                    height: 50px;
+                    min-width: 50px;
+                    min-height: 50px;
+                    max-width: 50px;
+                    max-height: 50px;
+                }}
+                QPushButton:hover {{
+                    background: {hover_color};
+                }}
+                QPushButton:checked {{
+                    background: rgba(33, 150, 243, 0.15);
+                    border-left: 3px solid #2196F3;
+                }}
+            """)
+    
+    def _update_collection_header_button_styles(self):
+        """Update collection panel header button styles based on current theme."""
+        if self.current_theme == 'dark':
+            # Dark theme - original styles
+            button_style = """
+                QPushButton {
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    color: #fff;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.12);
+                    border-color: rgba(255, 255, 255, 0.25);
+                }
+            """
+            import_button_style = button_style + """
+                QPushButton::menu-indicator {
+                    width: 0px;
+                }
+            """
+        else:
+            # Light theme - better contrast
+            button_style = """
+                QPushButton {
+                    background: #FFFFFF;
+                    border: 1px solid #9E9E9E;
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    color: #212121;
+                }
+                QPushButton:hover {
+                    background: #F5F5F5;
+                    border-color: #616161;
+                }
+            """
+            import_button_style = button_style + """
+                QPushButton::menu-indicator {
+                    width: 0px;
+                }
+            """
+        
+        self.add_collection_btn.setStyleSheet(button_style)
+        self.import_collection_menu_btn.setStyleSheet(import_button_style)
+    
+    def _update_tab_bar_button_styles(self):
+        """Update New Request and Recent button styles based on current theme."""
+        if self.current_theme == 'dark':
+            # Dark theme - original styles
+            new_request_style = """
+                QPushButton {
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    padding: 0px 12px;
+                    text-align: left;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                }
+                QPushButton:pressed {
+                    background: rgba(33, 150, 243, 0.3);
+                }
+            """
+            recent_style = """
+                QPushButton {
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 3px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    padding: 0px 10px;
+                    text-align: center;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                }
+                QPushButton:checked {
+                    background: rgba(33, 150, 243, 0.15);
+                    border: 1px solid rgba(33, 150, 243, 0.4);
+                }
+            """
+        else:
+            # Light theme - better contrast
+            new_request_style = """
+                QPushButton {
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    padding: 0px 12px;
+                    text-align: left;
+                    color: #212121;
+                }
+                QPushButton:hover {
+                    background: rgba(0, 0, 0, 0.08);
+                    border: 1px solid rgba(0, 0, 0, 0.15);
+                }
+                QPushButton:pressed {
+                    background: rgba(25, 118, 210, 0.15);
+                }
+            """
+            recent_style = """
+                QPushButton {
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 3px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    padding: 0px 10px;
+                    text-align: center;
+                    color: #212121;
+                }
+                QPushButton:hover {
+                    background: rgba(0, 0, 0, 0.08);
+                    border: 1px solid rgba(0, 0, 0, 0.15);
+                }
+                QPushButton:checked {
+                    background: rgba(25, 118, 210, 0.12);
+                    border: 1px solid rgba(25, 118, 210, 0.4);
+                }
+            """
+        
+        self.new_request_btn.setStyleSheet(new_request_style)
+        self.recent_requests_btn.setStyleSheet(recent_style)
+    
+    def _update_save_button_style(self):
+        """Update Save button style based on current theme."""
+        if self.current_theme == 'dark':
+            # Dark theme - original style
+            save_style = """
+                QPushButton {
+                    border: 1px solid #444444;
+                    border-top-left-radius: 4px;
+                    border-bottom-left-radius: 4px;
+                    border-top-right-radius: 0px;
+                    border-bottom-right-radius: 0px;
+                    background-color: transparent;
+                    color: #E0E0E0;
+                    padding: 0px;
+                    margin: 0px;
+                }
+                QPushButton:hover {
+                    background-color: #2A2A2A;
+                    border-color: #555555;
+                }
+                QPushButton:pressed {
+                    background-color: #2D2D2D;
+                }
+            """
+        else:
+            # Light theme - better contrast
+            save_style = """
+                QPushButton {
+                    border: 1px solid #BDBDBD;
+                    border-top-left-radius: 4px;
+                    border-bottom-left-radius: 4px;
+                    border-top-right-radius: 0px;
+                    border-bottom-right-radius: 0px;
+                    background-color: #FFFFFF;
+                    color: #212121;
+                    font-weight: 500;
+                    padding: 0px;
+                    margin: 0px;
+                }
+                QPushButton:hover {
+                    background-color: #F5F5F5;
+                    border-color: #757575;
+                }
+                QPushButton:pressed {
+                    background-color: #E8E8E8;
+                }
+            """
+        
+        self.save_btn.setStyleSheet(save_style)
+    
+    def _update_env_combo_style(self):
+        """Update environment combobox style based on current theme."""
+        if self.current_theme == 'dark':
+            # Dark theme - original style
+            env_combo_style = """
+                QComboBox {
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 3px;
+                    padding: 2px 8px;
+                    color: #fff;
+                    font-size: 11px;
+                }
+                QComboBox:hover {
+                    background: rgba(255, 255, 255, 0.08);
+                    border-color: rgba(255, 255, 255, 0.2);
+                }
+                QComboBox::drop-down {
+                    border: none;
+                    background: transparent;
+                    width: 20px;
+                }
+                QComboBox::down-arrow {
+                    image: none;
+                    border-left: 4px solid transparent;
+                    border-right: 4px solid transparent;
+                    border-top: 5px solid #999;
+                    width: 0;
+                    height: 0;
+                    margin-right: 4px;
+                }
+            """
+        else:
+            # Light theme - better contrast
+            env_combo_style = """
+                QComboBox {
+                    background: #FFFFFF;
+                    border: 1px solid #BDBDBD;
+                    border-radius: 3px;
+                    padding: 2px 8px;
+                    color: #212121;
+                    font-size: 11px;
+                    font-weight: 500;
+                }
+                QComboBox:hover {
+                    background: #FAFAFA;
+                    border-color: #757575;
+                }
+                QComboBox::drop-down {
+                    border: none;
+                    background: transparent;
+                    width: 20px;
+                }
+                QComboBox::down-arrow {
+                    image: none;
+                    border-left: 4px solid transparent;
+                    border-right: 4px solid transparent;
+                    border-top: 5px solid #616161;
+                    width: 0;
+                    height: 0;
+                    margin-right: 4px;
+                }
+            """
+        
+        self.env_combo.setStyleSheet(env_combo_style)
     
     # ==================== Context Menu Helpers ====================
     
@@ -7848,6 +8170,154 @@ class MainWindow(QMainWindow):
                     border: none;
                 }
             """)
+    
+    def _update_description_button_style(self):
+        """Update description button style based on current theme and whether description exists."""
+        has_description = bool(self._current_description)
+        
+        # Choose icon based on description state
+        icon = "📝" if has_description else "💬"  # 📝 = filled note, 💬 = empty comment
+        self.description_btn.setText(icon)
+        
+        if self.current_theme == 'dark':
+            if has_description:
+                self.description_btn.setStyleSheet("""
+                    QPushButton#descriptionBtn {
+                        background-color: transparent;
+                        border: none;
+                        border-radius: 3px;
+                        padding: 2px;
+                        font-size: 12px;
+                        color: rgba(100, 181, 246, 0.9);
+                    }
+                    QPushButton#descriptionBtn:hover {
+                        background-color: rgba(100, 181, 246, 0.25);
+                        color: rgba(100, 181, 246, 1.0);
+                    }
+                    QPushButton#descriptionBtn:pressed {
+                        background-color: rgba(100, 181, 246, 0.3);
+                        color: white;
+                    }
+                    QPushButton#descriptionBtn:focus {
+                        outline: none;
+                        border: none;
+                    }
+                """)
+            else:
+                self.description_btn.setStyleSheet("""
+                    QPushButton#descriptionBtn {
+                        background-color: transparent;
+                        border: none;
+                        border-radius: 3px;
+                        padding: 2px;
+                        font-size: 12px;
+                        color: rgba(255, 255, 255, 0.5);
+                    }
+                    QPushButton#descriptionBtn:hover {
+                        background-color: rgba(255, 255, 255, 0.25);
+                        color: rgba(255, 255, 255, 0.95);
+                    }
+                    QPushButton#descriptionBtn:pressed {
+                        background-color: rgba(255, 255, 255, 0.3);
+                        color: white;
+                    }
+                    QPushButton#descriptionBtn:focus {
+                        outline: none;
+                        border: none;
+                    }
+                """)
+        else:
+            if has_description:
+                self.description_btn.setStyleSheet("""
+                    QPushButton#descriptionBtn {
+                        background-color: transparent;
+                        border: none;
+                        border-radius: 3px;
+                        padding: 2px;
+                        font-size: 12px;
+                        color: rgba(25, 118, 210, 0.9);
+                    }
+                    QPushButton#descriptionBtn:hover {
+                        background-color: rgba(25, 118, 210, 0.15);
+                        color: rgba(25, 118, 210, 1.0);
+                    }
+                    QPushButton#descriptionBtn:pressed {
+                        background-color: rgba(25, 118, 210, 0.25);
+                        color: rgb(25, 118, 210);
+                    }
+                    QPushButton#descriptionBtn:focus {
+                        outline: none;
+                        border: none;
+                    }
+                """)
+            else:
+                self.description_btn.setStyleSheet("""
+                    QPushButton#descriptionBtn {
+                        background-color: transparent;
+                        border: none;
+                        border-radius: 3px;
+                        padding: 2px;
+                        font-size: 12px;
+                        color: rgba(0, 0, 0, 0.4);
+                    }
+                    QPushButton#descriptionBtn:hover {
+                        background-color: rgba(0, 0, 0, 0.1);
+                        color: rgba(0, 0, 0, 0.7);
+                    }
+                    QPushButton#descriptionBtn:pressed {
+                        background-color: rgba(0, 0, 0, 0.15);
+                        color: rgba(0, 0, 0, 0.9);
+                    }
+                    QPushButton#descriptionBtn:focus {
+                        outline: none;
+                        border: none;
+                    }
+                """)
+        
+        # Update tooltip with description preview
+        if has_description:
+            preview = self._current_description[:100]
+            if len(self._current_description) > 100:
+                preview += "..."
+            self.description_btn.setToolTip(f"Description:\n{preview}\n\n(Click to edit)")
+        else:
+            self.description_btn.setToolTip("Add description (empty)")
+    
+    def _edit_description(self):
+        """Open dialog to edit request description."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton, QLabel, QDialogButtonBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Request Description")
+        dialog.setModal(True)
+        dialog.setMinimumSize(500, 300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Info label
+        info_label = QLabel("Add notes or description for this request:")
+        layout.addWidget(info_label)
+        
+        # Text edit
+        text_edit = QTextEdit()
+        text_edit.setPlaceholderText("Enter description or notes here...")
+        text_edit.setPlainText(self._current_description)
+        text_edit.setFocus()
+        layout.addWidget(text_edit)
+        
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Show dialog and handle result
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_description = text_edit.toPlainText().strip()
+            if new_description != self._current_description:
+                self._current_description = new_description
+                self._update_description_button_style()
+                self._mark_as_changed()
     
     def _rename_request(self, request_id: int):
         """Rename a request."""
@@ -8054,9 +8524,12 @@ class MainWindow(QMainWindow):
         if row < 0 or row >= table.rowCount():
             return
         
-        # Clear the row content instead of removing it (to maintain row count)
+        # Clear the row content
         table.setItem(row, 0, QTableWidgetItem(""))
         table.setItem(row, 1, QTableWidgetItem(""))
+        
+        # Trigger reorganization (will sort and remove empty rows except one)
+        self._auto_add_table_rows(table)
         
         # Mark as changed
         self._mark_as_changed()

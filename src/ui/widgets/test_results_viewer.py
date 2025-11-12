@@ -111,6 +111,9 @@ class TestResultsViewer(QWidget):
         
         layout.addWidget(self.content_widget)
         
+        # Set minimum height to allow window resizing
+        self.setMinimumHeight(40)  # Small minimum for header only when collapsed
+        
         # Hide by default
         self.setVisible(False)
     

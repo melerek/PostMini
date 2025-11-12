@@ -7,6 +7,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] - 2025-11-13
+
+### ✨ New Features
+
+#### 🌍 Environment Import/Export with Postman Compatibility
+- **Full Postman Environment Format support** - Import and export environments compatible with Postman
+- **Import button** in Environments panel - Import from Postman or PostMini format
+- **Export button** in Environments panel - Export to Postman or Internal format
+- **Automatic format detection** - Seamlessly import from either format
+- **Secret variable handling** - Choose to include actual values or replace with placeholders
+- **Bulk operations** - Import/export multiple environments at once
+- **Disabled variable support** - Postman's enabled/disabled variables preserved with `_DISABLED_` prefix
+- **Secret detection** - Automatically marks variables as secrets based on keywords (key, token, password, etc.)
+- **Duplicate name handling** - Smart conflict resolution when importing
+- **Full validation** - Validates Postman environment structure on import
+- **Format selection dialog** - Choose between Internal and Postman format when exporting
+- **Comprehensive documentation** - New Environment Import/Export Guide
+
+**Use Cases:**
+- ✅ Migrate environments from Postman to PostMini
+- ✅ Share environments with Postman users
+- ✅ Create environment templates (with placeholders)
+- ✅ Backup environments with or without secrets
+- ✅ Team collaboration across different tools
+
+**New Files:**
+- `src/features/postman_environment_converter.py` - Postman format converter
+- `src/features/environment_io.py` - Import/export infrastructure
+- `tests/test_postman_environment_compatibility.py` - Comprehensive test suite (9 tests, all passing)
+- `docs/guides/ENVIRONMENT_IMPORT_EXPORT_GUIDE.md` - Complete user guide
+
+### 🔧 Technical Improvements
+- **PostmanEnvironmentConverter** class with bidirectional conversion
+- **EnvironmentExporter** class with format and secret options
+- **EnvironmentImporter** class with auto-detection and validation
+- Secret keyword detection: `secret`, `key`, `token`, `password`, `auth`, `api_key`, `credential`, `private`, `sensitive`
+- Roundtrip conversion preserves all data integrity
+
+### 🎨 UI/UX Improvements
+
+#### Enhanced Light Theme Readability
+- **Comprehensive light theme improvements** for better contrast and readability
+- **QPushButton styling** - White backgrounds, dark text (#212121), strong borders (#BDBDBD)
+- **Send Button** - Material Design blue (#1976D2) with white text for prominence
+- **ComboBox/Dropdown styling** - Stronger borders, bold text, blue focus state (#1976D2)
+- **Text Input fields** - Enhanced borders, blue focus state for better visibility
+- **Tree Widget items** - Darker text (#424242) for improved readability
+- **Tree selection** - Strong blue selection (#BBDEFB background, #0D47A1 text)
+- **Environment selector** - Theme-aware styling in status bar
+- All improvements apply **ONLY to light theme** - dark theme unchanged
+
+#### Theme-Aware Panel Buttons
+- **Environment Panel buttons** - Import, Export, Add, Variables, Edit, Delete all theme-aware
+- **Collections Panel buttons** - Add and Import buttons with proper theme support
+- **Variable Inspector button** - Add button with dropdown menu theme-aware
+- **Central Panel buttons** - New Request, Recent, and Save buttons properly styled per theme
+- **Icon bar buttons** - All 6 left sidebar icon buttons maintain correct styling on theme switch
+- Dynamic style updates ensure buttons always match active theme
+
+#### Theme Toggle Button
+- **Theme toggle in status bar** - Quick access next to keyboard shortcuts hint
+- **Sun/Moon icon** - Visual indicator of current theme (🌙 Dark / ☀️ Light)
+- Button styled to match current theme with proper hover states
+
+#### Panel Width Optimization
+- **Left collapsible panels** - Default width increased to 400px (was 250px)
+- Better utilization of screen space for Collections, Environments, Variables, Git Sync, and History panels
+- More content visible without scrolling
+
+#### Dynamic Table Row Management
+- **Environment variables table** - No automatic alphabetic sorting
+- **Collection variables table** - No automatic alphabetic sorting  
+- Variables remain in the order they are added
+- User has full control over variable ordering
+
+### 🐛 Bug Fixes
+
+#### Fixed Theme Initialization Bug
+- **Root cause:** MainWindow received theme after __init__ completed
+- **Symptom:** Dark theme startup showed light theme button styling until first theme switch
+- **Solution:** Theme now passed to MainWindow constructor for proper initialization
+- Buttons correctly styled on startup in both themes
+
+#### Fixed Icon Bar Button Theme Switching
+- **Issue:** Icon bar buttons broke when switching between themes
+- **Solution:** Dynamic style update methods rewrite complete inline styles on theme change
+- All 6 sidebar buttons (Collections, Environments, Variables, Git Sync, History, Recent) work correctly
+
+### 🔧 Technical Changes
+- Modified `src/ui/main_window.py` - Theme initialization, button style methods, theme-aware components
+- Modified `src/ui/widgets/environments_panel.py` - Added `set_theme()` method and theme-aware button styling
+- Modified `src/ui/widgets/variable_inspector_panel.py` - Added theme support for Add button
+- Modified `main.py` - Pass theme to MainWindow constructor
+- Modified `styles.qss` - Enhanced light theme styling for all UI elements
+- Theme management pattern: `set_theme(theme)` methods with `_update_*_style()` helpers
+
+---
+
 ## [1.8.6] - 2025-11-06
 
 ### ✨ New Features

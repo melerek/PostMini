@@ -137,7 +137,7 @@ class TestTabWidget(QWidget):
         self.assertions_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.assertions_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.assertions_table.setAlternatingRowColors(True)
-        self.assertions_table.setMinimumHeight(200)  # Ensure table is always visible
+        self.assertions_table.setMinimumHeight(100)  # Reduced for better window sizing
         
         # Enable context menu for right-click actions
         self.assertions_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

@@ -122,7 +122,7 @@ class ScriptTabWidget(QWidget):
         editor = CodeEditor(theme=self.theme)
         editor.setPlaceholderText(f"// {help_text}\n// Use 'pm' object to interact with environment\n")
         editor.textChanged.connect(self.scripts_changed.emit)
-        editor.setMinimumHeight(150)
+        editor.setMinimumHeight(100)  # Reduced for better window sizing
         
         # Store reference to editor
         if script_type == "pre_request":

@@ -167,8 +167,8 @@ class SettingsPanel(QWidget):
         main_layout.addWidget(scroll_area)
         
         self.setLayout(main_layout)
-        self.setMinimumWidth(250)
-        self.setMaximumWidth(350)
+        self.setMinimumWidth(200)
+        self.setMaximumWidth(450)
     
     def _load_settings(self):
         """Load settings from database."""

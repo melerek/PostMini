@@ -152,8 +152,8 @@ class RecentRequestsWidget(QWidget):
         layout.addWidget(self.list_widget)
         
         self.setLayout(layout)
-        self.setMinimumWidth(250)
-        self.setMaximumWidth(350)
+        self.setMinimumWidth(200)
+        self.setMaximumWidth(400)
     
     def _load_recent_requests(self):
         """Load recent requests from database."""

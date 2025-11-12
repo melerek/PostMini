@@ -45,6 +45,7 @@ class VariableInspectorPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_environment_id = None
+        self.current_theme = 'dark'  # Default theme
         self.db = None  # Will be set by parent
         self._init_ui()
         print(f"[DEBUG] VariableInspectorPanel initialized, parent: {parent}")
@@ -75,24 +76,6 @@ class VariableInspectorPanel(QWidget):
         
         # Add button with dropdown menu in header
         self.add_var_btn = QPushButton("+ Add")
-        self.add_var_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 12px;
-                font-weight: 500;
-                color: #fff;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border-color: rgba(255, 255, 255, 0.25);
-            }
-            QPushButton::menu-indicator {
-                width: 0px;
-            }
-        """)
         self.add_var_btn.setToolTip("Add variable")
         
         # Create dropdown menu with proper styling
@@ -130,6 +113,9 @@ class VariableInspectorPanel(QWidget):
         # Attach menu to button
         self.add_var_btn.setMenu(add_menu)
         header_layout.addWidget(self.add_var_btn)
+        
+        # Apply initial theme to button
+        self._update_add_button_style()
         
         layout.addWidget(header)
         
@@ -186,7 +172,7 @@ class VariableInspectorPanel(QWidget):
         layout.addLayout(content_layout)
         
         self.setLayout(layout)
-        self.setMinimumWidth(300)
+        self.setMinimumWidth(200)
     
     def load_variables(self, 
                        environment_vars: Dict[str, str] = None,
@@ -356,6 +342,56 @@ class VariableInspectorPanel(QWidget):
             ("$randomBoolean", "Random boolean"),
             ("$randomHexColor", "Random hex color"),
         ]
+    
+    def set_theme(self, theme: str):
+        """Update theme for the panel."""
+        self.current_theme = theme
+        self._update_add_button_style()
+    
+    def _update_add_button_style(self):
+        """Update add button style based on current theme."""
+        if self.current_theme == 'dark':
+            # Dark theme - original style
+            button_style = """
+                QPushButton {
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    color: #fff;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.12);
+                    border-color: rgba(255, 255, 255, 0.25);
+                }
+                QPushButton::menu-indicator {
+                    width: 0px;
+                }
+            """
+        else:
+            # Light theme - better contrast
+            button_style = """
+                QPushButton {
+                    background: #FFFFFF;
+                    border: 1px solid #9E9E9E;
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    color: #212121;
+                }
+                QPushButton:hover {
+                    background: #F5F5F5;
+                    border-color: #616161;
+                }
+                QPushButton::menu-indicator {
+                    width: 0px;
+                }
+            """
+        
+        self.add_var_btn.setStyleSheet(button_style)
     
     def _truncate_value(self, value: str, max_length: int = 50) -> str:
         """Truncate long values for display."""

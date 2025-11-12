@@ -203,13 +203,11 @@ def main():
         app.setStyleSheet(stylesheet)
         print(f"[OK] {current_theme.capitalize()} theme loaded successfully")
     
-    # Create and show the main window with the database path
-    main_window = MainWindow(db_path=str(app_paths.database_path))
-    main_window.current_theme = current_theme  # Store current theme
+    # Create and show the main window with the database path and theme
+    main_window = MainWindow(db_path=str(app_paths.database_path), theme=current_theme)
     
-    # Update script tab theme to match saved preference
-    if hasattr(main_window, 'scripts_tab'):
-        main_window.scripts_tab.set_theme(current_theme)
+    # Update script tab theme to match saved preference (already set in __init__)
+    # No need to set current_theme again, it's already set in constructor
     
     main_window.show()
     
