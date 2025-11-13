@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+---
+
+## [1.9.1] - 2025-11-13
+
+### ✨ New Features
+
+#### 🎯 Drag & Drop Ordering for Collections, Folders, and Requests
+- **User-controlled ordering** - Drag and drop to reorder collections, folders, and requests exactly how you want them
+- **Persistent order** - Order is saved to database immediately and persists across restarts
+- **Import/export preservation** - Order is preserved when exporting/importing collections (Postman-compatible)
+- **Visual feedback** - Drop indicators show where items will be placed (above, below, or inside)
+- **Automatic count updates** - Item counts refresh automatically after moves
+- **Expanded state preservation** - Folders stay expanded during drag & drop operations
+- **Comprehensive test coverage** - 17 passing tests covering all scenarios
+
+**Validation Rules (Postman-Compatible):**
+- ✅ Collections can be reordered at root level only (cannot be nested)
+- ✅ Folders can be moved within their collection (cannot move between collections)
+- ✅ Folders cannot be at root level (must be inside collections)
+- ✅ Requests can be moved between collections and folders
+- ✅ Circular reference prevention (folders cannot be dropped into themselves or descendants)
+- ✅ Type-safe drops (folders cannot be dropped on requests, etc.)
+
+**Technical Details:**
+- Added `order_index` column to collections, folders, and requests tables
+- Custom `ReorderableTreeWidget` class with comprehensive drop validation
+- Transaction-safe database updates with rollback on error
+- Circular reference detection for folder moves
+- Smart tree reload only when items are moved (not just reordered)
+
+**Documentation:**
+- `docs/guides/DRAG_DROP_ORDERING.md` - Complete technical and user documentation
+- `tests/test_drag_drop_ordering.py` - Comprehensive test suite (17 tests)
+
+### 🐛 Bug Fixes
+- Fixed database queries to use `order_index` for consistent sorting
+- Fixed `get_folders_by_collection()` to include `order_index` in returned data
+- Fixed `get_requests_by_folder()` to order by `order_index` instead of name
+- Fixed test suite parameter order for `create_request()` calls
+- Fixed import/export test data format expectations
+
+### 🔧 Database Changes
+- Added `order_index INTEGER` column to `collections` table (default: id * 100)
+- Added `order_index INTEGER` column to `folders` table (default: id * 100)
+- Added `order_index INTEGER` column to `requests` table (default: id * 100)
+- New methods: `reorder_collections()`, `reorder_folders()`, `reorder_requests()`
+- All queries now use `ORDER BY order_index` instead of `ORDER BY name` for consistent ordering
+
+### 🎨 UI/UX Improvements
+- Single-click drag and hold to initiate drag
+- Drop indicators show valid drop positions
+- Invalid drops are blocked with no visual artifacts
+- Folders involved in moves stay expanded
+- Current request's folder stays expanded during operations
+- Perfect for organizing large API projects with complex folder structures
+
+---
+
 ## [1.9.0] - 2025-11-13
 
 ### ✨ New Features

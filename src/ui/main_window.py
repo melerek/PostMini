@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QLabel,
     QMessageBox, QInputDialog, QHeaderView, QToolBar, QFileDialog, QApplication,
     QSizePolicy, QDialog, QStyledItemDelegate, QMenu, QGroupBox, QTabBar, QTreeWidgetItemIterator,
-    QDialogButtonBox
+    QDialogButtonBox, QAbstractItemView
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QAction, QKeySequence, QShortcut, QBrush, QColor, QPalette, QPainter, QPen
@@ -57,6 +57,257 @@ from src.features.secrets_manager import SecretsManager
 from src.features.curl_converter import CurlConverter
 from datetime import datetime
 import requests
+
+
+class ReorderableTreeWidget(QTreeWidget):
+    """Custom QTreeWidget that handles drag & drop reordering."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.main_window = None  # Will be set by MainWindow
+        self._dragged_item = None
+        self._dragged_data = None
+    
+    def startDrag(self, supportedActions):
+        """Store dragged item info before drag starts."""
+        self._dragged_item = self.currentItem()
+        if self._dragged_item:
+            self._dragged_data = self._dragged_item.data(0, Qt.ItemDataRole.UserRole)
+        super().startDrag(supportedActions)
+    
+    def dropMimeData(self, parent, index, data, action):
+        """Validate drop operations before allowing them."""
+        if not self._dragged_item or not self._dragged_data:
+            return False
+        
+        dragged_type = self._dragged_data.get('type')
+        drop_indicator = self.dropIndicatorPosition()
+        
+        # Get target item (where we're dropping)
+        target_item = parent
+        target_data = target_item.data(0, Qt.ItemDataRole.UserRole) if target_item else None
+        target_type = target_data.get('type') if target_data else None
+        
+        print(f"[DROP MIME] Dragged: {dragged_type}, Target: {target_type}, Indicator: {drop_indicator}")
+        
+        # Validation rules (Postman-style):
+        # 1. Collections are TOP-LEVEL ONLY - cannot be nested inside anything
+        # 2. Folders can be dropped on collections or other folders (not on requests)
+        # 3. Requests can be dropped on folders or collections (not on other requests)
+        
+        if dragged_type == 'collection':
+            # Collections must stay at root level - cannot be nested
+            # Block if trying to drop ON any item
+            if drop_indicator == QTreeWidget.DropIndicatorPosition.OnItem:
+                print(f"[DROP BLOCKED in dropMimeData] Cannot nest collections")
+                return False
+            # Block if target has a parent (is not at root level)
+            # Collections can only be dropped at root - next to other collections
+            if target_item is not None:
+                # Check if target item has a parent (not at root)
+                if target_item.parent() is not None:
+                    print(f"[DROP BLOCKED in dropMimeData] Collections can only be reordered at root level")
+                    return False
+                # If target is not a collection, block (collections can only be next to other collections)
+                if target_type != 'collection':
+                    print(f"[DROP BLOCKED in dropMimeData] Collections can only be dropped next to other collections")
+                    return False
+        
+        elif dragged_type == 'folder':
+            # Get the collection ID of the dragged folder
+            dragged_collection_id = self._dragged_data.get('collection_id')
+            
+            # Folders must ALWAYS be inside a collection or folder, never at root level
+            if target_item is None:
+                print(f"[DROP BLOCKED in dropMimeData] Folders cannot be at root level")
+                return False
+            
+            # Determine the target collection ID
+            target_collection_id = None
+            if target_item:
+                if target_type == 'collection':
+                    target_collection_id = target_data.get('id')
+                elif target_type in ('folder', 'request'):
+                    target_collection_id = target_data.get('collection_id')
+            
+            # Block if trying to move folder to a different collection
+            if target_collection_id and target_collection_id != dragged_collection_id:
+                print(f"[DROP BLOCKED in dropMimeData] Cannot move folder between collections")
+                return False
+            
+            # Folders can be dropped on collections or folders, but not on requests
+            if target_type == 'request' and drop_indicator == QTreeWidget.DropIndicatorPosition.OnItem:
+                print(f"[DROP BLOCKED in dropMimeData] Cannot drop folder on request")
+                return False
+            
+            # Prevent circular references: folder cannot be dropped into itself or its descendants
+            if drop_indicator == QTreeWidget.DropIndicatorPosition.OnItem and target_type == 'folder':
+                dragged_folder_id = self._dragged_data.get('id')
+                target_folder_id = target_data.get('id')
+                
+                # Check if target is the dragged folder itself
+                if dragged_folder_id == target_folder_id:
+                    print(f"[DROP BLOCKED in dropMimeData] Cannot drop folder into itself")
+                    return False
+                
+                # Check if target is a descendant of dragged folder
+                def is_descendant(potential_descendant_id, ancestor_id):
+                    """Check if potential_descendant_id is a descendant of ancestor_id."""
+                    current = target_item
+                    while current:
+                        current_data = current.data(0, Qt.ItemDataRole.UserRole)
+                        if current_data and current_data.get('type') == 'folder':
+                            if current_data.get('id') == ancestor_id:
+                                return True
+                        current = current.parent()
+                    return False
+                
+                if is_descendant(target_folder_id, dragged_folder_id):
+                    print(f"[DROP BLOCKED in dropMimeData] Cannot drop folder into its own descendant")
+                    return False
+        
+        elif dragged_type == 'request':
+            # Requests can be dropped on collections or folders, but not on other requests
+            if target_type == 'request' and drop_indicator == QTreeWidget.DropIndicatorPosition.OnItem:
+                print(f"[DROP BLOCKED in dropMimeData] Cannot drop request on request")
+                return False
+        
+        print(f"[DROP ALLOWED in dropMimeData]")
+        # Allow the drop
+        return super().dropMimeData(parent, index, data, action)
+    
+    def dropEvent(self, event):
+        """Handle drop events to reorder items in the database."""
+        # Use stored dragged item (more reliable than currentItem during drop)
+        if not self._dragged_item or not self._dragged_data:
+            event.ignore()
+            return
+        
+        # Get drop position and target
+        drop_position = event.position().toPoint() if hasattr(event, 'position') else event.pos()
+        target_item = self.itemAt(drop_position)
+        drop_indicator = self.dropIndicatorPosition()
+        
+        # Get dragged and target types
+        dragged_type = self._dragged_data.get('type')
+        target_data = target_item.data(0, Qt.ItemDataRole.UserRole) if target_item else None
+        target_type = target_data.get('type') if target_data else None
+        
+        print(f"[DROP EVENT] Dragged: {dragged_type}, Target: {target_type}, Indicator: {drop_indicator}")
+        
+        # Validation: Block invalid drops based on drop indicator position
+        should_block = False
+        
+        # Rule 1: Cannot drop request ON another request
+        if dragged_type == 'request' and target_type == 'request':
+            if drop_indicator == QAbstractItemView.DropIndicatorPosition.OnItem:
+                print("[BLOCK] Cannot drop request ON another request")
+                should_block = True
+        
+        # Rule 2: Collections can ONLY be reordered at root level
+        # Block ANY drop of collection ON any item (collection must stay at root)
+        if dragged_type == 'collection':
+            if drop_indicator == QAbstractItemView.DropIndicatorPosition.OnItem:
+                print("[BLOCK] Cannot drop collection ON anything (must stay at root level)")
+                should_block = True
+            # Also block if target is not at root level or is not a collection
+            if target_item is not None:
+                if target_item.parent() is not None:
+                    print("[BLOCK] Collections can only be reordered at root level")
+                    should_block = True
+                elif target_type != 'collection':
+                    print("[BLOCK] Collections can only be dropped next to other collections")
+                    should_block = True
+        
+        # Rule 3: Folders cannot be at root level
+        if dragged_type == 'folder':
+            # Check if dropping at root level (target_item is None or has no parent)
+            if target_item is None or (target_item.parent() is None and target_type != 'collection'):
+                print("[BLOCK] Folders cannot be at root level")
+                should_block = True
+        
+        # Rule 4: Cannot move folders between collections
+        if dragged_type == 'folder' and not should_block:
+            # Get the collection ID of the dragged folder
+            dragged_collection_id = self._dragged_data.get('collection_id')
+            
+            # Determine the target collection ID
+            target_collection_id = None
+            if target_item:
+                if target_type == 'collection':
+                    target_collection_id = target_data.get('id')
+                elif target_type in ('folder', 'request'):
+                    target_collection_id = target_data.get('collection_id')
+            
+            # Block if trying to move folder to a different collection
+            if target_collection_id and target_collection_id != dragged_collection_id:
+                print("[BLOCK] Cannot move folder between collections")
+                should_block = True
+        
+        # Rule 5: Cannot drop folder ON request or into itself/descendants
+        if dragged_type == 'folder' and target_type == 'request':
+            if drop_indicator == QAbstractItemView.DropIndicatorPosition.OnItem:
+                print("[BLOCK] Cannot drop folder ON request")
+                should_block = True
+        
+        # Rule 6: Prevent circular folder references
+        if dragged_type == 'folder' and target_type == 'folder':
+            if drop_indicator == QAbstractItemView.DropIndicatorPosition.OnItem:
+                dragged_folder_id = self._dragged_data.get('id')
+                target_folder_id = target_data.get('id')
+                
+                # Check if target is the dragged folder itself
+                if dragged_folder_id == target_folder_id:
+                    print("[BLOCK] Cannot drop folder into itself")
+                    should_block = True
+                else:
+                    # Check if target is a descendant of dragged folder
+                    current = target_item
+                    while current and not should_block:
+                        current_data = current.data(0, Qt.ItemDataRole.UserRole)
+                        if current_data and current_data.get('type') == 'folder':
+                            if current_data.get('id') == dragged_folder_id:
+                                print("[BLOCK] Cannot drop folder into its own descendant")
+                                should_block = True
+                                break
+                        current = current.parent()
+        
+        if should_block:
+            event.ignore()
+            self._dragged_item = None
+            self._dragged_data = None
+            return
+        
+        # Store the data before Qt modifies the tree
+        dragged_data = self._dragged_data
+        
+        # Additional validation: check if dragged item still exists and has valid parent
+        dragged_type = dragged_data.get('type')
+        
+        # Allow Qt to handle the visual drop
+        super().dropEvent(event)
+        
+        # Verify the item didn't disappear (check if it still exists in tree)
+        if self._dragged_item and self.indexFromItem(self._dragged_item).isValid():
+            # Now update the database order
+            if self.main_window:
+                try:
+                    self.main_window._handle_tree_reorder(self._dragged_item, dragged_data)
+                except Exception as e:
+                    print(f"Error during reorder: {e}")
+                    # Reload tree to restore correct state
+                    if self.main_window:
+                        self.main_window._load_collections()
+        else:
+            # Item disappeared - this shouldn't happen with our validation, but reload to be safe
+            print("Warning: Dragged item disappeared after drop. Reloading tree...")
+            if self.main_window:
+                self.main_window._load_collections()
+        
+        # Clear stored data
+        self._dragged_item = None
+        self._dragged_data = None
+
 
 
 class RequestTreeItemDelegate(QStyledItemDelegate):
@@ -1985,7 +2236,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(header)
         
         # Collections tree
-        self.collections_tree = QTreeWidget()
+        self.collections_tree = ReorderableTreeWidget()
+        self.collections_tree.main_window = self  # Give it access to main window
         self.collections_tree.setHeaderHidden(True)  # Hide "Name" header
         self.collections_tree.setIconSize(QSize(16, 16))  # Standardize icon size to 16px
         # Set custom delegate for colored method badges
@@ -1997,10 +2249,18 @@ class MainWindow(QMainWindow):
         # Connect expand/collapse signals for folder icon updates
         self.collections_tree.itemExpanded.connect(self._on_tree_item_expanded)
         self.collections_tree.itemCollapsed.connect(self._on_tree_item_collapsed)
-        # Disable selection highlighting
-        self.collections_tree.setSelectionMode(QTreeWidget.SelectionMode.NoSelection)
+        # Enable selection for drag & drop (but single selection only)
+        self.collections_tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
         self.collections_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.collections_tree.customContextMenuRequested.connect(self._show_tree_context_menu)
+        
+        # Enable drag & drop for reordering
+        self.collections_tree.setDragEnabled(True)
+        self.collections_tree.setAcceptDrops(True)
+        self.collections_tree.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.collections_tree.setDropIndicatorShown(True)
+        self.collections_tree.setDefaultDropAction(Qt.DropAction.MoveAction)
+        
         layout.addWidget(self.collections_tree)
         
         return pane
@@ -2818,6 +3078,13 @@ class MainWindow(QMainWindow):
                                    {'type': 'collection', 'id': collection['id'], 'name': collection['name']})
             collection_item.setIcon(0, QIcon(collection_icon_path))
             
+            # Enable drag & drop for collections
+            collection_item.setFlags(
+                collection_item.flags() | 
+                Qt.ItemFlag.ItemIsDragEnabled | 
+                Qt.ItemFlag.ItemIsDropEnabled
+            )
+            
             # Collection names should NOT be bold by default
             # Bold will be applied only when it contains the active request
             collection_item.setForeground(0, QBrush(QColor('#CCCCCC')))  # Light gray for collections
@@ -2861,7 +3128,15 @@ class MainWindow(QMainWindow):
                 folder_item.setData(0, Qt.ItemDataRole.UserRole,
                                    {'type': 'folder', 'id': folder_data['id'],
                                     'collection_id': folder_data['collection_id'],
+                                    'parent_id': folder_data['parent_id'],
                                     'name': folder_data['name']})
+                
+                # Enable drag & drop for folders
+                folder_item.setFlags(
+                    folder_item.flags() | 
+                    Qt.ItemFlag.ItemIsDragEnabled | 
+                    Qt.ItemFlag.ItemIsDropEnabled
+                )
                 
                 # Set icon based on expanded state
                 if folder_data['id'] in expanded_folder_ids:
@@ -2985,10 +3260,94 @@ class MainWindow(QMainWindow):
                              'collection_id': collection_id,
                              'folder_id': request.get('folder_id')})
         
+        # Enable drag & drop for requests
+        request_item.setFlags(
+            request_item.flags() | 
+            Qt.ItemFlag.ItemIsDragEnabled | 
+            Qt.ItemFlag.ItemIsDropEnabled
+        )
+        
         # Set text color to gray (same as collections/folders)
         request_item.setForeground(0, QBrush(QColor('#CCCCCC')))
         
         parent_item.addChild(request_item)
+    
+    def _update_tree_item_counts(self, *collection_ids):
+        """
+        Update the request counts displayed in collection and folder names.
+        
+        Args:
+            *collection_ids: IDs of collections to update. If none provided, updates all.
+        """
+        # If no collection IDs provided, update all
+        if not collection_ids:
+            for i in range(self.collections_tree.topLevelItemCount()):
+                item = self.collections_tree.topLevelItem(i)
+                data = item.data(0, Qt.ItemDataRole.UserRole)
+                if data and data.get('type') == 'collection':
+                    collection_ids = (*collection_ids, data['id'])
+        
+        # Update each specified collection
+        for collection_id in collection_ids:
+            # Find collection item in tree
+            for i in range(self.collections_tree.topLevelItemCount()):
+                item = self.collections_tree.topLevelItem(i)
+                data = item.data(0, Qt.ItemDataRole.UserRole)
+                if data and data.get('type') == 'collection' and data['id'] == collection_id:
+                    # Update collection count
+                    all_requests = self.db.get_requests_by_collection(collection_id)
+                    request_count = len(all_requests)
+                    collection_name = f"{data['name']} [{request_count}]"
+                    item.setText(0, collection_name)
+                    
+                    # Update all folder counts in this collection recursively
+                    self._update_folder_counts_recursive(item)
+                    break
+    
+    def _update_folder_counts_recursive(self, parent_item):
+        """Recursively update request counts for all folders under parent_item."""
+        for i in range(parent_item.childCount()):
+            child = parent_item.child(i)
+            data = child.data(0, Qt.ItemDataRole.UserRole)
+            
+            if data and data.get('type') == 'folder':
+                folder_id = data['id']
+                collection_id = data['collection_id']
+                
+                # Count requests recursively with cycle detection
+                def count_requests_in_folder(fid, visited=None):
+                    if visited is None:
+                        visited = set()
+                    
+                    # Detect circular references
+                    if fid in visited:
+                        print(f"[WARNING] Circular folder reference detected for folder {fid}")
+                        return 0
+                    
+                    visited.add(fid)
+                    
+                    count = 0
+                    try:
+                        # Count direct requests
+                        direct_requests = self.db.get_requests_by_folder(fid, collection_id)
+                        count += len(direct_requests)
+                        
+                        # Count requests in subfolders
+                        folders = self.db.get_folders_by_collection(collection_id)
+                        subfolders = [f for f in folders if f['parent_id'] == fid]
+                        for subfolder in subfolders:
+                            count += count_requests_in_folder(subfolder['id'], visited.copy())
+                    except Exception as e:
+                        print(f"[ERROR] Error counting requests in folder {fid}: {e}")
+                    
+                    return count
+                
+                request_count = count_requests_in_folder(folder_id)
+                folder_name = f"{data['name']} [{request_count}]"
+                child.setText(0, folder_name)
+                
+                # Recurse into subfolders
+                self._update_folder_counts_recursive(child)
     
     def _update_current_request_highlight(self):
         """Update the tree to highlight/bold the currently opened request and underline all open requests."""
@@ -3254,6 +3613,237 @@ class MainWindow(QMainWindow):
             
             from PyQt6.QtGui import QIcon
             item.setIcon(0, QIcon(folder_icon_path))
+    
+    def _handle_tree_reorder(self, dragged_item: QTreeWidgetItem, dragged_data: dict):
+        """
+        Handle reordering after a drag & drop operation.
+        Updates the database with the new order of items.
+        Also handles moving items between collections/folders.
+        """
+        if not dragged_data or not isinstance(dragged_data, dict):
+            return
+        
+        item_type = dragged_data.get('type')
+        if not item_type:
+            return
+        
+        # Get the parent of the dragged item (after the drop)
+        parent_item = dragged_item.parent()
+        
+        try:
+            if item_type == 'collection':
+                # Reorder collections at root level
+                collection_ids = []
+                for i in range(self.collections_tree.topLevelItemCount()):
+                    item = self.collections_tree.topLevelItem(i)
+                    data = item.data(0, Qt.ItemDataRole.UserRole)
+                    if data and data.get('type') == 'collection':
+                        collection_ids.append(data['id'])  # Use 'id' key
+                
+                if collection_ids:
+                    self.db.reorder_collections(collection_ids)
+            
+            elif item_type == 'folder':
+                # Check if folder moved to a new collection or parent folder
+                folder_id = dragged_data.get('id')
+                old_collection_id = dragged_data.get('collection_id')
+                old_parent_id = dragged_data.get('parent_id')
+                
+                # Determine new parent and collection based on where it was dropped
+                new_collection_id = old_collection_id  # Default: same collection
+                new_parent_id = old_parent_id  # Default: same parent
+                
+                if parent_item:
+                    parent_data = parent_item.data(0, Qt.ItemDataRole.UserRole)
+                    if parent_data:
+                        if parent_data.get('type') == 'collection':
+                            new_collection_id = parent_data.get('id')
+                            new_parent_id = None  # At collection root
+                        elif parent_data.get('type') == 'folder':
+                            new_parent_id = parent_data.get('id')
+                            new_collection_id = parent_data.get('collection_id')
+                
+                print(f"[FOLDER MOVE] ID={folder_id}, old_collection={old_collection_id}, new_collection={new_collection_id}, old_parent={old_parent_id}, new_parent={new_parent_id}")
+                
+                # Update folder's collection_id and/or parent_id if moved
+                if new_collection_id != old_collection_id or new_parent_id != old_parent_id:
+                    # Folder moved to different collection or parent
+                    print(f"[MOVE] Folder {folder_id} moved to collection {new_collection_id}, parent {new_parent_id}")
+                    cursor = self.db.connection.cursor()
+                    cursor.execute("UPDATE folders SET collection_id = ?, parent_id = ? WHERE id = ?",
+                                 (new_collection_id, new_parent_id, folder_id))
+                    self.db.connection.commit()
+                    
+                    # Verify the update
+                    cursor.execute("SELECT collection_id, parent_id FROM folders WHERE id = ?", (folder_id,))
+                    result = cursor.fetchone()
+                    if result:
+                        print(f"[DB VERIFY] Folder {folder_id} in DB: collection_id={result[0]}, parent_id={result[1]}")
+                    else:
+                        print(f"[DB ERROR] Folder {folder_id} not found in database!")
+                else:
+                    print(f"[NO MOVE] Folder {folder_id} - same position (old_parent={old_parent_id}, new_parent={new_parent_id})")
+                
+                # Now reorder folders in the new parent
+                if new_collection_id:
+                    folder_ids = []
+                    if parent_item:  # Inside a folder or collection
+                        for i in range(parent_item.childCount()):
+                            child = parent_item.child(i)
+                            child_data = child.data(0, Qt.ItemDataRole.UserRole)
+                            if child_data and child_data.get('type') == 'folder':
+                                folder_ids.append(child_data['id'])
+                    
+                    if folder_ids:
+                        self.db.reorder_folders(new_collection_id, folder_ids)
+            
+            elif item_type == 'request':
+                # Check if request moved to a new collection or folder
+                request_id = dragged_data.get('id')
+                old_collection_id = dragged_data.get('collection_id')
+                old_folder_id = dragged_data.get('folder_id')
+                
+                # Determine new parent (folder or collection)
+                new_collection_id = None
+                new_folder_id = None
+                
+                if parent_item:
+                    parent_data = parent_item.data(0, Qt.ItemDataRole.UserRole)
+                    if parent_data:
+                        if parent_data.get('type') == 'collection':
+                            new_collection_id = parent_data.get('id')
+                            new_folder_id = None  # At collection root
+                        elif parent_data.get('type') == 'folder':
+                            new_folder_id = parent_data.get('id')
+                            new_collection_id = parent_data.get('collection_id')
+                
+                # Update request's collection_id and/or folder_id if moved
+                if new_collection_id is not None and (new_collection_id != old_collection_id or new_folder_id != old_folder_id):
+                    print(f"[MOVE] Request {request_id} moved to collection {new_collection_id}, folder {new_folder_id}")
+                    cursor = self.db.connection.cursor()
+                    cursor.execute("UPDATE requests SET collection_id = ?, folder_id = ? WHERE id = ?",
+                                 (new_collection_id, new_folder_id, request_id))
+                    self.db.connection.commit()
+                
+                # Now reorder requests in the new parent
+                if new_collection_id is not None:
+                    request_ids = []
+                    if parent_item:
+                        for i in range(parent_item.childCount()):
+                            child = parent_item.child(i)
+                            child_data = child.data(0, Qt.ItemDataRole.UserRole)
+                            if child_data and child_data.get('type') == 'request':
+                                request_ids.append(child_data['id'])
+                    
+                    if request_ids:
+                        self.db.reorder_requests(new_collection_id, new_folder_id, request_ids)
+            
+            # For moves that change parent relationships, reload the entire tree to ensure counts are correct
+            # This is simpler and more reliable than tracking all affected folders
+            should_reload = False
+            
+            if item_type == 'folder':
+                old_parent_id = dragged_data.get('parent_id')
+                new_parent_id = None
+                if parent_item:
+                    parent_data = parent_item.data(0, Qt.ItemDataRole.UserRole)
+                    if parent_data and parent_data.get('type') == 'folder':
+                        new_parent_id = parent_data.get('id')
+                
+                print(f"[RELOAD CHECK] Folder: old_parent={old_parent_id}, new_parent={new_parent_id}")
+                # If parent changed, need to update counts
+                if old_parent_id != new_parent_id:
+                    should_reload = True
+                    print(f"[RELOAD] Triggering reload due to folder parent change")
+            
+            elif item_type == 'request':
+                old_collection_id = dragged_data.get('collection_id')
+                old_folder_id = dragged_data.get('folder_id')
+                new_collection_id = None
+                new_folder_id = None
+                
+                if parent_item:
+                    parent_data = parent_item.data(0, Qt.ItemDataRole.UserRole)
+                    if parent_data:
+                        if parent_data.get('type') == 'collection':
+                            new_collection_id = parent_data.get('id')
+                        elif parent_data.get('type') == 'folder':
+                            new_folder_id = parent_data.get('id')
+                            new_collection_id = parent_data.get('collection_id')
+                
+                print(f"[RELOAD CHECK] Request: old_collection={old_collection_id}, new_collection={new_collection_id}, old_folder={old_folder_id}, new_folder={new_folder_id}")
+                # If collection or folder changed, need to update counts
+                if new_collection_id != old_collection_id or new_folder_id != old_folder_id:
+                    should_reload = True
+                    print(f"[RELOAD] Triggering reload due to request move")
+            
+            # Reload tree if items were moved between parents
+            if should_reload:
+                print("[INFO] Reloading tree to update counts after move")
+                
+                # Before reloading, ensure affected folders and collections stay expanded
+                if not hasattr(self, '_folders_to_keep_expanded'):
+                    self._folders_to_keep_expanded = set()
+                if not hasattr(self, '_collections_to_keep_expanded'):
+                    self._collections_to_keep_expanded = set()
+                
+                if item_type == 'folder':
+                    # Keep the moved folder's parent expanded (if it has one)
+                    old_parent_id = dragged_data.get('parent_id')
+                    if old_parent_id:
+                        self._folders_to_keep_expanded.add(old_parent_id)
+                    
+                    # Keep the destination folder expanded (if dropped into a folder)
+                    if parent_item:
+                        parent_data = parent_item.data(0, Qt.ItemDataRole.UserRole)
+                        if parent_data:
+                            if parent_data.get('type') == 'folder':
+                                self._folders_to_keep_expanded.add(parent_data.get('id'))
+                            elif parent_data.get('type') == 'collection':
+                                self._collections_to_keep_expanded.add(parent_data.get('id'))
+                
+                elif item_type == 'request':
+                    # Keep both old and new parent folders/collections expanded
+                    old_folder_id = dragged_data.get('folder_id')
+                    old_collection_id = dragged_data.get('collection_id')
+                    
+                    if old_folder_id:
+                        self._folders_to_keep_expanded.add(old_folder_id)
+                    if old_collection_id:
+                        self._collections_to_keep_expanded.add(old_collection_id)
+                    
+                    if parent_item:
+                        parent_data = parent_item.data(0, Qt.ItemDataRole.UserRole)
+                        if parent_data:
+                            if parent_data.get('type') == 'folder':
+                                self._folders_to_keep_expanded.add(parent_data.get('id'))
+                                # Also keep the folder's collection expanded
+                                if parent_data.get('collection_id'):
+                                    self._collections_to_keep_expanded.add(parent_data.get('collection_id'))
+                            elif parent_data.get('type') == 'collection':
+                                self._collections_to_keep_expanded.add(parent_data.get('id'))
+                
+                # If there's a current open request, ensure its folder stays expanded
+                if self.current_request_id:
+                    current_request = self.db.get_request(self.current_request_id)
+                    if current_request:
+                        if current_request.get('folder_id'):
+                            self._folders_to_keep_expanded.add(current_request.get('folder_id'))
+                        if current_request.get('collection_id'):
+                            self._collections_to_keep_expanded.add(current_request.get('collection_id'))
+                
+                self._load_collections()
+                
+                # Clear the kept expanded folders/collections after reload
+                self._folders_to_keep_expanded.clear()
+                self._collections_to_keep_expanded.clear()
+        
+        except Exception as e:
+            print(f"Error reordering items: {e}")
+            import traceback
+            traceback.print_exc()
+            # Reload tree to restore correct order
+            self._load_collections()
     
     def _show_tree_context_menu(self, position):
         """Show context menu for collections tree."""

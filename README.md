@@ -1,12 +1,12 @@
 # PostMini - Desktop API Client
 
-**Version 1.9.0** | Professional API Testing Tool | MIT License
+**Version 1.9.1** | Professional API Testing Tool | MIT License
 
-A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, **environment import/export with Postman compatibility**, **request chaining**, **variable extraction**, OAuth 2.0, API testing with advanced reporting, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
+A simple and powerful desktop API client built with PyQt6. PostMini allows you to create, manage, and execute HTTP requests with full support for multi-request tabs, collections, environment variables, **environment import/export with Postman compatibility**, **request chaining**, **variable extraction**, **drag & drop ordering**, OAuth 2.0, API testing with advanced reporting, code generation, dark mode, cURL import/export, OpenAPI/Swagger import, dynamic variables, and persistent storage.
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.9.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.9.1-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Tests](https://img.shields.io/badge/tests-374%2B%20passing-success)
 
@@ -48,6 +48,17 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
   - **Smart conflict resolution** - Handles duplicate environment names automatically
   - Perfect for team collaboration across Postman and PostMini
   - [Read the Environment Import/Export Guide](docs/guides/ENVIRONMENT_IMPORT_EXPORT_GUIDE.md)
+
+- **🎯 Drag & Drop Ordering**: Organize collections, folders, and requests exactly how you want
+  - **Drag collections** to reorder them in the sidebar
+  - **Drag folders** within collections to group related requests
+  - **Drag requests** between folders or collections
+  - **Order persists** across restarts and through import/export
+  - **Postman-compatible validation** - Same rules as Postman for moving items
+  - **Smart conflict prevention** - Can't create circular references or invalid structures
+  - **Real-time updates** - Item counts and UI update immediately after moves
+  - Perfect for organizing large API projects with complex folder structures
+  - [Read the Drag & Drop Ordering Guide](docs/guides/DRAG_DROP_ORDERING.md)
 
 ### Previous Updates (V1.8.2)
 - **🎨 UI Refinements**: Improved button layout and visual clarity
@@ -165,6 +176,7 @@ PostMini is a **free, open-source, privacy-focused** alternative to Postman:
 - **Polished UI**: Focus states, hover effects, improved spacing and readability
 
 ### Core Features
+- **Drag & Drop Ordering**: 🆕 v1.9.0 - Organize collections, folders, and requests with drag & drop (Postman-compatible)
 - **Environment Import/Export**: 🆕 v1.9.0 - Full Postman compatibility for seamless migration and team collaboration
 - **Request Chaining & Variable Extraction**: 🆕 v1.7.0 - Extract values from responses and use in subsequent requests (`{{extracted.variableName}}`)
 - **Advanced Test Reporting**: 🆕 v1.7.0 - Export test results as HTML, JUnit XML, JSON, or CSV

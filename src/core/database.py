@@ -253,16 +253,47 @@ class DatabaseManager:
             )
         """)
         
+        # Add order_index column to collections table if it doesn't exist (migration)
+        try:
+            cursor.execute("ALTER TABLE collections ADD COLUMN order_index INTEGER")
+            # Initialize existing collections with order_index = id * 100
+            cursor.execute("UPDATE collections SET order_index = id * 100 WHERE order_index IS NULL")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
+        # Add order_index column to folders table if it doesn't exist (migration)
+        try:
+            cursor.execute("ALTER TABLE folders ADD COLUMN order_index INTEGER")
+            # Initialize existing folders with order_index = id * 100
+            cursor.execute("UPDATE folders SET order_index = id * 100 WHERE order_index IS NULL")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
+        # Add order_index column to requests table if it doesn't exist (migration)
+        try:
+            cursor.execute("ALTER TABLE requests ADD COLUMN order_index INTEGER")
+            # Initialize existing requests with order_index = id * 100
+            cursor.execute("UPDATE requests SET order_index = id * 100 WHERE order_index IS NULL")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
         self.connection.commit()
     
     # ==================== Collection Operations ====================
     
-    def create_collection(self, name: str) -> int:
+    def create_collection(self, name: str, order_index: Optional[int] = None) -> int:
         """
         Create a new collection.
         
         Args:
             name: Name of the collection
+            order_index: Optional order index for sorting (defaults to id * 100 if not provided)
             
         Returns:
             ID of the newly created collection
@@ -271,7 +302,13 @@ class DatabaseManager:
             sqlite3.IntegrityError: If collection name already exists
         """
         cursor = self.connection.cursor()
-        cursor.execute("INSERT INTO collections (name) VALUES (?)", (name,))
+        if order_index is not None:
+            cursor.execute("INSERT INTO collections (name, order_index) VALUES (?, ?)", (name, order_index))
+        else:
+            cursor.execute("INSERT INTO collections (name) VALUES (?)", (name,))
+            collection_id = cursor.lastrowid
+            # Set default order_index = id * 100
+            cursor.execute("UPDATE collections SET order_index = ? WHERE id = ?", (collection_id * 100, collection_id))
         self.connection.commit()
         return cursor.lastrowid
     
@@ -283,7 +320,7 @@ class DatabaseManager:
             List of dictionaries containing collection data
         """
         cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM collections ORDER BY name")
+        cursor.execute("SELECT * FROM collections ORDER BY order_index")
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
     
@@ -329,6 +366,27 @@ class DatabaseManager:
         cursor.execute("DELETE FROM collections WHERE id = ?", (collection_id,))
         self.connection.commit()
     
+    def reorder_collections(self, collection_ids_in_order: List[int]):
+        """
+        Reorder collections based on provided list of IDs.
+        
+        Args:
+            collection_ids_in_order: List of collection IDs in desired order
+        """
+        cursor = self.connection.cursor()
+        try:
+            # Update order_index for each collection (index * 100 for spacing)
+            for idx, collection_id in enumerate(collection_ids_in_order):
+                new_order_index = idx * 100
+                cursor.execute(
+                    "UPDATE collections SET order_index = ? WHERE id = ?",
+                    (new_order_index, collection_id)
+                )
+            self.connection.commit()
+        except Exception as e:
+            self.connection.rollback()
+            raise e
+    
     # ==================== Request Operations ====================
     
     def create_request(self, name: str, url: str, method: str, collection_id: int,
@@ -336,7 +394,7 @@ class DatabaseManager:
                       body: Optional[str] = None, auth_type: str = 'None',
                       auth_token: Optional[str] = None, description: Optional[str] = None,
                       folder_id: Optional[int] = None, pre_request_script: Optional[str] = None,
-                      post_response_script: Optional[str] = None) -> int:
+                      post_response_script: Optional[str] = None, order_index: Optional[int] = None) -> int:
         """
         Create a new request in a collection.
         
@@ -354,6 +412,7 @@ class DatabaseManager:
             folder_id: Optional ID of the parent folder
             pre_request_script: Optional JavaScript pre-request script
             post_response_script: Optional JavaScript post-response script
+            order_index: Optional order index for sorting (defaults to id * 100 if not provided)
             
         Returns:
             ID of the newly created request
@@ -364,12 +423,23 @@ class DatabaseManager:
         params_json = json.dumps(params) if params else None
         headers_json = json.dumps(headers) if headers else None
         
-        cursor.execute("""
-            INSERT INTO requests 
-            (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (collection_id, name, method, url, params_json, headers_json, 
-              body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script))
+        if order_index is not None:
+            cursor.execute("""
+                INSERT INTO requests 
+                (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, order_index)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (collection_id, name, method, url, params_json, headers_json, 
+                  body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, order_index))
+        else:
+            cursor.execute("""
+                INSERT INTO requests 
+                (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (collection_id, name, method, url, params_json, headers_json, 
+                  body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script))
+            request_id = cursor.lastrowid
+            # Set default order_index = id * 100
+            cursor.execute("UPDATE requests SET order_index = ? WHERE id = ?", (request_id * 100, request_id))
         
         self.connection.commit()
         return cursor.lastrowid
@@ -388,7 +458,7 @@ class DatabaseManager:
         cursor.execute("""
             SELECT * FROM requests 
             WHERE collection_id = ? 
-            ORDER BY name
+            ORDER BY order_index
         """, (collection_id,))
         rows = cursor.fetchall()
         
@@ -1205,7 +1275,7 @@ class DatabaseManager:
     
     # ==================== Folder Operations ====================
     
-    def create_folder(self, collection_id: int, name: str, parent_id: Optional[int] = None) -> int:
+    def create_folder(self, collection_id: int, name: str, parent_id: Optional[int] = None, order_index: Optional[int] = None) -> int:
         """
         Create a new folder within a collection.
         
@@ -1213,6 +1283,7 @@ class DatabaseManager:
             collection_id: ID of the collection
             name: Name of the folder
             parent_id: ID of the parent folder (for nesting), or None for root level
+            order_index: Optional order index for sorting (defaults to id * 100 if not provided)
             
         Returns:
             ID of the newly created folder
@@ -1220,10 +1291,19 @@ class DatabaseManager:
         from datetime import datetime
         cursor = self.connection.cursor()
         now = datetime.now().isoformat()
-        cursor.execute("""
-            INSERT INTO folders (collection_id, parent_id, name, created_at)
-            VALUES (?, ?, ?, ?)
-        """, (collection_id, parent_id, name, now))
+        if order_index is not None:
+            cursor.execute("""
+                INSERT INTO folders (collection_id, parent_id, name, created_at, order_index)
+                VALUES (?, ?, ?, ?, ?)
+            """, (collection_id, parent_id, name, now, order_index))
+        else:
+            cursor.execute("""
+                INSERT INTO folders (collection_id, parent_id, name, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (collection_id, parent_id, name, now))
+            folder_id = cursor.lastrowid
+            # Set default order_index = id * 100
+            cursor.execute("UPDATE folders SET order_index = ? WHERE id = ?", (folder_id * 100, folder_id))
         self.connection.commit()
         return cursor.lastrowid
     
@@ -1239,10 +1319,10 @@ class DatabaseManager:
         """
         cursor = self.connection.cursor()
         cursor.execute("""
-            SELECT id, collection_id, parent_id, name, created_at
+            SELECT id, collection_id, parent_id, name, created_at, order_index
             FROM folders
             WHERE collection_id = ?
-            ORDER BY name
+            ORDER BY order_index
         """, (collection_id,))
         
         folders = []
@@ -1252,7 +1332,8 @@ class DatabaseManager:
                 'collection_id': row[1],
                 'parent_id': row[2],
                 'name': row[3],
-                'created_at': row[4]
+                'created_at': row[4],
+                'order_index': row[5]
             })
         return folders
     
@@ -1361,6 +1442,28 @@ class DatabaseManager:
         
         self.connection.commit()
     
+    def reorder_folders(self, collection_id: int, folder_ids_in_order: List[int]):
+        """
+        Reorder folders within a collection based on provided list of IDs.
+        
+        Args:
+            collection_id: ID of the collection
+            folder_ids_in_order: List of folder IDs in desired order
+        """
+        cursor = self.connection.cursor()
+        try:
+            # Update order_index for each folder (index * 100 for spacing)
+            for idx, folder_id in enumerate(folder_ids_in_order):
+                new_order_index = idx * 100
+                cursor.execute(
+                    "UPDATE folders SET order_index = ? WHERE id = ? AND collection_id = ?",
+                    (new_order_index, folder_id, collection_id)
+                )
+            self.connection.commit()
+        except Exception as e:
+            self.connection.rollback()
+            raise e
+    
     def move_request_to_folder(self, request_id: int, folder_id: Optional[int]):
         """
         Move a request to a folder (or to collection root if folder_id is None).
@@ -1372,6 +1475,35 @@ class DatabaseManager:
         cursor = self.connection.cursor()
         cursor.execute("UPDATE requests SET folder_id = ? WHERE id = ?", (folder_id, request_id))
         self.connection.commit()
+    
+    def reorder_requests(self, collection_id: int, folder_id: Optional[int], request_ids_in_order: List[int]):
+        """
+        Reorder requests within a folder or collection root based on provided list of IDs.
+        
+        Args:
+            collection_id: ID of the collection
+            folder_id: ID of the folder, or None for collection root
+            request_ids_in_order: List of request IDs in desired order
+        """
+        cursor = self.connection.cursor()
+        try:
+            # Update order_index for each request (index * 100 for spacing)
+            for idx, request_id in enumerate(request_ids_in_order):
+                new_order_index = idx * 100
+                if folder_id is None:
+                    cursor.execute(
+                        "UPDATE requests SET order_index = ? WHERE id = ? AND collection_id = ? AND folder_id IS NULL",
+                        (new_order_index, request_id, collection_id)
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE requests SET order_index = ? WHERE id = ? AND collection_id = ? AND folder_id = ?",
+                        (new_order_index, request_id, collection_id, folder_id)
+                    )
+            self.connection.commit()
+        except Exception as e:
+            self.connection.rollback()
+            raise e
     
     def get_requests_by_folder(self, folder_id: Optional[int], collection_id: int) -> List[Dict]:
         """
@@ -1393,7 +1525,7 @@ class DatabaseManager:
                        headers, body, auth_type, auth_token, description
                 FROM requests
                 WHERE collection_id = ? AND folder_id IS NULL
-                ORDER BY name
+                ORDER BY order_index
             """, (collection_id,))
         else:
             # Get requests in specific folder
@@ -1402,7 +1534,7 @@ class DatabaseManager:
                        headers, body, auth_type, auth_token, description
                 FROM requests
                 WHERE folder_id = ?
-                ORDER BY name
+                ORDER BY order_index
             """, (folder_id,))
         
         requests = []

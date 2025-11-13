@@ -86,7 +86,8 @@ class CollectionExporter:
             folders_export.append({
                 'name': folder['name'],
                 'path': parent_path,  # Path to parent folder
-                'full_path': full_path  # Full path including this folder
+                'full_path': full_path,  # Full path including this folder
+                'order_index': folder.get('order_index')
             })
         
         # Build export structure
@@ -95,6 +96,7 @@ class CollectionExporter:
             "export_date": datetime.now().isoformat(),
             "collection": {
                 "name": collection['name'],
+                "order_index": collection.get('order_index'),
                 "folders": folders_export,
                 "variables": [],
                 "requests": []
@@ -125,7 +127,8 @@ class CollectionExporter:
                 "auth_token": request.get('auth_token'),
                 "pre_request_script": request.get('pre_request_script'),
                 "post_response_script": request.get('post_response_script'),
-                "folder_path": folder_path
+                "folder_path": folder_path,
+                "order_index": request.get('order_index')
             }
             export_data["collection"]["requests"].append(request_data)
         
@@ -303,8 +306,9 @@ class CollectionImporter:
                 return False, f"Collection '{collection_name}' already exists", None
         
         try:
-            # Create collection
-            collection_id = self.db.create_collection(collection_name)
+            # Create collection - use order_index from data if present, otherwise it will default to id * 100
+            order_index = collection_data.get("order_index")
+            collection_id = self.db.create_collection(collection_name, order_index=order_index)
             
             # Import collection variables (if present)
             if "variables" in collection_data:
@@ -322,7 +326,7 @@ class CollectionImporter:
                 # Sort folders by depth (shorter paths first) to create parents before children
                 folders = sorted(collection_data["folders"], key=lambda f: len(f.get('path', [])))
                 
-                for folder_info in folders:
+                for idx, folder_info in enumerate(folders):
                     folder_name = folder_info['name']
                     parent_path = tuple(folder_info.get('path', []))  # Convert to tuple for dict key
                     full_path = tuple(folder_info.get('full_path', []))
@@ -330,18 +334,24 @@ class CollectionImporter:
                     # Get parent folder ID if this is a nested folder
                     parent_id = folder_map.get(parent_path, None)
                     
+                    # Use order_index from data if present, otherwise use position in array
+                    folder_order_index = folder_info.get('order_index', idx * 100)
+                    
                     # Create folder
-                    folder_id = self.db.create_folder(collection_id, folder_name, parent_id=parent_id)
+                    folder_id = self.db.create_folder(collection_id, folder_name, parent_id=parent_id, order_index=folder_order_index)
                     
                     # Store in map for children to reference
                     folder_map[full_path] = folder_id
             
             # Import all requests and link them to their folders
             requests_imported = 0
-            for request_data in collection_data["requests"]:
+            for idx, request_data in enumerate(collection_data["requests"]):
                 # Determine folder_id for this request
                 folder_path = tuple(request_data.get("folder_path", []))  # Convert to tuple for dict key
                 folder_id = folder_map.get(folder_path, None)
+                
+                # Use order_index from data if present, otherwise use position in array
+                request_order_index = request_data.get('order_index', idx * 100)
                 
                 self.db.create_request(
                     collection_id=collection_id,
@@ -355,7 +365,8 @@ class CollectionImporter:
                     auth_token=request_data.get("auth_token"),
                     folder_id=folder_id,  # Link to folder
                     pre_request_script=request_data.get("pre_request_script"),
-                    post_response_script=request_data.get("post_response_script")
+                    post_response_script=request_data.get("post_response_script"),
+                    order_index=request_order_index
                 )
                 requests_imported += 1
             
