@@ -40,10 +40,11 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 [Files]
 ; Main executable and all dependencies from PyInstaller output
 Source: "dist\PostMini\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Documentation
+; Essential documentation only (README, LICENSE, CHANGELOG)
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs
-; NOTE: Don't use "Flags: ignoreversion" on any shared system files
+Source: "LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
+; NOTE: Full documentation available at https://github.com/melerek/PostMini
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

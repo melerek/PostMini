@@ -2711,6 +2711,17 @@ class MainWindow(QMainWindow):
             # Recursively add parent folders
             self._add_folder_and_parents_to_expanded(folder.get('parent_id'), expanded_folder_ids)
     
+    def _force_expand_folders_recursive(self, item, folder_ids_to_expand: set):
+        """Recursively force expansion of specific folders after tree is built."""
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if data and isinstance(data, dict):
+            if data.get('type') == 'folder' and data.get('id') in folder_ids_to_expand:
+                item.setExpanded(True)
+        
+        # Recurse through children
+        for i in range(item.childCount()):
+            self._force_expand_folders_recursive(item.child(i), folder_ids_to_expand)
+    
     def _ensure_request_visible_in_tree(self, request_id: int):
         """Ensure a request is visible in the collections tree by expanding parent folders."""
         if not request_id:
@@ -2767,6 +2778,12 @@ class MainWindow(QMainWindow):
         for i in range(self.collections_tree.topLevelItemCount()):
             item = self.collections_tree.topLevelItem(i)
             self._store_expanded_state(item, expanded_collection_ids, expanded_folder_ids)
+        
+        # Add any folders/collections that should be kept expanded (e.g., after deletion)
+        if hasattr(self, '_folders_to_keep_expanded'):
+            expanded_folder_ids.update(self._folders_to_keep_expanded)
+        if hasattr(self, '_collections_to_keep_expanded'):
+            expanded_collection_ids.update(self._collections_to_keep_expanded)
         
         # If there's a current request, ensure its folder will be expanded
         if self.current_request_id:
@@ -2881,8 +2898,21 @@ class MainWindow(QMainWindow):
             if collection['id'] in expanded_collection_ids:
                 collection_item.setExpanded(True)
         
+        # Force expansion of folders that should be kept expanded (second pass after tree is fully built)
+        # This ensures Qt doesn't collapse them during tree construction
+        if hasattr(self, '_folders_to_keep_expanded') and self._folders_to_keep_expanded:
+            for i in range(self.collections_tree.topLevelItemCount()):
+                collection_item = self.collections_tree.topLevelItem(i)
+                self._force_expand_folders_recursive(collection_item, self._folders_to_keep_expanded)
+        
         # Highlight currently opened request
         self._update_current_request_highlight()
+        
+        # Clear temporary tracking sets after they've been used
+        if hasattr(self, '_folders_to_keep_expanded'):
+            self._folders_to_keep_expanded.clear()
+        if hasattr(self, '_collections_to_keep_expanded'):
+            self._collections_to_keep_expanded.clear()
     
     def _store_expanded_state(self, item, expanded_collection_ids, expanded_folder_ids):
         """Recursively store expanded state of collections and folders."""
@@ -3591,6 +3621,10 @@ class MainWindow(QMainWindow):
         if ok and name.strip():
             try:
                 self.db.create_folder(collection_id, name.strip())
+                # Keep the collection expanded after adding folder
+                if not hasattr(self, '_collections_to_keep_expanded'):
+                    self._collections_to_keep_expanded = set()
+                self._collections_to_keep_expanded.add(collection_id)
                 self._load_collections()
                 self.toast.success(f"Folder '{name}' created")
             except Exception as e:
@@ -3610,6 +3644,14 @@ class MainWindow(QMainWindow):
         if ok and name.strip():
             try:
                 self.db.create_folder(collection_id, name.strip(), parent_folder_id)
+                # Keep the parent folder AND all its parents expanded after adding subfolder
+                if not hasattr(self, '_folders_to_keep_expanded'):
+                    self._folders_to_keep_expanded = set()
+                # Add parent folder and all its ancestors
+                self._add_folder_and_parents_to_expanded(parent_folder_id, self._folders_to_keep_expanded)
+                if not hasattr(self, '_collections_to_keep_expanded'):
+                    self._collections_to_keep_expanded = set()
+                self._collections_to_keep_expanded.add(collection_id)
                 self._load_collections()
                 self.toast.success(f"Subfolder '{name}' created")
             except Exception as e:
@@ -4015,15 +4057,26 @@ class MainWindow(QMainWindow):
     
     def _mark_as_changed(self):
         """Mark the request as having unsaved changes."""
+        # Don't mark as changed if there's no request loaded
+        current_tab_index = self.request_tabs.currentIndex()
+        if current_tab_index < 0:
+            return  # No tab open
+        
+        if current_tab_index not in self.tab_states:
+            return  # Tab has no state
+        
+        # Don't mark as changed if this tab has no request (empty/new tab with no data)
+        tab_state = self.tab_states[current_tab_index]
+        if not tab_state.get('request_id') and not self.current_request_id:
+            return  # No request to mark as changed
+        
         if not self.has_unsaved_changes:
             self.has_unsaved_changes = True
             self._update_request_title()
             
             # Update current tab's unsaved indicator
-            current_tab_index = self.request_tabs.currentIndex()
-            if current_tab_index >= 0 and current_tab_index in self.tab_states:
-                self.tab_states[current_tab_index]['has_changes'] = True
-                self._update_tab_title(current_tab_index)
+            self.tab_states[current_tab_index]['has_changes'] = True
+            self._update_tab_title(current_tab_index)
     
     def _update_method_style(self, method: str):
         """Update the method combo styling based on selected method."""
@@ -4238,9 +4291,6 @@ class MainWindow(QMainWindow):
     
     def _save_request(self):
         """Save the current request to the database."""
-        # Convert temporary tab to persistent when saving request
-        self._convert_temporary_to_persistent()
-        
         # Check if this is a new unsaved request
         current_tab_index = self.request_tabs.currentIndex()
         is_new_request = False
@@ -4251,13 +4301,19 @@ class MainWindow(QMainWindow):
                 is_new_request = True
         
         if is_new_request:
+            # Convert temporary tab to persistent when saving new request
+            self._convert_temporary_to_persistent()
             # New request - prompt for collection selection
             self._save_new_request()
             return
         
         if not self.current_request_id:
             QMessageBox.warning(self, "Warning", "No request selected to save!")
+            # Don't convert temporary tab if there's nothing to save
             return
+        
+        # Convert temporary tab to persistent only when actually saving
+        self._convert_temporary_to_persistent()
         
         try:
             # Get current request name
@@ -6754,7 +6810,8 @@ class MainWindow(QMainWindow):
             
             # Check if variable already exists
             existing_vars = self.db.get_collection_variables_with_metadata(collection_id)
-            if any(var['name'] == name for var in existing_vars):
+            # Note: Database returns 'key' not 'name'
+            if any(var['key'] == name for var in existing_vars):
                 reply = QMessageBox.question(
                     self,
                     "Variable Exists",
@@ -8424,6 +8481,10 @@ class MainWindow(QMainWindow):
         if not request:
             return
         
+        # Capture the folder that contains this request before deletion
+        # So we can keep it expanded after reload
+        folder_id_to_keep_expanded = request.get('folder_id')
+        
         reply = QMessageBox.question(
             self, "Confirm Delete",
             f"Are you sure you want to delete request '{request['name']}'?",
@@ -8433,12 +8494,37 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 self.db.delete_request(request_id)
+                
+                # Store the folder AND all parent folders to keep expanded
+                if folder_id_to_keep_expanded:
+                    if not hasattr(self, '_folders_to_keep_expanded'):
+                        self._folders_to_keep_expanded = set()
+                    # Add this folder and all its parents to the set
+                    self._add_folder_and_parents_to_expanded(folder_id_to_keep_expanded, self._folders_to_keep_expanded)
+                
+                # Also store the collection to keep expanded
+                collection_id = request.get('collection_id')
+                if collection_id:
+                    if not hasattr(self, '_collections_to_keep_expanded'):
+                        self._collections_to_keep_expanded = set()
+                    self._collections_to_keep_expanded.add(collection_id)
+                
+                # Close the tab if this request is open in any tab
+                tab_index_to_close = None
+                for tab_idx, tab_state in self.tab_states.items():
+                    if tab_state.get('request_id') == request_id:
+                        tab_index_to_close = tab_idx
+                        break
+                
+                if tab_index_to_close is not None:
+                    self._close_tab(tab_index_to_close)
+                
                 if self.current_request_id == request_id:
                     self.current_request_id = None
-                    self._clear_request_editor()
-                    self.center_stack.setCurrentWidget(self.no_request_empty_state)
+                
                 self._auto_sync_to_filesystem()
                 self._load_collections()
+                
                 self.toast.success(f"Request '{request['name']}' deleted")
             except Exception as e:
                 self.toast.error(f"Failed to delete: {str(e)[:30]}...")

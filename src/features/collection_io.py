@@ -33,7 +33,7 @@ class CollectionExporter:
     
     def export_collection(self, collection_id: int) -> Dict:
         """
-        Export a single collection with all its requests to a dictionary.
+        Export a single collection with all its requests, folders, and variables to a dictionary.
         
         Args:
             collection_id: ID of the collection to export
@@ -52,18 +52,68 @@ class CollectionExporter:
         # Get all requests for this collection
         requests = self.db.get_requests_by_collection(collection_id)
         
+        # Get all folders for this collection
+        folders = self.db.get_folders_by_collection(collection_id)
+        
+        # Get all collection variables
+        collection_variables = self.db.get_collection_variables(collection_id)
+        
+        # Build folder path map for folders
+        folder_paths = {}
+        folder_full_paths = {}
+        
+        def build_folder_path(folder_id):
+            """Recursively build path for a folder."""
+            folder = next((f for f in folders if f['id'] == folder_id), None)
+            if not folder:
+                return []
+            
+            parent_id = folder.get('parent_id')
+            if parent_id:
+                return build_folder_path(parent_id) + [folder['name']]
+            else:
+                return [folder['name']]
+        
+        # Build paths for all folders
+        folders_export = []
+        for folder in folders:
+            parent_path = build_folder_path(folder.get('parent_id')) if folder.get('parent_id') else []
+            full_path = parent_path + [folder['name']]
+            
+            folder_paths[folder['id']] = parent_path
+            folder_full_paths[folder['id']] = full_path
+            
+            folders_export.append({
+                'name': folder['name'],
+                'path': parent_path,  # Path to parent folder
+                'full_path': full_path  # Full path including this folder
+            })
+        
         # Build export structure
         export_data = {
             "export_version": self.EXPORT_VERSION,
             "export_date": datetime.now().isoformat(),
             "collection": {
                 "name": collection['name'],
+                "folders": folders_export,
+                "variables": [],
                 "requests": []
             }
         }
         
-        # Add all requests
+        # Add collection variables
+        for var in collection_variables:
+            export_data["collection"]["variables"].append({
+                "key": var['key'],
+                "value": var['value']
+            })
+        
+        # Add all requests with folder paths
         for request in requests:
+            folder_path = []
+            if request.get('folder_id'):
+                folder_path = folder_full_paths.get(request['folder_id'], [])
+            
             request_data = {
                 "name": request['name'],
                 "method": request['method'],
@@ -74,7 +124,8 @@ class CollectionExporter:
                 "auth_type": request.get('auth_type', 'None'),
                 "auth_token": request.get('auth_token'),
                 "pre_request_script": request.get('pre_request_script'),
-                "post_response_script": request.get('post_response_script')
+                "post_response_script": request.get('post_response_script'),
+                "folder_path": folder_path
             }
             export_data["collection"]["requests"].append(request_data)
         
@@ -254,6 +305,15 @@ class CollectionImporter:
         try:
             # Create collection
             collection_id = self.db.create_collection(collection_name)
+            
+            # Import collection variables (if present)
+            if "variables" in collection_data:
+                for var in collection_data["variables"]:
+                    self.db.create_collection_variable(
+                        collection_id=collection_id,
+                        key=var['key'],
+                        value=var.get('value', '')
+                    )
             
             # Create folders first (if present) and build a mapping of paths to folder IDs
             folder_map = {}  # Maps tuple of folder path to folder_id

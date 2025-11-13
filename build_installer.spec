@@ -54,12 +54,51 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
+        # Data science / visualization (not needed)
         'matplotlib',
         'numpy',
         'pandas',
         'scipy',
         'PIL',
+        'Pillow',
+        
+        # GUI frameworks (not needed, we use PyQt6)
         'tkinter',
+        'wx',
+        'gtk',
+        
+        # Testing frameworks
+        'pytest',
+        'pytest-qt',
+        '_pytest',
+        'unittest.mock',
+        'doctest',
+        
+        # Development tools
+        'IPython',
+        'jupyter',
+        'notebook',
+        'pyinstaller',
+        
+        # Unused standard library modules
+        'pdb',
+        'pydoc',
+        'xmlrpc',
+        'ftplib',
+        'smtplib',
+        'poplib',
+        'imaplib',
+        'telnetlib',
+        'turtle',
+        
+        # Unused encodings
+        'encodings.cp932',
+        'encodings.cp949',
+        'encodings.cp950',
+        'encodings.euc_jp',
+        'encodings.euc_kr',
+        'encodings.shift_jis',
+        'encodings.big5',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

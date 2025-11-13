@@ -38,8 +38,17 @@ class PostmanConverter:
                 "schema": PostmanConverter.POSTMAN_SCHEMA,
                 "description": f"Exported from API Client on {collection_data.get('export_date', '')}"
             },
-            "item": []
+            "item": [],
+            "variable": []
         }
+        
+        # Convert collection variables to Postman format
+        for var in collection.get('variables', []):
+            postman_collection["variable"].append({
+                "key": var.get('key', ''),
+                "value": var.get('value', ''),
+                "type": "default"
+            })
         
         # Convert each request to Postman format
         for request in collection.get('requests', []):
@@ -147,6 +156,32 @@ class PostmanConverter:
             "response": []
         }
         
+        # Add scripts as events
+        events = []
+        
+        pre_request_script = request.get('pre_request_script')
+        if pre_request_script:
+            events.append({
+                "listen": "prerequest",
+                "script": {
+                    "type": "text/javascript",
+                    "exec": pre_request_script.split('\n')
+                }
+            })
+        
+        post_response_script = request.get('post_response_script')
+        if post_response_script:
+            events.append({
+                "listen": "test",
+                "script": {
+                    "type": "text/javascript",
+                    "exec": post_response_script.split('\n')
+                }
+            })
+        
+        if events:
+            postman_item["event"] = events
+        
         return postman_item
     
     @staticmethod
@@ -170,9 +205,18 @@ class PostmanConverter:
                 "name": info.get('name', 'Imported Collection'),
                 "description": info.get('description', ''),
                 "folders": [],  # List of folders with hierarchy info
+                "variables": [],  # List of collection variables
                 "requests": []  # List of requests with folder_path info
             }
         }
+        
+        # Extract collection variables from Postman format
+        postman_variables = postman_data.get('variable', [])
+        for var in postman_variables:
+            internal_format["collection"]["variables"].append({
+                "key": var.get('key', ''),
+                "value": var.get('value', '')
+            })
         
         # Convert each Postman item to our format (recursively)
         items = postman_data.get('item', [])
@@ -323,6 +367,27 @@ class PostmanConverter:
                         auth_token = apikey_item.get('value', '')
                         break
         
+        # Extract scripts from events
+        pre_request_script = None
+        post_response_script = None
+        
+        # Check item-level events (in the item, not in request_data)
+        item_events = item.get('event', [])
+        for event in item_events:
+            event_listen = event.get('listen', '')
+            script_data = event.get('script', {})
+            
+            if event_listen == 'prerequest':
+                # Pre-request script
+                exec_lines = script_data.get('exec', [])
+                if exec_lines:
+                    pre_request_script = '\n'.join(exec_lines)
+            elif event_listen == 'test':
+                # Test/post-response script
+                exec_lines = script_data.get('exec', [])
+                if exec_lines:
+                    post_response_script = '\n'.join(exec_lines)
+        
         return {
             "name": name,
             "folder_path": folder_path.copy(),  # Store folder path as list
@@ -332,7 +397,9 @@ class PostmanConverter:
             "headers": headers if headers else None,
             "body": body,
             "auth_type": auth_type,
-            "auth_token": auth_token
+            "auth_token": auth_token,
+            "pre_request_script": pre_request_script,
+            "post_response_script": post_response_script
         }
     
     @staticmethod
