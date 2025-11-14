@@ -293,11 +293,11 @@ class TestDynamicVariablesIntegration:
         """Test dynamic variable substitution in URL."""
         from src.features.variable_substitution import VariableSubstitution
         
-        url = "https://api.example.com/users/$guid/orders"
+        url = "https://api.example.com/users/{{$guid}}/orders"
         result, unresolved = VariableSubstitution.substitute(url, {})
         
-        # $guid should be replaced
-        assert '$guid' not in result
+        # {{$guid}} should be replaced
+        assert '{{$guid}}' not in result
         assert 'https://api.example.com/users/' in result
         assert '/orders' in result
         # UUID should be present
@@ -307,13 +307,13 @@ class TestDynamicVariablesIntegration:
         """Test dynamic variable substitution in request body."""
         from src.features.variable_substitution import VariableSubstitution
         
-        body = '{"id": "$guid", "email": "$randomEmail", "timestamp": "$timestamp"}'
+        body = '{"id": "{{$guid}}", "email": "{{$randomEmail}}", "timestamp": "{{$timestamp}}"}'
         result, unresolved = VariableSubstitution.substitute(body, {})
         
         # All variables should be replaced
-        assert '$guid' not in result
-        assert '$randomEmail' not in result
-        assert '$timestamp' not in result
+        assert '{{$guid}}' not in result
+        assert '{{$randomEmail}}' not in result
+        assert '{{$timestamp}}' not in result
         
         # Check if valid JSON
         import json
@@ -327,22 +327,22 @@ class TestDynamicVariablesIntegration:
         """Test mixing dynamic variables and environment variables."""
         from src.features.variable_substitution import VariableSubstitution
         
-        text = "{{baseUrl}}/users/$guid?timestamp=$timestamp"
+        text = "{{baseUrl}}/users/{{$guid}}?timestamp={{$timestamp}}"
         env_vars = {'baseUrl': 'https://api.example.com'}
         
         result, unresolved = VariableSubstitution.substitute(text, env_vars)
         
         # Both types should be replaced
         assert '{{baseUrl}}' not in result
-        assert '$guid' not in result
-        assert '$timestamp' not in result
+        assert '{{$guid}}' not in result
+        assert '{{$timestamp}}' not in result
         assert 'https://api.example.com/users/' in result
     
     def test_multiple_same_variables(self):
         """Test multiple occurrences of same variable get different values."""
         from src.features.variable_substitution import VariableSubstitution
         
-        text = "First: $guid, Second: $guid"
+        text = "First: {{$guid}}, Second: {{$guid}}"
         result, unresolved = VariableSubstitution.substitute(text, {})
         
         # Extract both GUIDs
@@ -355,11 +355,140 @@ class TestDynamicVariablesIntegration:
         """Test that invalid dynamic variables are reported as unresolved."""
         from src.features.variable_substitution import VariableSubstitution
         
-        text = "Valid: $guid, Invalid: $notAVariable"
+        text = "Valid: {{$guid}}, Invalid: {{$notAVariable}}"
         result, unresolved = VariableSubstitution.substitute(text, {})
         
-        assert '$notAVariable' in unresolved
-        assert '$guid' not in unresolved
+        assert '{{$notAVariable}}' in unresolved
+        assert '{{$guid}}' not in unresolved
+
+
+class TestNestedVariables:
+    """Test nested variable resolution (variables within variable values)."""
+    
+    def test_basic_nested_variables(self):
+        """Test basic nested variable resolution."""
+        from src.features.variable_substitution import VariableSubstitution
+        
+        env_vars = {
+            'protocol': 'https',
+            'domain': 'api.example.com',
+            'baseUrl': '{{protocol}}://{{domain}}'
+        }
+        
+        result, unresolved = VariableSubstitution.substitute('{{baseUrl}}/users', env_vars)
+        assert result == 'https://api.example.com/users'
+        assert unresolved == []
+    
+    def test_multi_level_nesting(self):
+        """Test multiple levels of nested variables."""
+        from src.features.variable_substitution import VariableSubstitution
+        
+        env_vars = {
+            'env': 'prod',
+            'region': 'us-east-1',
+            'subdomain': '{{env}}-{{region}}',
+            'domain': 'example.com',
+            'baseUrl': 'https://{{subdomain}}.{{domain}}'
+        }
+        
+        result, unresolved = VariableSubstitution.substitute('{{baseUrl}}/api/v1', env_vars)
+        assert result == 'https://prod-us-east-1.example.com/api/v1'
+        assert unresolved == []
+    
+    def test_collection_variables_with_nesting(self):
+        """Test nesting across different variable scopes."""
+        from src.features.variable_substitution import VariableSubstitution
+        
+        env_vars = {'env': 'staging'}
+        col_vars = {
+            'domain': 'ecovadis-ilab.com',
+            'urlOM': '{{env}}.{{domain}}/launch/ordermanagement/api'
+        }
+        
+        result, unresolved = VariableSubstitution.substitute(
+            '{{urlOM}}/order/v2/CsrRating',
+            env_vars,
+            col_vars
+        )
+        assert result == 'staging.ecovadis-ilab.com/launch/ordermanagement/api/order/v2/CsrRating'
+        assert unresolved == []
+    
+    def test_prefix_syntax_with_nesting(self):
+        """Test nested variables with explicit prefix syntax."""
+        from src.features.variable_substitution import VariableSubstitution
+        
+        env_vars = {
+            'protocol': 'https',
+            'host': 'api.example.com'
+        }
+        col_vars = {
+            'baseUrl': '{{env.protocol}}://{{env.host}}',
+            'version': 'v2'
+        }
+        
+        result, unresolved = VariableSubstitution.substitute(
+            '{{col.baseUrl}}/{{col.version}}/users',
+            env_vars,
+            col_vars
+        )
+        assert result == 'https://api.example.com/v2/users'
+        assert unresolved == []
+    
+    def test_circular_reference_protection(self):
+        """Test that circular references are detected and handled."""
+        from src.features.variable_substitution import VariableSubstitution
+        
+        env_vars = {
+            'a': '{{b}}',
+            'b': '{{a}}'
+        }
+        
+        result, unresolved = VariableSubstitution.substitute('{{a}}', env_vars)
+        # Should stop after max_depth and leave unresolved variable
+        assert '{{' in result
+    
+    def test_partial_resolution(self):
+        """Test partial resolution when some nested variables are missing."""
+        from src.features.variable_substitution import VariableSubstitution
+        
+        env_vars = {
+            'protocol': 'https',
+            'baseUrl': '{{protocol}}://{{domain}}'  # domain doesn't exist
+        }
+        
+        result, unresolved = VariableSubstitution.substitute('{{baseUrl}}/api', env_vars)
+        assert result == 'https://{{domain}}/api'
+        assert '{{domain}}' in unresolved
+    
+    def test_nested_with_dynamic_variables(self):
+        """Test nested variables - dynamic variables are resolved independently."""
+        from src.features.variable_substitution import VariableSubstitution
+        
+        env_vars = {
+            'protocol': 'https',
+            'domain': 'api.example.com',
+            'baseUrl': '{{protocol}}://{{domain}}'
+        }
+        
+        # Dynamic variables are resolved first, then nested resolution happens
+        result, unresolved = VariableSubstitution.substitute(
+            '{{baseUrl}}/users',
+            env_vars
+        )
+        assert result == 'https://api.example.com/users'
+        assert unresolved == []
+        
+        # Test with actual dynamic variable
+        result2, unresolved2 = VariableSubstitution.substitute(
+            '{{$guid}}',
+            env_vars
+        )
+        # Should have a GUID
+        assert re.match(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            result2
+        )
+        assert unresolved2 == []
 
 
 if __name__ == '__main__':

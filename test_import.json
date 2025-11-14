@@ -1,0 +1,28 @@
+{
+  "export_version": "1.0",
+  "export_date": "2025-11-14T16:26:03.334065",
+  "collection": {
+    "name": "Original Collection",
+    "order_index": 200,
+    "folders": [],
+    "variables": [],
+    "requests": [
+      {
+        "name": "Test Request",
+        "method": "GET",
+        "url": "https://api.example.com/test",
+        "params": {
+          "key": "value"
+        },
+        "headers": null,
+        "body": null,
+        "auth_type": "None",
+        "auth_token": null,
+        "pre_request_script": null,
+        "post_response_script": null,
+        "folder_path": [],
+        "order_index": 300
+      }
+    ]
+  }
+}

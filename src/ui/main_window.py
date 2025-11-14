@@ -7198,9 +7198,9 @@ class MainWindow(QMainWindow):
                         print(f"[DEBUG] Variables from database: {list(db_env.get('variables', {}).keys())}")
         
         # Get collection variables
-        collection_vars = {}
+        collection_vars = []
         if hasattr(self, 'current_collection_id') and self.current_collection_id:
-            collection_vars = self.db.get_collection_variables(self.current_collection_id)
+            collection_vars = self.db.get_collection_variables_with_metadata(self.current_collection_id)
         
         # Get extracted variables
         extracted_vars = self.db.get_all_extracted_variables()
@@ -7213,7 +7213,8 @@ class MainWindow(QMainWindow):
             collection_vars=collection_vars,
             extracted_vars=extracted_vars,
             environment_name=environment_name,
-            environment_id=environment_id
+            environment_id=environment_id,
+            collection_id=self.current_collection_id if hasattr(self, 'current_collection_id') else None
         )
         print(f"[DEBUG] === Refresh Complete ===\n")
     
@@ -7235,6 +7236,16 @@ class MainWindow(QMainWindow):
                             # Refresh environment manager
                             self.env_manager.set_active_environment(self.db.get_environment(env_id))
                             self.toast.success(f"Updated variable: {name}")
+            elif scope == 'collection':
+                # Update collection variable
+                # Find the variable ID by name
+                if hasattr(self, 'current_collection_id') and self.current_collection_id:
+                    collection_vars = self.db.get_collection_variables_with_metadata(self.current_collection_id)
+                    for var in collection_vars:
+                        if var['key'] == name:
+                            self.db.update_collection_variable(var['id'], value=new_value)
+                            self.toast.success(f"Updated collection variable: {name}")
+                            break
             elif scope == 'extracted':
                 # Find and update extracted variable
                 extracted_vars = self.db.get_all_extracted_variables()
@@ -7312,6 +7323,22 @@ class MainWindow(QMainWindow):
                             print(f"[DEBUG] Environment not found")
                     else:
                         print(f"[DEBUG] No active environment")
+            elif scope == 'collection':
+                # Delete collection variable
+                if hasattr(self, 'current_collection_id') and self.current_collection_id:
+                    collection_vars = self.db.get_collection_variables_with_metadata(self.current_collection_id)
+                    print(f"[DEBUG] Collection variables before delete: {[v['key'] for v in collection_vars]}")
+                    found = False
+                    for var in collection_vars:
+                        if var['key'] == name:
+                            self.db.delete_collection_variable(var['id'])
+                            print(f"[DEBUG] Deleted collection variable with ID: {var['id']}")
+                            self.toast.success(f"Deleted collection variable: {name}")
+                            found = True
+                            break
+                    if not found:
+                        print(f"[DEBUG] Variable {name} not found in collection variables")
+                        self.toast.warning(f"Variable {name} not found")
             elif scope == 'extracted':
                 # Find and delete extracted variable
                 extracted_vars = self.db.get_all_extracted_variables()

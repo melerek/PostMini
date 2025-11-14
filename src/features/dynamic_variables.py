@@ -68,6 +68,17 @@ class DynamicVariables:
         'silver', 'gold', 'maroon', 'olive', 'aqua', 'fuchsia'
     ]
     
+    _LOREM_WORDS = [
+        'lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit',
+        'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore', 'et',
+        'dolore', 'magna', 'aliqua', 'enim', 'ad', 'minim', 'veniam', 'quis',
+        'nostrud', 'exercitation', 'ullamco', 'laboris', 'nisi', 'aliquip', 'ex', 'ea',
+        'commodo', 'consequat', 'duis', 'aute', 'irure', 'in', 'reprehenderit', 'voluptate',
+        'velit', 'esse', 'cillum', 'fugiat', 'nulla', 'pariatur', 'excepteur', 'sint',
+        'occaecat', 'cupidatat', 'non', 'proident', 'sunt', 'culpa', 'qui', 'officia',
+        'deserunt', 'mollit', 'anim', 'id', 'est', 'laborum'
+    ]
+    
     def __init__(self):
         """Initialize the dynamic variables resolver."""
         self._generators: Dict[str, Callable[[], str]] = {
@@ -129,6 +140,10 @@ class DynamicVariables:
             
             # Boolean
             '$randomBoolean': self._gen_random_boolean,
+            
+            # Text
+            '$randomLoremWord': self._gen_random_lorem_word,
+            '$randomWord': self._gen_random_lorem_word,
         }
     
     def resolve(self, var_name: str) -> str:
@@ -331,6 +346,10 @@ class DynamicVariables:
     def _gen_random_boolean() -> str:
         """Generate random boolean."""
         return random.choice(['true', 'false'])
+    
+    def _gen_random_lorem_word(self) -> str:
+        """Generate random lorem ipsum word."""
+        return random.choice(self._LOREM_WORDS)
 
 
 # Global instance for easy access

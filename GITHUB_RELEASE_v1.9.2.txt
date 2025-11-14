@@ -1,0 +1,58 @@
+﻿##  New Features
+
+###  Nested Variable Resolution
+- **Recursive variable substitution** - Variables can now reference other variables up to 10 levels deep
+- **Cross-scope nesting** - Environment variables can reference collection variables and vice versa
+- **Dynamic variable support** - Nested variables work seamlessly with dynamic variables like {{$guid}}
+- **Tooltip enhancement** - Hover tooltips now show fully resolved values instead of raw nested references
+- **Circular reference protection** - Automatic detection and prevention of infinite loops
+- **Partial resolution** - Gracefully handles missing nested variables without breaking resolution
+- **Postman-compatible syntax** - Uses official {{$variableName}} format for dynamic variables
+- **Comprehensive test coverage** - 7 new nested variable tests, all passing
+
+**Example Usage:**
+```
+Environment Variables:
+  env = "staging"
+  domain = "ecovadis-ilab.com"
+
+Collection Variables:
+  baseUrl = "{{env}}.{{domain}}"
+  apiPath = "/api/v1"
+  fullUrl = "{{baseUrl}}{{apiPath}}"
+
+Result: "staging.ecovadis-ilab.com/api/v1"
+```
+
+**Supported Nesting Patterns:**
+-  Basic nesting: {{var1}} contains {{var2}}
+-  Multi-level: {{a}}  {{b}}  {{c}} (up to 10 levels)
+-  Cross-scope: {{col.baseUrl}} references {{env.domain}}
+-  Prefix syntax: {{env.var}}, {{col.var}}, {{ext.var}}
+-  Mixed with dynamic: {{url}}/{{$guid}}
+
+##  Bug Fixes
+- Fixed dynamic variable syntax in tests to use correct {{$guid}} format
+- Fixed tooltip display to show fully resolved nested values
+- Fixed unresolved variable tracking across recursive iterations
+
+##  Technical Improvements
+- Enhanced VariableSubstitution.substitute() with iterative resolution
+- Updated tooltip generation in HighlightedLineEdit and HighlightedTextEdit
+- Improved variable resolution performance with max depth limit
+- Better error handling for empty dynamic variable results
+
+##  Installation
+
+**Download:** PostMini_Setup_v1.9.2.exe
+
+**SHA256 Checksums:**
+- Installer: 74C3CEBC6576A9CB32F43C4F4B507D9AD194139F73D6B32E30D7A0DF1653405F
+- Executable: C7FB5C213F4871BA2529A05C9D2BD8BF545C14425E811FC632159A1604FC7945
+
+##  Auto-Update
+Users on v1.0.0+ will be automatically notified of this update.
+
+
+FILE TO UPLOAD: dist\installer\PostMini_Setup_v1.9.2.exe
+

@@ -294,6 +294,264 @@ class TestScriptEngine:
         assert result['environment']['retrieved_global'] == "undefined"
         assert result['environment']['retrieved_any'] == "from_coll"
 
+    def test_variables_replace_in(self):
+        """Test that pm.variables.replaceIn() replaces variable placeholders."""
+        script = """
+        const template = "Hello {{name}}, your token is {{token}}";
+        const resolved = pm.variables.replaceIn(template);
+        pm.environment.set("resolved", resolved);
+        
+        // Test with non-existent variable
+        const partial = pm.variables.replaceIn("{{existing}} and {{nonExistent}}");
+        pm.environment.set("partial", partial);
+        
+        // Test with non-string input
+        const number = pm.variables.replaceIn(123);
+        pm.environment.set("number", String(number));
+        """
+        
+        result = self.engine.execute_pre_request_script(
+            script=script,
+            url="https://api.example.com",
+            method="GET",
+            headers={},
+            body="",
+            params={},
+            environment={"name": "Alice", "existing": "found"},
+            collection_vars={"token": "abc123"}
+        )
+        
+        # Variables should be replaced with values from environment and collection
+        assert result['environment']['resolved'] == "Hello Alice, your token is abc123"
+        # Non-existent variables should remain as placeholders
+        assert result['environment']['partial'] == "found and {{nonExistent}}"
+        # Non-string input should be returned unchanged
+        assert result['environment']['number'] == "123"
+
+    def test_dynamic_variables_in_replace_in(self):
+        """Test that pm.variables.replaceIn() resolves dynamic variables like $guid, $randomInt."""
+        script = """
+        const guid = pm.variables.replaceIn('{{$guid}}');
+        const randomInt = pm.variables.replaceIn('{{$randomInt}}');
+        const randomFirstName = pm.variables.replaceIn('{{$randomFirstName}}');
+        const randomLastName = pm.variables.replaceIn('{{$randomLastName}}');
+        const randomLoremWord = pm.variables.replaceIn('{{$randomLoremWord}}');
+        
+        pm.environment.set("guid", guid);
+        pm.environment.set("randomInt", randomInt);
+        pm.environment.set("randomFirstName", randomFirstName);
+        pm.environment.set("randomLastName", randomLastName);
+        pm.environment.set("randomLoremWord", randomLoremWord);
+        
+        // Combined test
+        const email = pm.variables.replaceIn('test@{{$randomInt}}{{$randomLoremWord}}.com');
+        pm.environment.set("email", email);
+        """
+        
+        result = self.engine.execute_pre_request_script(
+            script=script,
+            url="https://api.example.com",
+            method="GET",
+            headers={},
+            body="",
+            params={},
+            environment={},
+            collection_vars={}
+        )
+        
+        # Verify all dynamic variables were resolved (not empty and not the placeholder)
+        assert result['environment']['guid'] != ""
+        assert '{{' not in result['environment']['guid']
+        assert '-' in result['environment']['guid']  # UUID format
+        
+        assert result['environment']['randomInt'] != ""
+        assert '{{' not in result['environment']['randomInt']
+        assert result['environment']['randomInt'].isdigit()
+        
+        assert result['environment']['randomFirstName'] != ""
+        assert '{{' not in result['environment']['randomFirstName']
+        
+        assert result['environment']['randomLastName'] != ""
+        assert '{{' not in result['environment']['randomLastName']
+        
+        assert result['environment']['randomLoremWord'] != ""
+        assert '{{' not in result['environment']['randomLoremWord']
+        
+        # Verify combined email has dynamic values resolved
+        assert '@' in result['environment']['email']
+        assert '.com' in result['environment']['email']
+        assert '{{' not in result['environment']['email']
+
+    def test_require_moment(self):
+        """Test that require('moment') works for date formatting."""
+        script = """
+        const moment = require('moment');
+        const formatted = moment().format("MM/DD/YYYY_HH:MM:SS");
+        pm.environment.set("timestamp", formatted);
+        
+        // Store in global like the user's script
+        pm.globals.set("today", moment().format("MM/DD/YYYY_HH:MM:SS"));
+        """
+        
+        result = self.engine.execute_pre_request_script(
+            script=script,
+            url="https://api.example.com",
+            method="GET",
+            headers={},
+            body="",
+            params={},
+            environment={},
+            collection_vars={}
+        )
+        
+        # Verify timestamp was formatted correctly
+        assert 'timestamp' in result['environment']
+        timestamp = result['environment']['timestamp']
+        assert '/' in timestamp
+        assert '_' in timestamp
+        # Check pattern MM/DD/YYYY_HH:MM:SS
+        parts = timestamp.split('_')
+        assert len(parts) == 2
+        date_parts = parts[0].split('/')
+        assert len(date_parts) == 3
+        
+        # Verify global variable was set
+        assert 'today' in result['globals']
+
+    def test_user_full_script(self):
+        """Test the complete user script with all features combined."""
+        script = """
+        pm.request.headers.add({key: 'X-Ctx-User-Id', value: 'test-user@services' });
+        pm.request.headers.add({key: 'X-Ctx-ScopeType', value: 'TECHNICAL' });
+        
+        const createOrderId = pm.variables.replaceIn('{{$guid}}');
+        pm.collectionVariables.set('createOrderId', createOrderId);
+        
+        const moment = require('moment');
+        pm.globals.set("today", moment().format("MM/DD/YYYY_HH:MM:SS"));
+        
+        const email = pm.variables.replaceIn('test@{{$randomInt}}{{$randomLoremWord}}.com');
+        pm.collectionVariables.set('email', email);
+        
+        const firstName = pm.variables.replaceIn('{{$randomFirstName}}_{{today}}');
+        pm.collectionVariables.set('firstName', firstName);
+        """
+        
+        result = self.engine.execute_pre_request_script(
+            script=script,
+            url="https://api.example.com",
+            method="POST",
+            headers={},
+            body="",
+            params={},
+            environment={},
+            collection_vars={}
+        )
+        
+        # Verify headers were added
+        assert 'X-Ctx-User-Id' in result['headers']
+        assert result['headers']['X-Ctx-User-Id'] == 'test-user@services'
+        assert 'X-Ctx-ScopeType' in result['headers']
+        
+        # Verify collection variables
+        assert 'createOrderId' in result['collection_variables']
+        assert 'email' in result['collection_variables']
+        assert 'firstName' in result['collection_variables']
+        
+        # Verify global variable
+        assert 'today' in result['globals']
+        
+        # Verify dynamic variables were resolved
+        assert '{{' not in result['collection_variables']['createOrderId']
+        assert '{{' not in result['collection_variables']['email']
+        assert '{{' not in result['collection_variables']['firstName']
+
+    def test_local_variables_priority(self):
+        """Test that pm.variables.set() creates local variables with highest priority."""
+        script = """
+        // Set up variables in different scopes with same name
+        pm.environment.set("testVar", "from_environment");
+        pm.collectionVariables.set("testVar", "from_collection");
+        pm.globals.set("testVar", "from_globals");
+        pm.variables.set("testVar", "from_local");
+        
+        // Get should return local value (highest priority)
+        const value = pm.variables.get("testVar");
+        pm.environment.set("retrieved", value);
+        
+        // Test replaceIn with local variable
+        const replaced = pm.variables.replaceIn("Value is: {{testVar}}");
+        pm.environment.set("replaced", replaced);
+        
+        // Set another local variable
+        pm.variables.set("localOnly", "only_in_local");
+        const localValue = pm.variables.get("localOnly");
+        pm.environment.set("localValue", localValue);
+        """
+        
+        result = self.engine.execute_pre_request_script(
+            script=script,
+            url="https://api.example.com",
+            method="GET",
+            headers={},
+            body="",
+            params={},
+            environment={},
+            collection_vars={}
+        )
+        
+        # Local variable should have highest priority
+        assert result['environment']['retrieved'] == "from_local"
+        assert result['environment']['replaced'] == "Value is: from_local"
+        
+        # Local-only variable should be accessible
+        assert result['environment']['localValue'] == "only_in_local"
+        
+        # But local variables shouldn't persist in environment/collection/globals
+        # (they're temporary, script-scoped only)
+        assert result['environment']['testVar'] == "from_environment"
+        assert result['collection_variables']['testVar'] == "from_collection"
+        assert result['globals']['testVar'] == "from_globals"
+
+    def test_variable_scope_isolation(self):
+        """Test that different variable scopes are properly isolated."""
+        script = """
+        // Each scope should maintain its own values
+        pm.environment.set("scopeTest", "env_value");
+        pm.collectionVariables.set("scopeTest", "coll_value");
+        pm.globals.set("scopeTest", "global_value");
+        
+        // Retrieve from specific scopes
+        const envVal = pm.environment.get("scopeTest");
+        const collVal = pm.collectionVariables.get("scopeTest");
+        const globalVal = pm.globals.get("scopeTest");
+        
+        pm.environment.set("env_check", envVal);
+        pm.environment.set("coll_check", collVal);
+        pm.environment.set("global_check", globalVal);
+        """
+        
+        result = self.engine.execute_pre_request_script(
+            script=script,
+            url="https://api.example.com",
+            method="GET",
+            headers={},
+            body="",
+            params={},
+            environment={},
+            collection_vars={}
+        )
+        
+        # Each scope should have its own value
+        assert result['environment']['scopeTest'] == "env_value"
+        assert result['collection_variables']['scopeTest'] == "coll_value"
+        assert result['globals']['scopeTest'] == "global_value"
+        
+        # Verification variables
+        assert result['environment']['env_check'] == "env_value"
+        assert result['environment']['coll_check'] == "coll_value"
+        assert result['environment']['global_check'] == "global_value"
+
 
 class TestScriptSnippets:
     """Test script snippets library."""

@@ -176,22 +176,25 @@ class VariableInspectorPanel(QWidget):
     
     def load_variables(self, 
                        environment_vars: Dict[str, str] = None,
-                       collection_vars: Dict[str, str] = None,
+                       collection_vars: List[Dict] = None,
                        extracted_vars: List[Dict] = None,
                        environment_name: str = None,
-                       environment_id: int = None):
+                       environment_id: int = None,
+                       collection_id: int = None):
         """
         Load and display variables.
         
         Args:
             environment_vars: Dictionary of environment variables
-            collection_vars: Dictionary of collection variables
+            collection_vars: List of collection variable dictionaries with metadata
             extracted_vars: List of extracted variable dictionaries
             environment_name: Name of active environment
             environment_id: ID of active environment
+            collection_id: ID of active collection
         """
         self.tree.clear()
         self.current_environment_id = environment_id
+        self.current_collection_id = collection_id
         total_count = 0
         
         # Store current environment for later use in add variable dialogs
@@ -270,19 +273,21 @@ class VariableInspectorPanel(QWidget):
             coll_parent.setExpanded(True)
             coll_parent.setFirstColumnSpanned(True)
             
-            for var_name, var_value in sorted(collection_vars.items()):
+            for var in sorted(collection_vars, key=lambda x: x['key']):
                 item = QTreeWidgetItem(coll_parent)
-                display_value = self._truncate_value(var_value)
+                display_value = self._truncate_value(var['value'])
                 
-                item.setText(0, var_name)
+                item.setText(0, var['key'])
                 item.setText(1, display_value)
-                item.setToolTip(1, str(var_value))
+                item.setToolTip(1, str(var['value']))
                 
                 item.setData(0, Qt.ItemDataRole.UserRole, {
-                    'name': var_name,
-                    'value': var_value,
+                    'name': var['key'],
+                    'value': var['value'],
                     'scope': 'collection',
-                    'editable': False  # Collection vars can't be edited here
+                    'collection_id': collection_id,
+                    'variable_id': var['id'],
+                    'editable': True  # Collection vars can be edited
                 })
                 
                 item.setForeground(0, QColor("#FF9800"))  # Orange
