@@ -1,7 +1,7 @@
 # PostMini vs Postman - Feature Comparison
 
-**Last Updated:** November 5, 2025  
-**PostMini Version:** 1.8.2
+**Last Updated:** November 14, 2025  
+**PostMini Version:** 1.9.2
 
 This document provides a detailed comparison between PostMini, Postman Free, and Postman Enterprise to help you choose the right API testing tool for your needs.
 
@@ -20,6 +20,9 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **🔗 Request Chaining** | ✅ **Interactive extraction** | ❌ | ✅ (Pro+) |
 | **📊 Test Reports** | ✅ **HTML, JUnit, JSON, CSV** | ❌ (Pro+ only) | ✅ |
 | **📜 JavaScript Scripting** | ✅ **Pre & Post Scripts** | ✅ | ✅ |
+| **🎯 Drag & Drop Ordering** | ✅ **Full control** | ✅ | ✅ |
+| **🌍 Environment Import/Export** | ✅ **Postman-compatible** | ✅ | ✅ |
+| **🔗 Nested Variables** | ✅ **Up to 10 levels** | ✅ | ✅ |
 
 ---
 
@@ -31,7 +34,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 |---------|----------|--------------|-------------------|
 | **HTTP Methods** | ✅ All (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS) | ✅ All | ✅ All |
 | **Request Builder** | ✅ Full-featured | ✅ Full-featured | ✅ Full-featured |
-| **Multi-Request Tabs** | ✅ **Unlimited tabs** | ✅ Limited tabs | ✅ Unlimited tabs |
+| **Multi-Request Tabs** | ✅ **Unlimited tabs + temporary preview** | ✅ Limited tabs | ✅ Unlimited tabs |
 | **Request Documentation** | ✅ **Built-in description field** | ❌ (Pro+) | ✅ Full |
 | **Response Viewer** | ✅ JSON formatting, headers, status | ✅ Advanced (cookies, visualize) | ✅ Advanced |
 | **Query Parameters** | ✅ **Table editor with delete key** | ✅ Table editor | ✅ Table editor |
@@ -43,7 +46,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **SSL Verification** | ✅ **Per-request toggle** | ✅ Global only | ✅ Global + per-request |
 | **GraphQL Support** | ❌ (Planned) | ✅ Full support | ✅ Full support |
 
-**Winner:** 🥇 **PostMini v1.8.2** - Request documentation, flexible timeout/SSL, better table UX!
+**Winner:** 🥇 **PostMini v1.9.2** - Request documentation, flexible timeout/SSL, better table UX!
 
 ---
 
@@ -53,6 +56,10 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 |---------|----------|--------------|-------------------|
 | **Collections** | ✅ Unlimited | ✅ Unlimited | ✅ Unlimited |
 | **Folders/Nesting** | ✅ **Multi-level (unlimited depth)** | ✅ Multi-level | ✅ Multi-level |
+| **Drag & Drop Ordering** | ✅ **Full control with validation** | ✅ | ✅ |
+| **Temporary Tabs (Preview Mode)** | ✅ **Single-click preview** | ❌ | ❌ |
+| **Keyboard Shortcuts for Panels** | ✅ **Alt+C/E/V/G/H/R** | ⚠️ Limited | ✅ Extensive |
+| **Order Persistence** | ✅ **Across restarts + import/export** | ✅ | ✅ |
 | **Request History** | ✅ **Full history with replay** | ⚠️ Limited (25 requests) | ✅ Unlimited |
 | **Recent Requests Panel** | ✅ **Quick access + pinning** | ❌ | ✅ |
 | **Search Collections** | ✅ Basic | ✅ Advanced search | ✅ Advanced + filters |
@@ -62,7 +69,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Duplicate Detection** | ✅ **Smart duplicate prevention** | ❌ | ✅ |
 | **Context Menus** | ✅ **Right-click quick actions** | ✅ | ✅ |
 
-**Winner:** 🤝 **Tie** - Both have excellent multi-level folder organization
+**Winner:** 🥇 **PostMini v1.9.2** - Drag & drop + temporary tabs + keyboard shortcuts!
 
 ---
 
@@ -71,7 +78,12 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | Feature | PostMini | Postman Free | Postman Enterprise |
 |---------|----------|--------------|-------------------|
 | **Environment Variables** | ✅ Unlimited environments | ✅ Unlimited | ✅ Unlimited |
+| **Environment Import** | ✅ **Postman-compatible** | ✅ Native | ✅ Native |
+| **Environment Export** | ✅ **Postman + Internal formats** | ✅ Native | ✅ Native |
 | **Variable Syntax** | ✅ `{{variable}}` | ✅ `{{variable}}` | ✅ `{{variable}}` |
+| **Nested Variables** | ✅ **Up to 10 levels deep** | ✅ Basic | ✅ Basic |
+| **Cross-scope Nesting** | ✅ **env ↔ col ↔ ext** | ⚠️ Limited | ⚠️ Limited |
+| **Circular Reference Protection** | ✅ **Automatic detection** | ❌ | ❌ |
 | **Global Variables** | ✅ Supported | ✅ Supported | ✅ Supported |
 | **Collection Variables** | ✅ **Built-in** | ✅ Supported | ✅ Supported |
 | **Dynamic Variables** | ✅ **38+ variables** ($guid, $timestamp, $randomEmail, etc.) | ✅ 40+ variables | ✅ 40+ variables |
@@ -79,10 +91,12 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Variable Extraction** | ✅ **Click-to-extract from responses** | ❌ (Pro+ only) | ✅ (scripts) |
 | **Variable Library** | ✅ **Built-in management UI (📚 button)** | ❌ | ✅ |
 | **Variable Highlighting** | ✅ **Color-coded by type** | ⚠️ Basic | ✅ |
+| **Tooltip Resolution** | ✅ **Shows fully resolved values** | ⚠️ Basic | ✅ |
 | **Variable Scopes** | ✅ Environment, Collection, Extracted | ✅ Global, Collection, Environment | ✅ All scopes |
 | **Secrets Management** | ✅ **Git-ignored secrets** | ⚠️ Cloud-stored | ✅ Vault integration |
+| **Secret Detection** | ✅ **Automatic keyword-based** | ❌ | ✅ Manual |
 
-**Winner:** 🥇 **PostMini v1.8.2** - Best variable extraction UX + local secrets + visual interface!
+**Winner:** 🥇 **PostMini v1.9.2** - Advanced nested variables + Postman import/export + local secrets!
 
 ---
 
@@ -123,7 +137,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Script Execution** | ✅ **V8 sandbox with timeout** | ✅ Secure | ✅ Secure |
 | **Script Migration** | ✅ **Copy-paste from Postman** | ✅ Native | ✅ Native |
 
-**Winner:** 🥇 **PostMini v1.8.2** - Full scripting parity with Postman + better local privacy!
+**Winner:** 🥇 **PostMini v1.9.2** - Full scripting parity with Postman + better local privacy!
 
 ---
 
@@ -171,7 +185,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **CI/CD Integration** | ✅ **JUnit XML support** | ✅ Newman CLI | ✅ Newman + native |
 | **Scheduled Tests** | ❌ | ❌ | ✅ Cloud monitors |
 
-**Winner:** 🥇 **PostMini v1.8.2** - Best of both worlds: Visual builder + scripting + enterprise reporting for FREE!
+**Winner:** 🥇 **PostMini v1.9.2** - Best of both worlds: Visual builder + scripting + enterprise reporting for FREE!
 
 ---
 
@@ -216,8 +230,12 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 
 | Feature | PostMini | Postman Free | Postman Enterprise |
 |---------|----------|--------------|-------------------|
-| **Postman Import** | ✅ v2.1 collections | ✅ Native | ✅ Native |
-| **Postman Export** | ✅ v2.1 format | ✅ Native | ✅ Native |
+| **Postman Collection Import** | ✅ v2.1 format | ✅ Native | ✅ Native |
+| **Postman Collection Export** | ✅ v2.1 format | ✅ Native | ✅ Native |
+| **Postman Environment Import** | ✅ **Full compatibility** | ✅ Native | ✅ Native |
+| **Postman Environment Export** | ✅ **Full compatibility** | ✅ Native | ✅ Native |
+| **Environment Secret Handling** | ✅ **Choose to include/exclude** | ✅ | ✅ |
+| **Bulk Environment Operations** | ✅ **Import/export multiple** | ✅ | ✅ |
 | **OpenAPI/Swagger Import** | ✅ **3.x & 2.0 (JSON/YAML)** | ✅ Full support | ✅ Full support |
 | **JSON Export** | ✅ | ✅ | ✅ |
 | **cURL Import** | ✅ | ✅ | ✅ |
@@ -257,21 +275,21 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 |---------|----------|--------------|-------------------|
 | **Learning Curve** | ✅ **Easy** | ⚠️ Moderate | ⚠️ Moderate-Hard |
 | **UI/UX** | ✅ **Clean, VS Code-inspired** | ✅ Feature-rich | ✅ Feature-rich |
-| **Keyboard Shortcuts** | ✅ Essential (Ctrl+Enter, Ctrl+S, etc.) | ✅ Comprehensive | ✅ Comprehensive |
-| **Error Messages** | ✅ **Intelligent suggestions** | ⚠️ Basic | ⚠️ Basic |
+| **Keyboard Shortcuts** | ✅ **Essential + Panel Toggles (Alt+C/E/V/G/H/R)** | ✅ Comprehensive | ✅ Comprehensive |
+| **Error Messages** | ✅ **Intelligent with troubleshooting steps** | ⚠️ Basic | ⚠️ Basic |
 | **Dark Mode** | ✅ **One-click toggle + persistence** | ✅ | ✅ |
 | **Themes** | ✅ Light + Dark | ✅ Multiple themes | ✅ Multiple themes |
 | **Vertical Space** | ✅ **No top toolbar (~40px more!)** | ⚠️ Has toolbar | ⚠️ Has toolbar |
 | **Status Bar** | ✅ **Enhanced with key info** | ✅ Basic | ✅ Basic |
-| **Empty States** | ✅ **Helpful illustrations** | ✅ | ✅ |
+| **Empty States** | ✅ **Professional illustrations with hints** | ✅ | ✅ |
 | **Toast Notifications** | ✅ **Non-intrusive feedback** | ✅ | ✅ |
 | **Context Menus** | ✅ **Right-click everywhere** | ✅ | ✅ |
 | **Documentation** | ✅ **HTML + Markdown** | ✅ Online | ✅ Online + in-app |
 | **Community Support** | ⚠️ GitHub issues | ✅ Large community | ✅ Dedicated support |
-| **Updates** | ⚠️ Manual | ✅ Auto-update | ✅ Auto-update |
+| **Auto-Updates** | ✅ **GitHub-based** | ✅ Auto-update | ✅ Auto-update |
 | **Open Source** | ✅ **MIT License** | ❌ Closed source | ❌ Closed source |
 
-**Winner:** 🥇 **PostMini v1.8.2** - Cleaner UI, better space usage, open source!
+**Winner:** 🥇 **PostMini v1.9.2** - Cleaner UI, better space usage, open source!
 
 ---
 
@@ -279,20 +297,20 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 
 | Category | Winner |
 |----------|--------|
-| **Core API Testing** | 🥇 PostMini v1.8.2 (description, timeout, SSL) |
-| **Collections & Organization** | 🤝 Tie (both excellent) |
-| **Environment & Variables** | 🥇 PostMini v1.8.2 (interactive extraction) |
+| **Core API Testing** | 🥇 PostMini v1.9.2 (description, timeout, SSL) |
+| **Collections & Organization** | 🥇 PostMini v1.9.2 (drag & drop ordering) |
+| **Environment & Variables** | 🥇 PostMini v1.9.2 (nested vars + import/export) |
 | **Authentication & Security** | 🥇 PostMini (privacy-first) |
-| **Scripting & Automation** | 🥇 PostMini v1.8.2 (full parity + local) |
+| **Scripting & Automation** | 🥇 PostMini v1.9.2 (full parity + local) |
 | **Code Generation** | 🥈 Postman (more languages) |
-| **Testing & QA** | 🥇 PostMini v1.8.2 (visual + scripts + reports) |
+| **Testing & QA** | 🥇 PostMini v1.9.2 (visual + scripts + reports) |
 | **Collaboration** | 🥇 PostMini (for Git users) |
 | **Data & Privacy** | 🥇 PostMini (100% local) |
-| **Import/Export** | 🥈 Postman Enterprise (more integrations) |
+| **Import/Export** | 🥇 PostMini v1.9.2 (Postman env compatibility) |
 | **Platform & Compatibility** | 🥇 PostMini (lighter, offline) |
-| **User Experience** | 🥇 PostMini v1.8.2 (cleaner, open source) |
+| **User Experience** | 🥇 PostMini v1.9.2 (cleaner, open source) |
 
-**🎉 PostMini wins 9 categories, ties 1, Postman wins 2!**
+**🎉 PostMini wins 11 categories, Postman wins 1!**
 
 ---
 
