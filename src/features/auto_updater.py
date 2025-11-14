@@ -23,7 +23,7 @@ class UpdateChecker(QThread):
     
     # Configuration - UPDATE THESE FOR YOUR REPOSITORY
     VERSION_URL = "https://raw.githubusercontent.com/melerek/PostMini/main/version.json"
-    CURRENT_VERSION = "1.9.1"  # Should match installer version
+    CURRENT_VERSION = "1.9.2"  # Should match installer version
     
     def __init__(self, silent=False):
         super().__init__()

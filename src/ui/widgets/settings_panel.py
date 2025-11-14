@@ -17,7 +17,7 @@ class SettingsPanel(QWidget):
     setting_changed = pyqtSignal(str, str)  # key, value
     check_updates_requested = pyqtSignal()  # Emitted when user clicks "Check for Updates"
     
-    APP_VERSION = "1.9.1"  # Current application version
+    APP_VERSION = "1.9.2"  # Current application version
     
     def __init__(self, db):
         super().__init__()

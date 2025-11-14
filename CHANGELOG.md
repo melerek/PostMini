@@ -11,6 +11,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.2] - 2025-11-14
+
+### ✨ New Features
+
+#### 🔗 Nested Variable Resolution
+- **Recursive variable substitution** - Variables can now reference other variables up to 10 levels deep
+- **Cross-scope nesting** - Environment variables can reference collection variables and vice versa
+- **Dynamic variable support** - Nested variables work seamlessly with dynamic variables like {{$guid}}
+- **Tooltip enhancement** - Hover tooltips now show fully resolved values instead of raw nested references
+- **Circular reference protection** - Automatic detection and prevention of infinite loops
+- **Partial resolution** - Gracefully handles missing nested variables without breaking resolution
+- **Postman-compatible syntax** - Uses official {{$variableName}} format for dynamic variables
+- **Comprehensive test coverage** - 7 new nested variable tests, all passing
+
+**Example Usage:**
+```
+Environment Variables:
+  env = "staging"
+  domain = "ecovadis-ilab.com"
+
+Collection Variables:
+  baseUrl = "{{env}}.{{domain}}"
+  apiPath = "/api/v1"
+  fullUrl = "{{baseUrl}}{{apiPath}}"
+
+Result: "staging.ecovadis-ilab.com/api/v1"
+```
+
+**Supported Nesting Patterns:**
+- ✅ Basic nesting: `{{var1}}` contains `{{var2}}`
+- ✅ Multi-level: `{{a}}` → `{{b}}` → `{{c}}` (up to 10 levels)
+- ✅ Cross-scope: `{{col.baseUrl}}` references `{{env.domain}}`
+- ✅ Prefix syntax: `{{env.var}}`, `{{col.var}}`, `{{ext.var}}`
+- ✅ Mixed with dynamic: `{{url}}/{{$guid}}`
+
+**Technical Details:**
+- Enhanced `VariableSubstitution.substitute()` with iterative resolution
+- Updated `HighlightedLineEdit` and `HighlightedTextEdit` tooltip generation
+- Regex pattern supports both dynamic (`{{$var}}`) and scoped (`{{env.var}}`) syntax
+- Iteration-based tracking of unresolved variables per resolution pass
+
+**Documentation:**
+- All 51 dynamic variable tests passing
+- 7 new nested variable tests in `tests/test_dynamic_variables.py`
+- Updated tooltip implementation in `src/ui/widgets/variable_highlight_delegate.py`
+
+### 🐛 Bug Fixes
+- Fixed dynamic variable syntax in tests to use correct `{{$guid}}` format (not `{{$.guid}}`)
+- Fixed tooltip display to show fully resolved nested values
+- Fixed unresolved variable tracking across recursive iterations
+
+### 🔧 Technical Improvements
+- Improved variable resolution performance with max depth limit
+- Enhanced tooltip generation with nested variable support
+- Better error handling for empty dynamic variable results
+
+---
+
 ## [1.9.1] - 2025-11-13
 
 ### ✨ New Features

@@ -1,23 +1,23 @@
 {
-  "latest_version": "1.9.1",
-  "release_date": "2025-11-13",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.1/PostMini_Setup_v1.9.1.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.1",
-  "checksum": "sha256:BE7406E83416037072132DE272D2B5936BDEA7EC92A5583A5D7D3A06A3CEF93A",
-  "exe_sha256": "4A50A158B0F8698673D952E0A5176EA9A301C7D5B35D6B88CEFA8773EEFD0635",
-  "installer_sha256": "BE7406E83416037072132DE272D2B5936BDEA7EC92A5583A5D7D3A06A3CEF93A",
+  "latest_version": "1.9.2",
+  "release_date": "2025-11-14",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.2/PostMini_Setup_v1.9.2.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.2",
+  "checksum": "sha256:74C3CEBC6576A9CB32F43C4F4B507D9AD194139F73D6B32E30D7A0DF1653405F",
+  "exe_sha256": "C7FB5C213F4871BA2529A05C9D2BD8BF545C14425E811FC632159A1604FC7945",
+  "installer_sha256": "74C3CEBC6576A9CB32F43C4F4B507D9AD194139F73D6B32E30D7A0DF1653405F",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "NEW: Drag & Drop Ordering - Organize collections, folders, and requests with drag & drop",
-    "NEW: Postman-compatible validation rules for organizing items",
-    "NEW: Order persists across restarts and import/export operations",
-    "NEW: Visual drop indicators show where items will be placed",
-    "NEW: Automatic count updates and smart tree refresh after moves",
-    "NEW: Circular reference prevention for folder operations",
-    "NEW: Comprehensive test coverage with 17 passing tests",
-    "FIXED: Database queries now use order_index for consistent sorting",
-    "IMPROVED: Better organization for large API projects with complex structures"
+    "NEW: Nested Variable Resolution - Variables can reference other variables up to 10 levels deep",
+    "NEW: Cross-scope nesting - Environment and collection variables can reference each other",
+    "NEW: Enhanced tooltips show fully resolved nested variable values",
+    "NEW: Dynamic variable support in nested contexts ({{$guid}}, {{$timestamp}}, etc.)",
+    "NEW: Circular reference protection prevents infinite loops",
+    "NEW: Partial resolution gracefully handles missing nested variables",
+    "NEW: Postman-compatible {{$variableName}} syntax for dynamic variables",
+    "FIXED: Tooltip display now shows fully resolved values instead of raw nested references",
+    "IMPROVED: Enhanced variable resolution with comprehensive test coverage (7 new tests)"
   ]
 }
 

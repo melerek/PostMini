@@ -27,7 +27,8 @@ class VariableSubstitution:
     """
     
     # Regex pattern to match {{prefix.variableName}} or {{variableName}} or {{$variableName}}
-    VARIABLE_PATTERN = re.compile(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
+    # Pattern handles: {{env.var}}, {{col.var}}, {{ext.var}}, {{$var}}, {{var}}
+    VARIABLE_PATTERN = re.compile(r'\{\{(?:(\$)([a-zA-Z_][a-zA-Z0-9_]*)|(?:(env|col|ext)\.)?([a-zA-Z_][a-zA-Z0-9_]*))\}\}')
     
     # Legacy pattern for backward compatibility (kept for reference but handled by main pattern)
     LEGACY_VARIABLE_PATTERN = re.compile(r'\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
@@ -35,9 +36,11 @@ class VariableSubstitution:
     @staticmethod
     def substitute(text: str, env_variables: Dict[str, str] = None, 
                    collection_variables: Dict[str, str] = None,
-                   extracted_variables: Dict[str, str] = None) -> Tuple[str, List[str]]:
+                   extracted_variables: Dict[str, str] = None,
+                   max_depth: int = 10) -> Tuple[str, List[str]]:
         """
         Replace all variable occurrences in text with their values using new prefix syntax.
+        Supports nested variables (variables within variable values) with recursive resolution.
         
         Supported syntax:
         - {{env.variable}} - Environment variables (explicit)
@@ -46,11 +49,18 @@ class VariableSubstitution:
         - {{$variable}} - Dynamic variables (explicit)
         - {{variable}} - Any scope (checks all in priority: extracted > collection > environment)
         
+        Nested variables example:
+        - env.protocol = "https"
+        - env.domain = "api.example.com"
+        - env.baseUrl = "{{protocol}}://{{domain}}"
+        - Result: "https://api.example.com"
+        
         Args:
             text: The text containing variables to substitute
             env_variables: Dictionary of environment variable names to values
             collection_variables: Dictionary of collection variable names to values
             extracted_variables: Dictionary of extracted variable names to values
+            max_depth: Maximum recursion depth to prevent infinite loops (default: 10)
             
         Returns:
             Tuple of (substituted_text, list_of_unresolved_variables)
@@ -73,57 +83,79 @@ class VariableSubstitution:
             extracted_variables = {}
         
         unresolved = []
+        result = text
         
-        # Substitute all variables with new syntax
-        def replace_variable(match):
-            prefix = match.group(1)  # env, col, ext, $ or None
-            var_name = match.group(2)  # The variable name
+        # Perform recursive substitution to handle nested variables
+        # Keep substituting until no more changes occur or max_depth is reached
+        for depth in range(max_depth):
+            previous_result = result
+            iteration_unresolved = []  # Track unresolved for this iteration
             
-            # Handle dynamic variables with {{$variable}} syntax
-            if prefix == '$':
-                resolved = resolve_dynamic_variable(f'${var_name}')
-                # If not resolved (same as input), it's unresolved
-                if resolved == f'${var_name}':
-                    unresolved.append(f'{{{{${var_name}}}}}')
-                return resolved
-            
-            # Handle explicit environment variables {{env.variable}}
-            elif prefix == 'env':
-                if var_name in env_variables:
-                    return str(env_variables[var_name])
+            # Substitute all variables with new syntax
+            def replace_variable(match):
+                # Group 1: $ for dynamic variables
+                # Group 2: variable name after $
+                # Group 3: env/col/ext prefix
+                # Group 4: variable name after prefix or standalone
+                dollar_sign = match.group(1)
+                dollar_var_name = match.group(2)
+                prefix = match.group(3)
+                var_name = match.group(4)
+                
+                # Handle dynamic variables with {{$variable}} syntax
+                if dollar_sign == '$':
+                    resolved = resolve_dynamic_variable(f'${dollar_var_name}')
+                    # If not resolved (returns empty string or same as input), it's unresolved
+                    if not resolved or resolved == f'${dollar_var_name}':
+                        iteration_unresolved.append(f'{{{{${dollar_var_name}}}}}')
+                        return match.group(0)  # Keep original if not resolved
+                    return resolved
+                
+                # Handle explicit environment variables {{env.variable}}
+                elif prefix == 'env':
+                    if var_name in env_variables:
+                        return str(env_variables[var_name])
+                    else:
+                        iteration_unresolved.append(f'{{{{env.{var_name}}}}}')
+                        return match.group(0)  # Keep original if not found
+                
+                # Handle explicit collection variables {{col.variable}}
+                elif prefix == 'col':
+                    if var_name in collection_variables:
+                        return str(collection_variables[var_name])
+                    else:
+                        iteration_unresolved.append(f'{{{{col.{var_name}}}}}')
+                        return match.group(0)  # Keep original if not found
+                
+                # Handle explicit extracted variables {{ext.variable}}
+                elif prefix == 'ext':
+                    if var_name in extracted_variables:
+                        return str(extracted_variables[var_name])
+                    else:
+                        iteration_unresolved.append(f'{{{{ext.{var_name}}}}}')
+                        return match.group(0)  # Keep original if not found
+                
+                # No prefix - backward compatibility: check all scopes (priority: extracted > collection > environment)
                 else:
-                    unresolved.append(f'{{{{env.{var_name}}}}}')
-                    return match.group(0)  # Keep original if not found
+                    if var_name in extracted_variables:
+                        return str(extracted_variables[var_name])
+                    elif var_name in collection_variables:
+                        return str(collection_variables[var_name])
+                    elif var_name in env_variables:
+                        return str(env_variables[var_name])
+                    else:
+                        iteration_unresolved.append(f'{{{{{var_name}}}}}')
+                        return match.group(0)  # Keep original {{var}} if not found
             
-            # Handle explicit collection variables {{col.variable}}
-            elif prefix == 'col':
-                if var_name in collection_variables:
-                    return str(collection_variables[var_name])
-                else:
-                    unresolved.append(f'{{{{col.{var_name}}}}}')
-                    return match.group(0)  # Keep original if not found
+            result = VariableSubstitution.VARIABLE_PATTERN.sub(replace_variable, result)
             
-            # Handle explicit extracted variables {{ext.variable}}
-            elif prefix == 'ext':
-                if var_name in extracted_variables:
-                    return str(extracted_variables[var_name])
-                else:
-                    unresolved.append(f'{{{{ext.{var_name}}}}}')
-                    return match.group(0)  # Keep original if not found
+            # Update unresolved list with this iteration's unresolved variables
+            unresolved = iteration_unresolved
             
-            # No prefix - backward compatibility: check all scopes (priority: extracted > collection > environment)
-            else:
-                if var_name in extracted_variables:
-                    return str(extracted_variables[var_name])
-                elif var_name in collection_variables:
-                    return str(collection_variables[var_name])
-                elif var_name in env_variables:
-                    return str(env_variables[var_name])
-                else:
-                    unresolved.append(f'{{{{{var_name}}}}}')
-                    return match.group(0)  # Keep original {{var}} if not found
+            # If no changes were made, we're done
+            if result == previous_result:
+                break
         
-        result = VariableSubstitution.VARIABLE_PATTERN.sub(replace_variable, text)
         return result, unresolved
     
     @staticmethod

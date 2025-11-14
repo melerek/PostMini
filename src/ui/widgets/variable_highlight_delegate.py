@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QStyledItemDelegate, QLineEdit, QStyle, QToolTip, QT
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QPainter, QFont, QPalette, QTextCursor
 from PyQt6.QtCore import Qt, QRegularExpression, pyqtSignal, QRect, QPoint
 import re
+from src.features.variable_substitution import VariableSubstitution
 
 
 class HighlightedLineEdit(QLineEdit):
@@ -260,6 +261,29 @@ class HighlightedLineEdit(QLineEdit):
                 value = self._get_variable_value_by_ref(var_ref)
                 
                 if value and value != "❌ Undefined":
+                    # Apply nested variable resolution to the value
+                    if self.environment_manager:
+                        env_vars = self.environment_manager.get_active_variables()
+                        col_vars = {}
+                        ext_vars = {}
+                        
+                        # Get collection vars if available
+                        if hasattr(self.parent(), 'db') and hasattr(self.parent(), 'current_collection_id'):
+                            col_vars = self.parent().db.get_collection_variables(self.parent().current_collection_id)
+                        
+                        # Get extracted vars if available
+                        if hasattr(self.parent(), 'extracted_variables'):
+                            ext_vars = self.parent().extracted_variables
+                        
+                        # Recursively resolve nested variables in the value
+                        resolved_value, _ = VariableSubstitution.substitute(
+                            value, 
+                            env_vars, 
+                            col_vars, 
+                            ext_vars
+                        )
+                        value = resolved_value
+                    
                     # Show tooltip with scope information
                     tooltip_text = f"<b>{var_ref}</b><br/><span style='color: #4CAF50;'>{value}</span>"
                     QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
@@ -489,6 +513,45 @@ class HighlightedTextEdit(QTextEdit):
                 value = self._get_variable_value(var_ref)
                 
                 if value and value != "❌ Undefined":
+                    # Apply nested variable resolution to the value (unless it's a dynamic variable)
+                    if self.environment_manager and not value.startswith("🎲 Dynamic"):
+                        env_vars = self.environment_manager.get_active_variables()
+                        col_vars = {}
+                        ext_vars = {}
+                        
+                        # Get collection vars if available
+                        try:
+                            from PyQt6.QtWidgets import QWidget
+                            parent = self.parent()
+                            while parent:
+                                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                                    if hasattr(parent, 'db'):
+                                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                                        break
+                                parent = parent.parent() if isinstance(parent, QWidget) else None
+                        except:
+                            pass
+                        
+                        # Get extracted vars if available
+                        try:
+                            parent = self.parent()
+                            while parent:
+                                if hasattr(parent, 'extracted_variables'):
+                                    ext_vars = parent.extracted_variables
+                                    break
+                                parent = parent.parent() if isinstance(parent, QWidget) else None
+                        except:
+                            pass
+                        
+                        # Recursively resolve nested variables in the value
+                        resolved_value, _ = VariableSubstitution.substitute(
+                            value, 
+                            env_vars, 
+                            col_vars, 
+                            ext_vars
+                        )
+                        value = resolved_value
+                    
                     # Show tooltip
                     tooltip_text = f"<b>{var_ref}</b><br/><span style='color: #4CAF50;'>{value}</span>"
                     QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
