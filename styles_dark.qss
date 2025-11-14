@@ -164,6 +164,7 @@ QPlainTextEdit {
     border-radius: 4px;
     padding: 4px 8px;  /* Minimal, 4-point grid */
     font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-size: 11px;
     font-weight: 400;
     selection-background-color: #3A79D0;
     selection-color: #FFFFFF;
@@ -286,6 +287,7 @@ QTreeWidget {
     border: none;
     border-right: 1px solid #2D2D2D;
     outline: none;
+    font-size: 12px;
 }
 
 QTreeWidget::item {

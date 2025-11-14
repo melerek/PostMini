@@ -193,7 +193,7 @@ QLineEdit, QTextEdit, QPlainTextEdit {
     padding: 6px 8px;
     selection-background-color: #BBDEFB;
     selection-color: #0D47A1;
-    font-size: 12px;
+    font-size: 11px;
     font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
     font-weight: 400;
 }
@@ -216,7 +216,7 @@ QLineEdit:disabled, QTextEdit:disabled {
 /* URL Input */
 QLineEdit#urlInput {
     font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 400;
     padding: 6px 8px;
 }
@@ -228,6 +228,7 @@ QTreeWidget {
     border: none;
     outline: none;
     padding: 0px;
+    font-size: 12px;
     show-decoration-selected: 0;
 }
 

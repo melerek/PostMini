@@ -398,9 +398,12 @@ class RequestTreeItemDelegate(QStyledItemDelegate):
             # Add fixed spacing (6 pixels) - reduced since method is now smaller
             x += method_width + 6
             
-            # Draw the request name in normal font and gray
+            # Draw the request name in normal font with better visibility
+            # Use stylesheet color for consistency with folders/collections
             painter.setFont(font)
-            painter.setPen(QPen(QColor('#CCCCCC')))
+            is_dark_theme = option.palette.color(QPalette.ColorRole.Window).lightness() < 128
+            text_color = '#CCCCCC' if is_dark_theme else '#424242'
+            painter.setPen(QPen(QColor(text_color)))
             painter.drawText(x, y, request_name)
             
             painter.restore()
@@ -528,17 +531,17 @@ class ColoredTabBar(QTabBar):
         # Calculate text width with proper font metrics
         fm = self.fontMetrics()
         
-        # Bold font for method (uppercase)
+        # Medium-weight font for method (uppercase)
         method_upper = method.upper()
-        method_width = fm.horizontalAdvance(method_upper) + 8  # Add extra for bold approximation
+        method_width = fm.horizontalAdvance(method_upper) + 4  # Add minimal extra for medium weight
         
-        bullet_width = fm.horizontalAdvance(" • ")
+        space_width = 8  # Space between method and name
         name_width = fm.horizontalAdvance(name)
         changes_width = fm.horizontalAdvance(" •") if has_changes else 0
-        close_btn_width = 24  # Space for close button
+        close_btn_width = 20  # Space for close button (24px actual + small margin)
         
-        # Add padding (12px left + 28px right from stylesheet)
-        total_width = 12 + method_width + bullet_width + name_width + changes_width + 28
+        # Add padding (8px left + 20px right for close button)
+        total_width = 8 + method_width + space_width + name_width + changes_width + close_btn_width
         
         # Cursor-style sizing: more compact, allow natural sizing
         return QSize(min(max(total_width, 80), 300), 35)
@@ -649,7 +652,7 @@ class ColoredTabBar(QTabBar):
                                rect.bottomRight().x(), rect.bottom() - 1)
             
             # Start position for text (with some padding)
-            x = rect.x() + 12
+            x = rect.x() + 8  # Reduced left padding for more text space
             y = rect.center().y() + 5  # Center vertically
             
             # Draw method with color (uppercase)
@@ -657,7 +660,7 @@ class ColoredTabBar(QTabBar):
             method_color = QColor(self.METHOD_COLORS.get(method, '#FFFFFF'))
             painter.setPen(QPen(method_color))
             font = painter.font()
-            font.setBold(True)
+            font.setWeight(QFont.Weight.Medium)  # Medium weight instead of bold - VS Code style
             font.setPointSize(9)
             painter.setFont(font)
             painter.drawText(x, y, method_upper)
@@ -670,12 +673,14 @@ class ColoredTabBar(QTabBar):
             x += 8
             
             # Draw name (truncate if needed)
+            # Reset to regular weight for name text
+            font.setWeight(QFont.Weight.Normal)
             # Set italic font for temporary tabs
             if is_temporary:
                 font.setItalic(True)
-                painter.setFont(font)
+            painter.setFont(font)
             
-            max_name_width = rect.width() - (x - rect.x()) - 30  # Reserve space for close button
+            max_name_width = rect.width() - (x - rect.x()) - 20  # Optimized space for close button
             name_display = name
             name_width = painter.fontMetrics().horizontalAdvance(name)
             
@@ -3087,7 +3092,9 @@ class MainWindow(QMainWindow):
             
             # Collection names should NOT be bold by default
             # Bold will be applied only when it contains the active request
-            collection_item.setForeground(0, QBrush(QColor('#CCCCCC')))  # Light gray for collections
+            is_dark_theme = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+            text_color = '#CCCCCC' if is_dark_theme else '#424242'
+            collection_item.setForeground(0, QBrush(QColor(text_color)))
             
             self.collections_tree.addTopLevelItem(collection_item)
             
@@ -3145,7 +3152,9 @@ class MainWindow(QMainWindow):
                 else:
                     folder_item.setIcon(0, QIcon(folder_icon_path))
                 
-                folder_item.setForeground(0, QBrush(QColor('#CCCCCC')))  # Same gray as collections
+                is_dark_theme = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+                text_color = '#CCCCCC' if is_dark_theme else '#424242'
+                folder_item.setForeground(0, QBrush(QColor(text_color)))
                 
                 parent_item.addChild(folder_item)
                 folder_items[folder_data['id']] = folder_item
@@ -3267,8 +3276,10 @@ class MainWindow(QMainWindow):
             Qt.ItemFlag.ItemIsDropEnabled
         )
         
-        # Set text color to gray (same as collections/folders)
-        request_item.setForeground(0, QBrush(QColor('#CCCCCC')))
+        # Set text color based on theme
+        is_dark_theme = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+        text_color = '#CCCCCC' if is_dark_theme else '#424242'
+        request_item.setForeground(0, QBrush(QColor(text_color)))
         
         parent_item.addChild(request_item)
     
