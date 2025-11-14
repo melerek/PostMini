@@ -1,23 +1,22 @@
 {
-  "latest_version": "1.9.2",
+  "latest_version": "1.9.3",
   "release_date": "2025-11-14",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.2/PostMini_Setup_v1.9.2.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.2",
-  "checksum": "sha256:74C3CEBC6576A9CB32F43C4F4B507D9AD194139F73D6B32E30D7A0DF1653405F",
-  "exe_sha256": "C7FB5C213F4871BA2529A05C9D2BD8BF545C14425E811FC632159A1604FC7945",
-  "installer_sha256": "74C3CEBC6576A9CB32F43C4F4B507D9AD194139F73D6B32E30D7A0DF1653405F",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.3/PostMini_Setup_v1.9.3.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.3",
+  "checksum": "sha256:36FA957DFD161F10AF859B15246DCA4FE16F047701976C9C29F5EC9F25ACA38F",
+  "exe_sha256": "DC3D372E591513E63CA1758F5294E5582C3D29853F48ECE5A62781C5F116DBA6",
+  "installer_sha256": "36FA957DFD161F10AF859B15246DCA4FE16F047701976C9C29F5EC9F25ACA38F",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "NEW: Nested Variable Resolution - Variables can reference other variables up to 10 levels deep",
-    "NEW: Cross-scope nesting - Environment and collection variables can reference each other",
-    "NEW: Enhanced tooltips show fully resolved nested variable values",
-    "NEW: Dynamic variable support in nested contexts ({{$guid}}, {{$timestamp}}, etc.)",
-    "NEW: Circular reference protection prevents infinite loops",
-    "NEW: Partial resolution gracefully handles missing nested variables",
-    "NEW: Postman-compatible {{$variableName}} syntax for dynamic variables",
-    "FIXED: Tooltip display now shows fully resolved values instead of raw nested references",
-    "IMPROVED: Enhanced variable resolution with comprehensive test coverage (7 new tests)"
+    "IMPROVED: Tab header typography - Reduced font weight from bold to medium for better space efficiency",
+    "IMPROVED: URL input font size reduced from 13px to 11px - Shows more text for longer addresses",
+    "IMPROVED: Collections list font size reduced from 13px to 12px for visual consistency",
+    "IMPROVED: All input fields now use 11px font for consistent typography",
+    "IMPROVED: Tab horizontal spacing optimized - Reduced padding to show more text before truncation",
+    "IMPROVED: Request names now match folder/collection text color in light theme for better visibility",
+    "FIXED: Request text appearing too light/gray in light theme - Now uses #424242 like folders",
+    "IMPROVED: Better visual hierarchy with consistent font sizing across UI elements"
   ]
 }
 

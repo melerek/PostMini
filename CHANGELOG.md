@@ -11,6 +11,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.3] - 2025-11-14
+
+### 🎨 UI/UX Improvements
+
+#### Typography & Font Optimization
+- **Tab headers font weight** - Changed from bold to medium weight for better space efficiency and modern look
+- **URL input optimization** - Reduced font size from 13px to 11px, allowing significantly more text visibility for long addresses
+- **Collections list consistency** - Reduced font size from 13px to 12px to match tab header sizing
+- **Input fields standardization** - All input fields now use consistent 11px font size
+- **Tab spacing optimization** - Reduced horizontal padding from 12px to 8px for more efficient space usage
+- **Request name visibility** - Fixed light theme text color from #CCCCCC to #424242 for better readability
+- **Theme-aware colors** - Request, folder, and collection names now automatically adjust color based on theme
+
+### 🐛 Bug Fixes
+- **Light theme visibility** - Request names were too light/faded in light theme, now match folder visibility
+- **Text truncation** - Improved text display before "..." truncation with optimized spacing
+
+### 🔧 Technical Changes
+- **ColoredTabBar** - Updated to use QFont.Weight.Medium instead of bold
+- **RequestTreeItemDelegate** - Now respects theme colors for request name rendering
+- **QSS stylesheets** - Font sizes optimized across QTreeWidget, QLineEdit, and input elements
+
+---
+
 ## [1.9.2] - 2025-11-14
 
 ### ✨ New Features
