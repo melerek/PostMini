@@ -11,6 +11,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.4] - 2025-11-17
+
+### ✨ New Features
+
+#### 📋 Variable Tooltip Copy Button
+- **Interactive tooltips** - Added "Copy to Clipboard" button to variable hover tooltips (Postman-style)
+- **Works everywhere** - URL input, parameters, headers, body, and all other variable fields
+- **Visual feedback** - Shows variable name, resolved value, and copy button with green checkmark confirmation
+- **Smart behavior** - Auto-hides after 500ms when mouse leaves tooltip, stays visible when hovering over button
+- **Custom widget** - Created `VariableTooltipWidget` with QPushButton integration for clipboard functionality
+
+#### 🔗 Live URL ↔ Params Synchronization
+- **Real-time sync** - Query parameters automatically populate in Params tab as you type in URL
+- **Bidirectional** - Editing Params table updates URL query string instantly
+- **Postman-compatible** - Replicates Postman's live query parameter behavior exactly
+- **Automatic cleanup** - Removing params from URL removes them from table, and vice versa
+- **URL parsing** - Robust URL parsing using urllib.parse with proper query string handling
+
+#### 🔄 Auto-refresh Variable Inspector
+- **Automatic updates** - Variable inspector panel refreshes automatically after scripts run
+- **Pre-request scripts** - Shows updated values immediately when scripts call `pm.collectionVariables.set()`
+- **Post-response scripts** - Reflects variable changes from response extraction scripts
+- **Performance optimized** - Only refreshes when panel is open, no impact when closed
+- **Live visibility** - No need to close/reopen panel to see updated variable values
+
+#### 📚 Collection Variable Code Snippets
+- **Pre-request snippets** - Added "Set Collection Variable" and "Get Collection Variable" examples
+- **Post-response snippets** - Added snippets for extracting and validating collection variables
+- **Quick access** - Available in Snippets dropdown on Scripts tab
+- **Copy-paste ready** - Fully working examples using `pm.collectionVariables` API
+
+### 🐛 Bug Fixes
+
+#### 🔧 Pre-request Script Variable Timing (Critical Fix)
+- **Root cause fixed** - Pre-request scripts now properly execute BEFORE variable substitution
+- **Original values preserved** - Stores unsubstituted URL, params, headers, body before first substitution
+- **Re-substitution from originals** - After script runs, re-applies variable substitution from original values
+- **Prevents stale data** - Fixes issue where already-substituted values couldn't be re-resolved
+- **Collection variables reload** - Always reloads collection variables after pre-request script execution
+- **Request Details accuracy** - Request Details tab now shows ACTUAL values sent to server
+- **Header support** - Headers added by scripts (e.g., `pm.request.headers.add()`) appear correctly
+
+#### 🖱️ Body Tab Tooltip Persistence
+- **150ms grace period** - Added delay before hiding tooltip when mouse leaves variable
+- **Hover detection** - Tooltip stays visible when mouse is over it, allowing button interaction
+- **Fixed in multi-line** - Applied to HighlightedTextEdit for Body tab editor
+- **Smooth UX** - Users can now reliably click copy button without tooltip disappearing
+
+### 🎨 UI/UX Improvements
+
+#### 🎨 Modern Button Styling on Scripts Tab
+- **Consistent design** - Updated Clear, Clear Console, and Hide buttons to match collections panel style
+- **Hover effects** - Smooth hover transitions with blue border on hover
+- **Dark theme optimized** - Background (#2D2D2D), borders (#3C3C3C), hover state (#007ACC)
+- **Professional look** - 4px border radius, proper padding, 11px font size
+- **Visual feedback** - Blue pressed state for better interaction feedback
+
+### 🔧 Technical Improvements
+- **VariableTooltipWidget** - Custom QWidget with QLabel, QPushButton, and QTimer for auto-hide
+- **Clipboard integration** - QApplication.clipboard() for cross-platform copy functionality
+- **URL-Params sync methods** - `_sync_url_to_params()` and `_sync_params_to_url()` with loop prevention
+- **urllib.parse integration** - urlparse, parse_qs, urlencode, urlunparse for robust URL handling
+- **Original value storage** - Stores pre-substitution values for accurate re-substitution
+- **_syncing_params flag** - Prevents infinite loops in bidirectional synchronization
+- **Variable inspector refresh** - Automatic `_refresh_variable_inspector_panel()` calls after script execution
+- **Debug logging** - Enhanced logging for script execution and variable substitution flow
+
+### 📚 Documentation
+- **NEXT_VERSION_FEATURES.md** - Comprehensive tracking of all v1.9.4 features and fixes
+- **Code comments** - Added detailed comments explaining re-substitution logic
+- **Snippet descriptions** - Clear descriptions for all new collection variable snippets
+
+---
+
 ## [1.9.3] - 2025-11-14
 
 ### 🎨 UI/UX Improvements

@@ -4,11 +4,131 @@ Variable Highlight Delegate
 Custom delegate and syntax highlighter for highlighting variables in the format {{variableName}}.
 """
 
-from PyQt6.QtWidgets import QStyledItemDelegate, QLineEdit, QStyle, QToolTip, QTextEdit
-from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QPainter, QFont, QPalette, QTextCursor
-from PyQt6.QtCore import Qt, QRegularExpression, pyqtSignal, QRect, QPoint
+from PyQt6.QtWidgets import QStyledItemDelegate, QLineEdit, QStyle, QToolTip, QTextEdit, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication
+from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QPainter, QFont, QPalette, QTextCursor, QCursor
+from PyQt6.QtCore import Qt, QRegularExpression, pyqtSignal, QRect, QPoint, QTimer
 import re
 from src.features.variable_substitution import VariableSubstitution
+
+
+class VariableTooltipWidget(QWidget):
+    """Custom tooltip widget with variable information and copy button."""
+    
+    def __init__(self, var_name, var_value, parent=None):
+        super().__init__(parent)
+        self.var_value = var_value
+        self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Create layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+        
+        # Container with background
+        container = QWidget()
+        container.setObjectName("tooltipContainer")
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(8, 6, 8, 6)
+        container_layout.setSpacing(6)
+        
+        # Variable name label
+        name_label = QLabel(f"<b>{var_name}</b>")
+        name_label.setStyleSheet("color: #CCCCCC; font-size: 11px;")
+        container_layout.addWidget(name_label)
+        
+        # Variable value label
+        value_label = QLabel(var_value)
+        value_label.setWordWrap(True)
+        value_label.setStyleSheet("color: #4CAF50; font-size: 11px; font-family: 'JetBrains Mono', monospace;")
+        value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        container_layout.addWidget(value_label)
+        
+        # Copy button
+        copy_btn = QPushButton("📋 Copy to Clipboard")
+        copy_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2D2D2D;
+                color: #CCCCCC;
+                border: 1px solid #3C3C3C;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-size: 10px;
+            }
+            QPushButton:hover {
+                background-color: #3C3C3C;
+                border-color: #007ACC;
+            }
+            QPushButton:pressed {
+                background-color: #007ACC;
+            }
+        """)
+        copy_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        copy_btn.clicked.connect(self._copy_to_clipboard)
+        container_layout.addWidget(copy_btn)
+        
+        # Style the container
+        container.setStyleSheet("""
+            QWidget#tooltipContainer {
+                background-color: #252526;
+                border: 1px solid #3C3C3C;
+                border-radius: 4px;
+            }
+        """)
+        
+        layout.addWidget(container)
+        
+        # Auto-hide timer (when mouse leaves)
+        self.hide_timer = QTimer()
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.timeout.connect(self.hide)
+        
+        self.setMouseTracking(True)
+    
+    def _copy_to_clipboard(self):
+        """Copy variable value to clipboard."""
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.var_value)
+        
+        # Change button text temporarily to show feedback
+        sender = self.sender()
+        if sender:
+            original_text = sender.text()
+            sender.setText("✓ Copied!")
+            sender.setStyleSheet(sender.styleSheet().replace("#2D2D2D", "#2E7D32"))
+            QTimer.singleShot(1000, lambda: self._reset_button(sender, original_text))
+    
+    def _reset_button(self, button, original_text):
+        """Reset button text and style."""
+        if button:
+            button.setText(original_text)
+            button.setStyleSheet("""
+                QPushButton {
+                    background-color: #2D2D2D;
+                    color: #CCCCCC;
+                    border: 1px solid #3C3C3C;
+                    border-radius: 3px;
+                    padding: 4px 8px;
+                    font-size: 10px;
+                }
+                QPushButton:hover {
+                    background-color: #3C3C3C;
+                    border-color: #007ACC;
+                }
+                QPushButton:pressed {
+                    background-color: #007ACC;
+                }
+            """)
+    
+    def enterEvent(self, event):
+        """Mouse entered - cancel hide timer."""
+        self.hide_timer.stop()
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Mouse left - start hide timer."""
+        self.hide_timer.start(500)  # Hide after 500ms
+        super().leaveEvent(event)
 
 
 class HighlightedLineEdit(QLineEdit):
@@ -284,14 +404,27 @@ class HighlightedLineEdit(QLineEdit):
                         )
                         value = resolved_value
                     
-                    # Show tooltip with scope information
-                    tooltip_text = f"<b>{var_ref}</b><br/><span style='color: #4CAF50;'>{value}</span>"
-                    QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
+                    # Show custom tooltip with copy button
+                    if not hasattr(self, '_tooltip_widget') or self._tooltip_widget is None:
+                        self._tooltip_widget = VariableTooltipWidget(var_ref, value)
+                    else:
+                        # Update existing tooltip
+                        self._tooltip_widget.var_value = value
+                        self._tooltip_widget.findChild(QLabel).setText(f"<b>{var_ref}</b>")
+                        value_labels = [w for w in self._tooltip_widget.findChildren(QLabel) if w.text() != f"<b>{var_ref}</b>"]
+                        if value_labels:
+                            value_labels[0].setText(value)
+                    
+                    # Position tooltip near mouse
+                    global_pos = event.globalPosition().toPoint()
+                    self._tooltip_widget.move(global_pos.x() + 10, global_pos.y() + 10)
+                    self._tooltip_widget.show()
                     tooltip_shown = True
                     break
         
         if not tooltip_shown:
-            QToolTip.hideText()
+            if hasattr(self, '_tooltip_widget') and self._tooltip_widget:
+                self._tooltip_widget.hide()
     
     def _get_variable_value_by_ref(self, var_ref):
         """Get variable value based on reference with prefix.
@@ -385,6 +518,11 @@ class HighlightedTextEdit(QTextEdit):
         super().__init__(parent)
         self.environment_manager = None
         self.setMouseTracking(True)
+        
+        # Timer to delay hiding tooltip (gives time for mouse to reach tooltip)
+        self._hide_tooltip_timer = QTimer()
+        self._hide_tooltip_timer.setSingleShot(True)
+        self._hide_tooltip_timer.timeout.connect(self._hide_tooltip_if_not_hovered)
     
     def set_environment_manager(self, env_manager):
         """Set the environment manager for variable resolution."""
@@ -552,14 +690,39 @@ class HighlightedTextEdit(QTextEdit):
                         )
                         value = resolved_value
                     
-                    # Show tooltip
-                    tooltip_text = f"<b>{var_ref}</b><br/><span style='color: #4CAF50;'>{value}</span>"
-                    QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
+                    # Show custom tooltip with copy button
+                    if not hasattr(self, '_tooltip_widget') or self._tooltip_widget is None:
+                        self._tooltip_widget = VariableTooltipWidget(var_ref, value)
+                    else:
+                        # Update existing tooltip
+                        self._tooltip_widget.var_value = value
+                        self._tooltip_widget.findChild(QLabel).setText(f"<b>{var_ref}</b>")
+                        value_labels = [w for w in self._tooltip_widget.findChildren(QLabel) if w.text() != f"<b>{var_ref}</b>"]
+                        if value_labels:
+                            value_labels[0].setText(value)
+                    
+                    # Position tooltip near mouse
+                    global_pos = event.globalPosition().toPoint()
+                    self._tooltip_widget.move(global_pos.x() + 10, global_pos.y() + 10)
+                    self._tooltip_widget.show()
+                    
+                    # Cancel any pending hide timer since we're showing tooltip
+                    self._hide_tooltip_timer.stop()
+                    
                     tooltip_shown = True
                     break
         
         if not tooltip_shown:
-            QToolTip.hideText()
+            # Don't hide immediately - give time for mouse to reach tooltip
+            if hasattr(self, '_tooltip_widget') and self._tooltip_widget and self._tooltip_widget.isVisible():
+                self._hide_tooltip_timer.start(150)  # 150ms delay
+    
+    def _hide_tooltip_if_not_hovered(self):
+        """Hide tooltip only if mouse is not hovering over it."""
+        if hasattr(self, '_tooltip_widget') and self._tooltip_widget:
+            # Check if mouse is over the tooltip widget
+            if not self._tooltip_widget.underMouse():
+                self._tooltip_widget.hide()
 
 
 class VariableSyntaxHighlighter(QSyntaxHighlighter):
@@ -984,13 +1147,25 @@ class VariableHighlightDelegate(QStyledItemDelegate):
                         value = self._get_variable_value_for_tooltip(var_ref)
                         
                         if value and value != "❌ Undefined":
-                            # Show tooltip
-                            tooltip_text = f"<b>{var_ref}</b><br/><span style='color: #4CAF50;'>{value}</span>"
-                            QToolTip.showText(event.globalPos(), tooltip_text, view)
+                            # Show custom tooltip with copy button
+                            if not hasattr(self, '_tooltip_widget') or self._tooltip_widget is None:
+                                self._tooltip_widget = VariableTooltipWidget(var_ref, value, view)
+                            else:
+                                # Update existing tooltip
+                                self._tooltip_widget.var_value = value
+                                labels = self._tooltip_widget.findChildren(QLabel)
+                                if len(labels) >= 2:
+                                    labels[0].setText(f"<b>{var_ref}</b>")
+                                    labels[1].setText(value)
+                            
+                            # Position tooltip near mouse
+                            self._tooltip_widget.move(event.globalPos().x() + 10, event.globalPos().y() + 10)
+                            self._tooltip_widget.show()
                             return True
                 
                 # Mouse not over a variable, hide tooltip
-                QToolTip.hideText()
+                if hasattr(self, '_tooltip_widget') and self._tooltip_widget:
+                    self._tooltip_widget.hide()
                 return True
         
         return super().helpEvent(event, view, option, index)

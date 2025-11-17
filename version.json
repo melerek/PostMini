@@ -1,22 +1,22 @@
 {
-  "latest_version": "1.9.3",
-  "release_date": "2025-11-14",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.3/PostMini_Setup_v1.9.3.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.3",
-  "checksum": "sha256:36FA957DFD161F10AF859B15246DCA4FE16F047701976C9C29F5EC9F25ACA38F",
-  "exe_sha256": "DC3D372E591513E63CA1758F5294E5582C3D29853F48ECE5A62781C5F116DBA6",
-  "installer_sha256": "36FA957DFD161F10AF859B15246DCA4FE16F047701976C9C29F5EC9F25ACA38F",
+  "latest_version": "1.9.4",
+  "release_date": "2025-11-17",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.4/PostMini_Setup_v1.9.4.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.4",
+  "checksum": "sha256:D86A308E99C1C5532D259F57CA3D2102744A314969F3127082E5645229883278",
+  "exe_sha256": "6A78D84007FFBBBC4C5F93B9E62D1042C39ACCD9E5442383FAE71D092F171B27",
+  "installer_sha256": "D86A308E99C1C5532D259F57CA3D2102744A314969F3127082E5645229883278",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "IMPROVED: Tab header typography - Reduced font weight from bold to medium for better space efficiency",
-    "IMPROVED: URL input font size reduced from 13px to 11px - Shows more text for longer addresses",
-    "IMPROVED: Collections list font size reduced from 13px to 12px for visual consistency",
-    "IMPROVED: All input fields now use 11px font for consistent typography",
-    "IMPROVED: Tab horizontal spacing optimized - Reduced padding to show more text before truncation",
-    "IMPROVED: Request names now match folder/collection text color in light theme for better visibility",
-    "FIXED: Request text appearing too light/gray in light theme - Now uses #424242 like folders",
-    "IMPROVED: Better visual hierarchy with consistent font sizing across UI elements"
+    "NEW: Variable tooltip copy button - Click to copy variable values with visual confirmation",
+    "NEW: Live URL ↔ Params synchronization - Query parameters sync in real-time between URL and Params tab",
+    "NEW: Auto-refresh Variable Inspector - Panel updates automatically when scripts modify variables",
+    "NEW: Collection variable code snippets - Quick access to pm.collectionVariables.set/get examples",
+    "FIXED: Pre-request script variable timing - Variables set by scripts now correctly used in requests",
+    "FIXED: Tooltip persistence in Body tab - Tooltips stay visible when moving to copy button",
+    "IMPROVED: Modern button styling on Scripts tab - Consistent design with hover effects",
+    "IMPROVED: Request Details tab accuracy - Shows actual values sent to server after script execution"
   ]
 }
 

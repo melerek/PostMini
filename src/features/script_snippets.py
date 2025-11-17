@@ -135,6 +135,27 @@ pm.request.headers.upsert({
 });
 
 console.log("Signature added (placeholder)");"""
+        },
+        
+        "Set Collection Variable": {
+            "description": "Set a collection variable value",
+            "code": """// Set collection variable
+const orderId = pm.variables.replaceIn('{{$guid}}');
+pm.collectionVariables.set('orderId', orderId);
+console.log('Collection variable set: orderId = ' + orderId);"""
+        },
+        
+        "Get Collection Variable": {
+            "description": "Get a collection variable value",
+            "code": """// Get collection variable
+const orderId = pm.collectionVariables.get('orderId');
+console.log('Collection variable: orderId = ' + orderId);
+
+// Use in request
+pm.request.headers.add({
+    key: 'X-Order-Id',
+    value: orderId
+});"""
         }
     }
     
@@ -192,6 +213,29 @@ pm.test("Response time is less than 500ms", function() {
 });
 
 console.log("Response time: " + pm.response.responseTime + "ms");"""
+        },
+        
+        "Set Collection Variable": {
+            "description": "Set a collection variable from response",
+            "code": """// Extract value from response and save to collection variable
+const jsonData = pm.response.json();
+const userId = jsonData.data.id;
+
+pm.collectionVariables.set('userId', userId);
+console.log('Collection variable set: userId = ' + userId);"""
+        },
+        
+        "Get Collection Variable": {
+            "description": "Get a collection variable value",
+            "code": """// Get collection variable
+const userId = pm.collectionVariables.get('userId');
+console.log('Collection variable: userId = ' + userId);
+
+// Use for validation
+pm.test('User ID matches', function() {
+    const responseId = pm.response.json().id;
+    pm.expect(responseId).to.equal(userId);
+});"""
         },
         
         "JSON Structure Test": {

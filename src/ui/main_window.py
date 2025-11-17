@@ -57,6 +57,7 @@ from src.features.secrets_manager import SecretsManager
 from src.features.curl_converter import CurlConverter
 from datetime import datetime
 import requests
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 
 class ReorderableTreeWidget(QTreeWidget):
@@ -759,6 +760,9 @@ class MainWindow(QMainWindow):
         # Track unsaved changes
         self.has_unsaved_changes = False
         self.original_request_data = {}
+        
+        # URL-Params sync flag (prevent infinite loop)
+        self._syncing_params = False
         
         # Track active threads
         self.request_thread = None
@@ -2380,6 +2384,7 @@ class MainWindow(QMainWindow):
         self.url_input = HighlightedLineEdit(theme=self.current_theme)
         self.url_input.setPlaceholderText("Enter request URL or paste text")
         self.url_input.returnPressed.connect(self._send_request)  # Enter key sends request
+        self.url_input.textChanged.connect(self._sync_url_to_params)  # Live sync URL to params
         self.url_input.setMinimumHeight(32)  # Reduced for compact layout
         self.url_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
@@ -2531,6 +2536,7 @@ class MainWindow(QMainWindow):
         self.params_table = self._create_key_value_table()
         self.params_table.itemChanged.connect(self._update_tab_counts)
         self.params_table.itemChanged.connect(lambda: self._auto_add_table_rows(self.params_table))
+        self.params_table.itemChanged.connect(self._sync_params_to_url)  # Live sync params to URL
         self.inner_tabs.addTab(self.params_table, "Params")
         
         # Headers tab
@@ -4641,6 +4647,103 @@ class MainWindow(QMainWindow):
         
         return result
     
+    def _sync_url_to_params(self):
+        """Sync query parameters from URL to params table (Postman-style live sync)."""
+        # Prevent infinite loop
+        if getattr(self, '_syncing_params', False):
+            return
+        
+        self._syncing_params = True
+        try:
+            url = self.url_input.text().strip()
+            if not url:
+                self._syncing_params = False
+                return
+            
+            # Parse URL to extract query parameters
+            try:
+                parsed = urlparse(url)
+                query_params = parse_qs(parsed.query, keep_blank_values=True)
+                
+                # Convert parse_qs result (lists) to simple key-value dict
+                params_dict = {}
+                for key, values in query_params.items():
+                    # parse_qs returns lists, take first value
+                    params_dict[key] = values[0] if values else ''
+                
+                # Update params table
+                self.params_table.blockSignals(True)
+                self.params_table.setRowCount(0)  # Clear existing
+                
+                # Add parsed params
+                for key, value in params_dict.items():
+                    row = self.params_table.rowCount()
+                    self.params_table.insertRow(row)
+                    self.params_table.setItem(row, 0, QTableWidgetItem(key))
+                    self.params_table.setItem(row, 1, QTableWidgetItem(value))
+                
+                # Add one empty row for adding new params
+                row = self.params_table.rowCount()
+                self.params_table.insertRow(row)
+                self.params_table.setItem(row, 0, QTableWidgetItem(''))
+                self.params_table.setItem(row, 1, QTableWidgetItem(''))
+                
+                self.params_table.blockSignals(False)
+                self._update_tab_counts()
+                
+            except Exception as e:
+                # Invalid URL or parsing error - silently ignore
+                pass
+        finally:
+            self._syncing_params = False
+    
+    def _sync_params_to_url(self):
+        """Sync params table to URL query string (Postman-style live sync)."""
+        # Prevent infinite loop
+        if getattr(self, '_syncing_params', False):
+            return
+        
+        self._syncing_params = True
+        try:
+            url = self.url_input.text().strip()
+            if not url:
+                self._syncing_params = False
+                return
+            
+            # Get params from table
+            params_dict = self._get_table_as_dict(self.params_table)
+            
+            # Parse current URL
+            try:
+                parsed = urlparse(url)
+                
+                # Build new query string
+                if params_dict:
+                    new_query = urlencode(params_dict)
+                else:
+                    new_query = ''
+                
+                # Reconstruct URL with new query
+                new_url = urlunparse((
+                    parsed.scheme,
+                    parsed.netloc,
+                    parsed.path,
+                    parsed.params,
+                    new_query,
+                    parsed.fragment
+                ))
+                
+                # Update URL input
+                self.url_input.blockSignals(True)
+                self.url_input.setText(new_url)
+                self.url_input.blockSignals(False)
+                
+            except Exception as e:
+                # Invalid URL - silently ignore
+                pass
+        finally:
+            self._syncing_params = False
+    
     def _store_original_request_data(self):
         """Store the current request data for change detection."""
         self.original_request_data = {
@@ -5180,10 +5283,18 @@ class MainWindow(QMainWindow):
         body = self.body_input.toPlainText()
         auth_type = self.auth_type_combo.currentText()
         
+        # Store ORIGINAL unsubstituted values for pre-request script re-substitution
+        original_url = url
+        original_params = params.copy() if params else {}
+        original_headers = headers.copy() if headers else {}
+        original_body = body
+        original_auth_token = ""
+        
         # Get auth token based on auth type
         auth_token = ""
         if auth_type == 'Bearer Token':
             auth_token = self.auth_token_input.text()
+            original_auth_token = auth_token  # Store original before substitution
         elif auth_type == 'OAuth 2.0':
             # OAuth token will be added directly to headers
             auth_header = self._get_authorization_header()
@@ -5385,6 +5496,9 @@ class MainWindow(QMainWindow):
                         if key not in env_variables or env_variables[key] != value:
                             self.env_manager.set_variable(key, value)
                 
+                # Track if collection variables were updated
+                collection_vars_updated = False
+                
                 if self.current_collection_id:
                     for key, value in script_result['collection_variables'].items():
                         if key not in coll_variables or coll_variables[key] != value:
@@ -5396,12 +5510,76 @@ class MainWindow(QMainWindow):
                                 self.db.update_collection_variable(var_id, value=value)
                             else:
                                 self.db.create_collection_variable(self.current_collection_id, key, value)
+                            collection_vars_updated = True
+                
+                # Always reload collection variables after pre-request script
+                # (script may have set new values that need to be substituted)
+                if self.current_collection_id:
+                    collection_variables = self.db.get_collection_variables(self.current_collection_id)
+                    print(f"[DEBUG] Reloaded collection variables after pre-request script: {collection_variables}")
+                
+                # Re-apply variable substitution after script execution
+                # CRITICAL: Re-substitute from ORIGINAL values (before first substitution)
+                # This ensures variables set by the script are properly substituted
+                if self.env_manager.has_active_environment():
+                    print(f"[DEBUG] Re-applying substitution from ORIGINAL values after pre-request script")
+                    
+                    # Get fresh environment variables (script may have updated them)
+                    env_variables = self.env_manager.get_active_variables()
+                    
+                    # Re-substitute from ORIGINAL unsubstituted values
+                    substituted, unresolved = self.env_manager.substitute_in_request(
+                        original_url, original_params, original_headers, original_body, original_auth_token, collection_variables=collection_variables
+                    )
+                    
+                    # Use newly substituted values
+                    url = substituted['url']
+                    params = substituted['params']
+                    headers = substituted['headers']
+                    body = substituted['body']
+                    if auth_type == 'Bearer Token':
+                        auth_token = substituted['auth_token']
+                    
+                    print(f"[DEBUG] After re-substitution:")
+                    print(f"  URL: {url}")
+                    print(f"  Headers: {headers}")
+                else:
+                    # No environment - use direct substitution
+                    print(f"[DEBUG] Re-applying direct substitution from ORIGINAL values after pre-request script")
+                    from src.features.variable_substitution import VariableSubstitution
+                    
+                    # Re-substitute from ORIGINAL unsubstituted values
+                    url, _ = VariableSubstitution.substitute(original_url, None, collection_variables, extracted_variables)
+                    
+                    # Re-substitute params
+                    if original_params:
+                        params, _ = VariableSubstitution.substitute_dict(original_params, None, collection_variables, extracted_variables)
+                    
+                    # Re-substitute headers
+                    if original_headers:
+                        headers, _ = VariableSubstitution.substitute_dict(original_headers, None, collection_variables, extracted_variables)
+                    
+                    # Re-substitute body
+                    if original_body:
+                        body, _ = VariableSubstitution.substitute(original_body, None, collection_variables, extracted_variables)
+                    
+                    # Re-substitute auth token
+                    if original_auth_token:
+                        auth_token, _ = VariableSubstitution.substitute(original_auth_token, None, collection_variables, extracted_variables)
+                    
+                    print(f"[DEBUG] After re-substitution:")
+                    print(f"  URL: {url}")
+                    print(f"  Headers: {headers}")
                 
                 # Display console logs
                 self.scripts_tab.append_console_output(script_result['console_logs'])
                 
                 exec_time = script_result.get('execution_time_ms', 0)
                 self.scripts_tab.append_console_text(f"✓ Pre-request script completed in {exec_time}ms", "info")
+                
+                # Refresh variable inspector if it's open (show updated variable values)
+                if hasattr(self, 'variable_inspector_pane') and self.variable_inspector_pane.isVisible():
+                    self._refresh_variable_inspector_panel()
                 
                 # Update method combo if changed
                 if method != self.method_combo.currentText():
@@ -5445,6 +5623,7 @@ class MainWindow(QMainWindow):
                 return
         
         # Store request details (after variable substitution and pre-request script)
+        # These are the ACTUAL values being sent to the server
         self.current_request_details = {
             'method': method,
             'url': url,
@@ -5454,6 +5633,11 @@ class MainWindow(QMainWindow):
             'auth_type': auth_type,
             'auth_token': auth_token
         }
+        
+        print(f"[DEBUG] Stored request details for Request Details tab:")
+        print(f"  URL: {url}")
+        print(f"  Params: {params}")
+        print(f"  Headers: {headers}")
         
         # Create and start request thread
         self.request_thread = RequestThread(
@@ -5572,6 +5756,10 @@ class MainWindow(QMainWindow):
                 
                 exec_time = script_result.get('execution_time_ms', 0)
                 self.scripts_tab.append_console_text(f"✓ Post-response script completed in {exec_time}ms", "info")
+                
+                # Refresh variable inspector if it's open (show updated variable values)
+                if hasattr(self, 'variable_inspector_pane') and self.variable_inspector_pane.isVisible():
+                    self._refresh_variable_inspector_panel()
                 
             except ScriptTimeoutError as e:
                 self.scripts_tab.append_console_text(f"⏱️ {str(e)}", "error")

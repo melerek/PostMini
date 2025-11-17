@@ -108,9 +108,27 @@ class ScriptTabWidget(QWidget):
         )
         header_layout.addWidget(snippets_combo)
         
-        # Clear button
+        # Clear button with modern styling
         clear_btn = QPushButton("Clear")
         clear_btn.setFixedWidth(60)
+        clear_btn.setFixedHeight(24)
+        clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2D2D2D;
+                color: #CCCCCC;
+                border: 1px solid #3C3C3C;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #3C3C3C;
+                border-color: #007ACC;
+            }
+            QPushButton:pressed {
+                background-color: #007ACC;
+            }
+        """)
         clear_btn.clicked.connect(
             lambda: self._clear_script(script_type)
         )
@@ -153,15 +171,51 @@ class ScriptTabWidget(QWidget):
         
         header_layout.addStretch()
         
-        # Clear console button
+        # Clear console button with modern styling
         clear_console_btn = QPushButton("Clear Console")
         clear_console_btn.setFixedWidth(100)
+        clear_console_btn.setFixedHeight(24)
+        clear_console_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2D2D2D;
+                color: #CCCCCC;
+                border: 1px solid #3C3C3C;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #3C3C3C;
+                border-color: #007ACC;
+            }
+            QPushButton:pressed {
+                background-color: #007ACC;
+            }
+        """)
         clear_console_btn.clicked.connect(self._clear_console)
         header_layout.addWidget(clear_console_btn)
         
-        # Toggle visibility button
+        # Toggle visibility button with modern styling
         self.toggle_console_btn = QPushButton("▼ Hide")
         self.toggle_console_btn.setFixedWidth(70)
+        self.toggle_console_btn.setFixedHeight(24)
+        self.toggle_console_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2D2D2D;
+                color: #CCCCCC;
+                border: 1px solid #3C3C3C;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #3C3C3C;
+                border-color: #007ACC;
+            }
+            QPushButton:pressed {
+                background-color: #007ACC;
+            }
+        """)
         self.toggle_console_btn.clicked.connect(self._toggle_console)
         header_layout.addWidget(self.toggle_console_btn)
         
