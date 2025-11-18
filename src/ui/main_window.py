@@ -2575,10 +2575,11 @@ class MainWindow(QMainWindow):
         # Body tab
         body_widget = QWidget()
         body_layout = QVBoxLayout(body_widget)
-        # Use HighlightedTextEdit for variable hover tooltips
-        from src.ui.widgets.variable_highlight_delegate import HighlightedTextEdit
-        self.body_input = HighlightedTextEdit()
-        self.body_input.environment_manager = self.env_manager
+        # Use AutocompleteTextEdit for variable autocomplete support
+        from src.ui.widgets.variable_autocomplete import AutocompleteTextEdit
+        self.body_input = AutocompleteTextEdit(theme=self.current_theme)
+        self.body_input.set_environment_manager(self.env_manager)
+        self.body_input.set_main_window(self)  # Set main window for variable resolution
         self.body_input.setPlaceholderText("Enter request body (e.g., JSON)")
         self.body_input.textChanged.connect(self._mark_as_changed)
         self.body_input.textChanged.connect(self._update_tab_indicators)
@@ -8707,6 +8708,8 @@ class MainWindow(QMainWindow):
             # Update variable highlighters for new theme
             if hasattr(self, 'url_input') and hasattr(self.url_input, 'set_theme'):
                 self.url_input.set_theme(new_theme)
+            if hasattr(self, 'body_input') and hasattr(self.body_input, 'set_theme'):
+                self.body_input.set_theme(new_theme)
             if hasattr(self, 'body_highlighter'):
                 self.body_highlighter.set_theme(new_theme)
             

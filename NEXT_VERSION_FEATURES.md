@@ -24,6 +24,18 @@ Track all changes here as they're implemented. This will become the changelog en
   - **Hover tooltips** - Mouse over `:paramName` shows resolved value with copy button
   - Same tooltip UX as `{{variable}}` syntax for consistency
 
+- **Variable Autocomplete** - Smart autocomplete for variables when typing:
+  - **Triggers**: Autocomplete appears when typing `{{` or `:` (for path parameters)
+  - **All Scopes**: Shows variables from environment, collection, extracted, and dynamic variables
+  - **Visual Design**: Modern dropdown with variable name, scope badge (ENV/COL/EXT/DYNAMIC), and value preview
+  - **Scope Colors**: Blue (environment), Purple (collection), Green (extracted), Orange (dynamic)
+  - **Navigation**: Tab/Down Arrow for next, Shift+Tab/Up Arrow for previous, Enter to select, Escape to close
+  - **Mouse Support**: Click to select variable
+  - **Live Filtering**: Type after `{{` to filter variables by name or value
+  - **Smart Insertion**: Automatically adds closing `}}` for variables, correct syntax for path parameters
+  - **Supported Fields**: URL input, request body, params table, headers table
+  - **Theme-Aware**: Fully integrated with both light and dark themes
+
 ## 🐛 Bug Fixes
 - (No fixes added yet)
 
@@ -33,6 +45,12 @@ Track all changes here as they're implemented. This will become the changelog en
 - **CookieTabWidget** - New widget component for cookie management UI with editable table and bulk operations
 - **Variable Substitution** - Added `substitute_path_params()` method to handle :paramName syntax
 - **EnvironmentManager** - Updated `substitute_in_request()` to automatically resolve path parameters after variable substitution
+- **New Widget Components**:
+  - `VariableAutocompleteWidget` - Main autocomplete dropdown with filtering and navigation
+  - `VariableAutocompleteItem` - Custom list item widget showing variable name, scope badge, and value preview
+  - `AutocompleteTextEdit` - QTextEdit subclass with autocomplete trigger detection and insertion
+- **Enhanced HighlightedLineEdit** - Extended with autocomplete functionality for URL field
+- **Theme Support** - Autocomplete widget fully integrated with theme switching system
 
 ## 📚 Documentation
 - (No documentation updates yet)
@@ -48,4 +66,5 @@ Track all changes here as they're implemented. This will become the changelog en
   - Pre-request/Post-response toggle buttons show dots when respective scripts exist
   - Provides at-a-glance visibility of where content exists in the request
 - **Consistent Styling** - Fixed button and dropdown font sizes across Cookies and Tests tabs to match Scripts tab (11px)
+- **Modern Autocomplete** - Professional autocomplete UI with scope badges, value previews, and smooth keyboard navigation
 

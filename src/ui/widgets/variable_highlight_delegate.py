@@ -140,10 +140,27 @@ class HighlightedLineEdit(QLineEdit):
         self._setup_colors()
         self.setMouseTracking(True)  # Enable mouse tracking for hover tooltips
         self.environment_manager = None  # Will be set from main window
+        self.main_window = None  # Will be set from main window
         self._variable_regions = []  # Store variable positions for hover detection
         
         # Connect text changed signal to trigger repaint
         self.textChanged.connect(self.update)
+        
+        # Initialize autocomplete
+        from src.ui.widgets.variable_autocomplete import VariableAutocompleteWidget
+        self.autocomplete_widget = VariableAutocompleteWidget(self, theme)
+        self.autocomplete_widget.variableSelected.connect(self._insert_variable)
+        self.autocomplete_widget.hide()
+        
+        # Track autocomplete state
+        self._autocomplete_active = False
+        self._autocomplete_start_pos = 0
+        self._autocomplete_trigger = ""
+        
+        # Timer for debouncing filter updates
+        self._filter_timer = QTimer()
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.timeout.connect(self._update_autocomplete_filter)
     
     def _setup_colors(self):
         """Setup colors based on theme."""
@@ -166,11 +183,17 @@ class HighlightedLineEdit(QLineEdit):
         """Update theme and repaint."""
         self.theme = theme
         self._setup_colors()
+        self.autocomplete_widget.theme = theme
+        self.autocomplete_widget._setup_ui()
         self.update()
     
     def set_environment_manager(self, env_manager):
         """Set the environment manager for variable resolution."""
         self.environment_manager = env_manager
+    
+    def set_main_window(self, main_window):
+        """Set the main window reference."""
+        self.main_window = main_window
     
     def _is_variable_defined(self, var_ref):
         """Check if a variable is defined in the appropriate scope.
@@ -652,6 +675,192 @@ class HighlightedLineEdit(QLineEdit):
                 return env_vars[param_name]
         
         return "❌ Undefined"
+    
+    def keyPressEvent(self, event):
+        """Handle key press events for autocomplete triggering."""
+        key = event.key()
+        text = event.text()
+        
+        # If autocomplete is active, handle navigation keys
+        if self._autocomplete_active and self.autocomplete_widget.isVisible():
+            if key in [Qt.Key.Key_Tab, Qt.Key.Key_Down, Qt.Key.Key_Up, 
+                      Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape,
+                      Qt.Key.Key_Backtab]:
+                self.autocomplete_widget.keyPressEvent(event)
+                return
+            elif key == Qt.Key.Key_Backspace:
+                # Handle backspace - close autocomplete if we delete the trigger
+                cursor_pos = self.cursorPosition()
+                if cursor_pos <= self._autocomplete_start_pos:
+                    self.autocomplete_widget.hide()
+                    self._autocomplete_active = False
+        
+        # Handle normal typing
+        super().keyPressEvent(event)
+        
+        # Check for autocomplete triggers after text is inserted
+        if text:
+            self._check_autocomplete_trigger()
+        
+        # Update filter if autocomplete is already active
+        if self._autocomplete_active and text and key not in [Qt.Key.Key_Return, Qt.Key.Key_Enter]:
+            self._filter_timer.start(100)  # Debounce filter updates
+    
+    def _check_autocomplete_trigger(self):
+        """Check if we should trigger autocomplete."""
+        cursor_pos = self.cursorPosition()
+        text = self.text()
+        
+        # Get text before cursor
+        text_before = text[:cursor_pos]
+        
+        # Check for {{ trigger
+        if text_before.endswith("{{"):
+            self._trigger_autocomplete("{{", cursor_pos)
+            return
+        
+        # Check for : trigger (only in URLs - look for :word pattern)
+        if text_before.endswith(":"):
+            # Check if this looks like a path parameter (preceded by /)
+            if len(text_before) >= 2 and text_before[-2] == "/":
+                self._trigger_autocomplete(":", cursor_pos)
+                return
+    
+    def _trigger_autocomplete(self, trigger: str, pos: int):
+        """Trigger the autocomplete dropdown."""
+        if not self.environment_manager:
+            return
+        
+        self._autocomplete_active = True
+        self._autocomplete_start_pos = pos
+        self._autocomplete_trigger = trigger
+        
+        # Get all available variables
+        variables = self._get_all_variables()
+        
+        if not variables:
+            return
+        
+        # Calculate position for dropdown (below cursor)
+        cursor_rect = self.cursorRect()
+        global_pos = self.mapToGlobal(cursor_rect.bottomLeft())
+        global_pos.setY(global_pos.y() + 2)  # Small offset
+        
+        # Show autocomplete
+        self.autocomplete_widget.show_autocomplete(variables, trigger, global_pos)
+    
+    def _update_autocomplete_filter(self):
+        """Update autocomplete filter based on current text."""
+        if not self._autocomplete_active:
+            return
+        
+        cursor_pos = self.cursorPosition()
+        text = self.text()
+        
+        # Get text after trigger
+        filter_text = ""
+        if cursor_pos > self._autocomplete_start_pos:
+            filter_text = text[self._autocomplete_start_pos:cursor_pos]
+        
+        # Update filter
+        self.autocomplete_widget.update_filter(filter_text)
+    
+    def _get_all_variables(self) -> list:
+        """Get all available variables from all scopes."""
+        variables = []
+        
+        if not self.environment_manager:
+            return variables
+        
+        # Get extracted variables
+        try:
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            for name, value in extracted_vars.items():
+                if value and value != '❌ Undefined':
+                    variables.append((name, str(value), 'ext'))
+        except:
+            pass
+        
+        # Get collection variables
+        try:
+            from PyQt6.QtWidgets import QWidget
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                    if hasattr(parent, 'db'):
+                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                        for name, value in col_vars.items():
+                            if value and value != '❌ Undefined':
+                                variables.append((name, str(value), 'col'))
+                        break
+                parent = parent.parent()
+        except:
+            pass
+        
+        # Get environment variables
+        try:
+            if self.environment_manager.has_active_environment():
+                env_vars = self.environment_manager.get_active_variables()
+                for name, value in env_vars.items():
+                    if value and value != '❌ Undefined':
+                        variables.append((name, str(value), 'env'))
+        except:
+            pass
+        
+        # Add dynamic variables
+        dynamic_vars = [
+            ('guid', 'Generates a UUID v4', 'dynamic'),
+            ('timestamp', 'Current Unix timestamp', 'dynamic'),
+            ('isoTimestamp', 'Current ISO 8601 timestamp', 'dynamic'),
+            ('randomInt', 'Random integer (0-1000)', 'dynamic'),
+        ]
+        variables.extend(dynamic_vars)
+        
+        return variables
+    
+    def _insert_variable(self, var_syntax: str):
+        """Insert the selected variable at cursor position."""
+        if not self._autocomplete_active:
+            return
+        
+        # Get current text and cursor position
+        text = self.text()
+        cursor_pos = self.cursorPosition()
+        
+        # Calculate position before the trigger
+        trigger_len = len(self._autocomplete_trigger)
+        pos_before_trigger = self._autocomplete_start_pos - trigger_len
+        
+        # Remove trigger and text after it (the partial typing)
+        text_before = text[:pos_before_trigger]
+        text_after = text[cursor_pos:]
+        
+        # Build full syntax
+        if self._autocomplete_trigger == "{{":
+            full_syntax = f"{{{{{var_syntax}}}}}"
+        else:  # ":"
+            full_syntax = var_syntax
+        
+        # Construct new text
+        new_text = text_before + full_syntax + text_after
+        
+        # Update text and cursor position
+        self.setText(new_text)
+        self.setCursorPosition(pos_before_trigger + len(full_syntax))
+        
+        # Reset autocomplete state
+        self._autocomplete_active = False
+        self.autocomplete_widget.hide()
+    
+    def focusOutEvent(self, event):
+        """Hide autocomplete when focus is lost."""
+        # Don't hide if focus moved to autocomplete widget
+        if self.autocomplete_widget.isVisible():
+            focus_widget = QApplication.focusWidget()
+            if focus_widget != self.autocomplete_widget:
+                self.autocomplete_widget.hide()
+                self._autocomplete_active = False
+        super().focusOutEvent(event)
 
 
 class HighlightedTextEdit(QTextEdit):
@@ -1043,10 +1252,19 @@ class VariableHighlightDelegate(QStyledItemDelegate):
         self.main_window = main_window
     
     def createEditor(self, parent, option, index):
-        """Create editor with variable highlighting."""
-        editor = QLineEdit(parent)
+        """Create editor with variable highlighting and autocomplete."""
+        # Use HighlightedLineEdit for autocomplete support
+        editor = HighlightedLineEdit(parent, self.theme)
         
-        # Set editor background to match table cell background (dark theme)
+        # Set environment manager if available
+        if self.environment_manager:
+            editor.set_environment_manager(self.environment_manager)
+        
+        # Set main window reference if available
+        if self.main_window:
+            editor.set_main_window(self.main_window)
+        
+        # Set editor background to match table cell background
         if self.theme == 'dark':
             editor.setStyleSheet("""
                 QLineEdit {
