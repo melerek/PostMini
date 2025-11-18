@@ -132,7 +132,7 @@ QPushButton {
     border: 1px solid #BDBDBD;
     border-radius: 4px;
     padding: 4px 8px;  /* Match dark theme density */
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     min-height: 24px;
 }

@@ -79,6 +79,19 @@ class TestTabWidget(QWidget):
         ])
         self.type_combo.currentTextChanged.connect(self._on_type_changed)
         self.type_combo.setMinimumWidth(120)
+        self.type_combo.setFixedHeight(24)
+        self.type_combo.setStyleSheet("""
+            QComboBox {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 20px;
+                padding: 4px 8px;
+            }
+        """)
         form_layout.addWidget(self.type_combo)
         
         # Field (conditional)
@@ -93,6 +106,19 @@ class TestTabWidget(QWidget):
         form_layout.addWidget(QLabel("Op:"))
         self.operator_combo = QComboBox()
         self.operator_combo.setMinimumWidth(100)
+        self.operator_combo.setFixedHeight(24)
+        self.operator_combo.setStyleSheet("""
+            QComboBox {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 20px;
+                padding: 4px 8px;
+            }
+        """)
         form_layout.addWidget(self.operator_combo)
         
         # Expected

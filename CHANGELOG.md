@@ -11,6 +11,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.7] - 2025-11-18
+
+### ✨ New Features
+
+#### 🍪 Cookie Management System
+- **NEW** - Full HTTP cookie support similar to Postman
+- **Cookies Tab** - New dedicated tab for viewing and managing cookies
+- **Automatic Persistence** - Cookies from responses are automatically saved to database
+- **Automatic Sending** - Cookies are automatically sent with matching requests (domain-based)
+- **Manual Management** - Add, edit, and delete cookies manually with full control
+- **Organization** - Domain-based organization with path, expiration, Secure, and HttpOnly flags
+- **Bulk Actions** - "Clear All" and "Delete Expired" buttons for efficient management
+- **Visual Indicators** - Content dot shows when cookies exist for current request
+- **Integration** - Seamlessly integrated with request/response flow
+
+#### 🔗 Path Parameter Support
+- **NEW** - Postman-compatible `:paramName` syntax in URLs
+- **Auto-Resolution** - URLs like `/users/:userId/posts/:postId` automatically resolve path parameters
+- **Variable Integration** - Path parameters use existing variable system (environment, collection, extracted)
+- **Priority System** - Resolution priority: extracted > collection > environment variables
+- **Example** - `{{baseUrl}}/order/v1/Rating/:invitationId` resolves both {{variables}} and :params
+- **Visual Feedback** - Path parameters are highlighted in URL field (green when defined, red when undefined)
+- **Hover Tooltips** - Mouse over `:paramName` shows resolved value with copy button
+- **Postman Compatibility** - Seamless import of Postman collections with path parameters
+
+### 🎨 UI/UX Enhancements
+
+#### 📝 Scripts Tab Improvements
+- **Postman-Style Toggle** - Toggle between Pre-request and Post-response scripts
+- **Space-Saving** - Only one script editor visible at a time in upper section
+- **Better UX** - Toggle buttons with active/inactive states for clear visual feedback
+- **Console Always Visible** - Console output remains at bottom regardless of active script
+
+#### 🔵 Content Indicators
+- **Visual Feedback** - Added dot indicators (·) to tab headers and buttons
+- **Body Tab** - Shows dot when body text is not empty
+- **Scripts Tab** - Shows dot when either pre-request or post-response script exists
+- **Cookies Tab** - Shows dot when cookies exist for current request
+- **Script Toggles** - Pre-request/Post-response buttons show dots when respective scripts exist
+- **At-a-Glance** - Provides immediate visibility of where content exists in the request
+
+#### ✨ Consistent Styling
+- **Fixed** - Button font sizes across Cookies and Tests tabs now match Scripts tab (11px)
+- **Fixed** - Dropdown font sizes in Tests tab now match Scripts tab snippets dropdown
+- **Consistent** - All action buttons use same height (24px) and styling
+
+### 🔧 Technical Improvements
+- **Database** - Added cookies table with comprehensive schema (domain, name, value, path, expires, secure, http_only, same_site)
+- **ApiClient** - Extended with cookie management methods: `get_cookies()`, `set_cookie()`, `clear_cookies()`, `load_cookies_from_db()`, `save_cookies_to_db()`
+- **CookieTabWidget** - New widget component for cookie management UI with editable table and bulk operations
+- **Variable Substitution** - Added `substitute_path_params()` method to handle `:paramName` syntax
+- **EnvironmentManager** - Updated `substitute_in_request()` to automatically resolve path parameters after variable substitution
+- **HighlightedLineEdit** - Extended to highlight and provide tooltips for path parameters
+
+---
+
 ## [1.9.6] - 2025-11-18
 
 ### 🎨 UI/UX Enhancements

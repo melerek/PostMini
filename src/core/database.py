@@ -253,6 +253,24 @@ class DatabaseManager:
             )
         """)
         
+        # Create cookies table for cookie management
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cookies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT NOT NULL,
+                name TEXT NOT NULL,
+                value TEXT,
+                path TEXT DEFAULT '/',
+                expires INTEGER,
+                secure INTEGER DEFAULT 0,
+                http_only INTEGER DEFAULT 0,
+                same_site TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(domain, name, path)
+            )
+        """)
+        
         # Add order_index column to collections table if it doesn't exist (migration)
         try:
             cursor.execute("ALTER TABLE collections ADD COLUMN order_index INTEGER")
@@ -1842,6 +1860,157 @@ class DatabaseManager:
                 updated_at = excluded.updated_at
         """, (key, value, updated_at))
         self.connection.commit()
+    
+    # ============= Cookie Management Methods =============
+    
+    def create_cookie(self, domain: str, name: str, value: str, path: str = '/', 
+                     expires: int = None, secure: bool = False, http_only: bool = False,
+                     same_site: str = None) -> int:
+        """
+        Create or update a cookie.
+        
+        Args:
+            domain: Cookie domain
+            name: Cookie name
+            value: Cookie value
+            path: Cookie path (default: '/')
+            expires: Expiration timestamp (None = session cookie)
+            secure: Secure flag
+            http_only: HttpOnly flag
+            same_site: SameSite attribute ('Strict', 'Lax', 'None', or None)
+            
+        Returns:
+            Cookie ID
+        """
+        from datetime import datetime
+        cursor = self.connection.cursor()
+        updated_at = datetime.now().isoformat()
+        
+        cursor.execute("""
+            INSERT INTO cookies (domain, name, value, path, expires, secure, http_only, same_site, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(domain, name, path) DO UPDATE SET
+                value = excluded.value,
+                expires = excluded.expires,
+                secure = excluded.secure,
+                http_only = excluded.http_only,
+                same_site = excluded.same_site,
+                updated_at = excluded.updated_at
+        """, (domain, name, value, path, expires, int(secure), int(http_only), same_site, updated_at))
+        
+        self.connection.commit()
+        return cursor.lastrowid
+    
+    def get_cookie(self, cookie_id: int):
+        """Get a cookie by ID."""
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM cookies WHERE id = ?", (cookie_id,))
+        return cursor.fetchone()
+    
+    def get_cookies_by_domain(self, domain: str = None):
+        """
+        Get all cookies, optionally filtered by domain.
+        
+        Args:
+            domain: Domain to filter by (None = all cookies)
+            
+        Returns:
+            List of cookie dictionaries
+        """
+        cursor = self.connection.cursor()
+        if domain:
+            cursor.execute("""
+                SELECT * FROM cookies 
+                WHERE domain = ? OR domain = ?
+                ORDER BY domain, name
+            """, (domain, f".{domain}"))
+        else:
+            cursor.execute("SELECT * FROM cookies ORDER BY domain, name")
+        return cursor.fetchall()
+    
+    def get_all_cookies(self):
+        """Get all cookies."""
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM cookies ORDER BY domain, name")
+        return cursor.fetchall()
+    
+    def update_cookie(self, cookie_id: int, value: str = None, expires: int = None,
+                     secure: bool = None, http_only: bool = None, same_site: str = None):
+        """
+        Update a cookie's attributes.
+        
+        Args:
+            cookie_id: Cookie ID
+            value: New value (None = no change)
+            expires: New expiration (None = no change)
+            secure: New secure flag (None = no change)
+            http_only: New HttpOnly flag (None = no change)
+            same_site: New SameSite value (None = no change)
+        """
+        from datetime import datetime
+        cursor = self.connection.cursor()
+        updated_at = datetime.now().isoformat()
+        
+        updates = []
+        params = []
+        
+        if value is not None:
+            updates.append("value = ?")
+            params.append(value)
+        if expires is not None:
+            updates.append("expires = ?")
+            params.append(expires)
+        if secure is not None:
+            updates.append("secure = ?")
+            params.append(int(secure))
+        if http_only is not None:
+            updates.append("http_only = ?")
+            params.append(int(http_only))
+        if same_site is not None:
+            updates.append("same_site = ?")
+            params.append(same_site)
+        
+        if updates:
+            updates.append("updated_at = ?")
+            params.append(updated_at)
+            params.append(cookie_id)
+            
+            query = f"UPDATE cookies SET {', '.join(updates)} WHERE id = ?"
+            cursor.execute(query, params)
+            self.connection.commit()
+    
+    def delete_cookie(self, cookie_id: int):
+        """Delete a cookie by ID."""
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM cookies WHERE id = ?", (cookie_id,))
+        self.connection.commit()
+    
+    def delete_cookies_by_domain(self, domain: str):
+        """Delete all cookies for a domain."""
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            DELETE FROM cookies 
+            WHERE domain = ? OR domain = ?
+        """, (domain, f".{domain}"))
+        self.connection.commit()
+    
+    def delete_all_cookies(self):
+        """Delete all cookies."""
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM cookies")
+        self.connection.commit()
+    
+    def delete_expired_cookies(self):
+        """Delete expired cookies."""
+        import time
+        current_time = int(time.time())
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            DELETE FROM cookies 
+            WHERE expires IS NOT NULL AND expires < ?
+        """, (current_time,))
+        self.connection.commit()
+
     
     def get_all_settings(self) -> Dict[str, str]:
         """

@@ -33,29 +33,48 @@ class ScriptTabWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Create main splitter (vertical split between pre/post sections)
-        self.main_splitter = QSplitter(Qt.Orientation.Vertical)
+        # ========== Script Type Toggle (Pre-request / Post-response) ==========
+        toggle_container = QWidget()
+        toggle_layout = QHBoxLayout(toggle_container)
+        toggle_layout.setContentsMargins(10, 10, 10, 5)
+        toggle_layout.setSpacing(5)
         
-        # ========== Pre-request Script Section ==========
-        pre_request_widget = self._create_script_section(
+        # Toggle buttons (Postman-style)
+        self.pre_request_toggle_btn = QPushButton("Pre-request Script")
+        self.pre_request_toggle_btn.setFixedHeight(28)
+        self.pre_request_toggle_btn.setCheckable(True)
+        self.pre_request_toggle_btn.setChecked(True)
+        self.pre_request_toggle_btn.clicked.connect(lambda: self._switch_script_view("pre_request"))
+        
+        self.post_response_toggle_btn = QPushButton("Post-response Script")
+        self.post_response_toggle_btn.setFixedHeight(28)
+        self.post_response_toggle_btn.setCheckable(True)
+        self.post_response_toggle_btn.clicked.connect(lambda: self._switch_script_view("post_response"))
+        
+        toggle_layout.addWidget(self.pre_request_toggle_btn)
+        toggle_layout.addWidget(self.post_response_toggle_btn)
+        toggle_layout.addStretch()
+        
+        main_layout.addWidget(toggle_container)
+        
+        # ========== Stacked Script Sections ==========
+        # Create both script sections but only show one at a time
+        self.pre_request_widget = self._create_script_section(
             "Pre-request Script",
             "pre_request",
             "Runs before the request is sent. Use to set variables, modify headers, etc."
         )
-        self.main_splitter.addWidget(pre_request_widget)
         
-        # ========== Post-response Script Section ==========
-        post_response_widget = self._create_script_section(
+        self.post_response_widget = self._create_script_section(
             "Post-response Script",
             "post_response",
             "Runs after response is received. Use to extract data, run tests, etc."
         )
-        self.main_splitter.addWidget(post_response_widget)
         
-        # Set initial splitter sizes (50/50 split)
-        self.main_splitter.setSizes([400, 400])
-        
-        main_layout.addWidget(self.main_splitter)
+        # Add both to layout, initially show pre-request
+        main_layout.addWidget(self.pre_request_widget, 1)
+        main_layout.addWidget(self.post_response_widget, 1)
+        self.post_response_widget.hide()
         
         # ========== Console Output Section (bottom) ==========
         self.console_widget = self._create_console_output()
@@ -63,6 +82,7 @@ class ScriptTabWidget(QWidget):
         
         # Apply initial theme-aware button styles
         self._update_clear_button_styles()
+        self._update_toggle_button_styles()
     
     def _create_script_section(self, title: str, script_type: str, help_text: str) -> QWidget:
         """Create a script editor section with header and controls."""
@@ -257,6 +277,21 @@ class ScriptTabWidget(QWidget):
         editor.clear()
         self.scripts_changed.emit()
     
+    def _switch_script_view(self, script_type: str):
+        """Switch between pre-request and post-response script views."""
+        if script_type == "pre_request":
+            self.pre_request_toggle_btn.setChecked(True)
+            self.post_response_toggle_btn.setChecked(False)
+            self.pre_request_widget.show()
+            self.post_response_widget.hide()
+        else:
+            self.pre_request_toggle_btn.setChecked(False)
+            self.post_response_toggle_btn.setChecked(True)
+            self.pre_request_widget.hide()
+            self.post_response_widget.show()
+        
+        self._update_toggle_button_styles()
+    
     def _clear_console(self):
         """Clear console output."""
         self.console_output.clear()
@@ -380,6 +415,7 @@ class ScriptTabWidget(QWidget):
         
         # Update Clear button styles
         self._update_clear_button_styles()
+        self._update_toggle_button_styles()
     
     def _update_clear_button_styles(self):
         """Update Clear button styles based on current theme."""
@@ -430,4 +466,93 @@ class ScriptTabWidget(QWidget):
             self.clear_console_btn.setStyleSheet(button_style)
         if hasattr(self, 'toggle_console_btn'):
             self.toggle_console_btn.setStyleSheet(button_style)
+    
+    def update_toggle_indicators(self):
+        """Update dot indicators on toggle buttons based on script content."""
+        has_pre_script = bool(self.get_pre_request_script())
+        has_post_script = bool(self.get_post_response_script())
+        
+        pre_text = "Pre-request Script ·" if has_pre_script else "Pre-request Script"
+        post_text = "Post-response Script ·" if has_post_script else "Post-response Script"
+        
+        self.pre_request_toggle_btn.setText(pre_text)
+        self.post_response_toggle_btn.setText(post_text)
+    
+    def _update_toggle_button_styles(self):
+        """Update toggle button styles based on current theme and selection state."""
+        if self.theme == 'dark':
+            # Active button (selected)
+            active_style = """
+                QPushButton {
+                    background-color: #007ACC;
+                    color: #FFFFFF;
+                    border: 1px solid #007ACC;
+                    border-radius: 4px;
+                    padding: 4px 16px;
+                    font-size: 12px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #005A9E;
+                }
+            """
+            # Inactive button (not selected)
+            inactive_style = """
+                QPushButton {
+                    background-color: #2D2D2D;
+                    color: #CCCCCC;
+                    border: 1px solid #3C3C3C;
+                    border-radius: 4px;
+                    padding: 4px 16px;
+                    font-size: 12px;
+                }
+                QPushButton:hover {
+                    background-color: #3C3C3C;
+                    border-color: #007ACC;
+                }
+            """
+        else:
+            # Active button (selected)
+            active_style = """
+                QPushButton {
+                    background-color: #1976D2;
+                    color: #FFFFFF;
+                    border: 1px solid #1976D2;
+                    border-radius: 4px;
+                    padding: 4px 16px;
+                    font-size: 12px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #1565C0;
+                }
+            """
+            # Inactive button (not selected)
+            inactive_style = """
+                QPushButton {
+                    background-color: #F5F5F5;
+                    color: #212121;
+                    border: 1px solid #BDBDBD;
+                    border-radius: 4px;
+                    padding: 4px 16px;
+                    font-size: 12px;
+                }
+                QPushButton:hover {
+                    background-color: #E8E8E8;
+                    border-color: #1976D2;
+                }
+            """
+        
+        # Apply styles based on checked state
+        if hasattr(self, 'pre_request_toggle_btn'):
+            if self.pre_request_toggle_btn.isChecked():
+                self.pre_request_toggle_btn.setStyleSheet(active_style)
+            else:
+                self.pre_request_toggle_btn.setStyleSheet(inactive_style)
+        
+        if hasattr(self, 'post_response_toggle_btn'):
+            if self.post_response_toggle_btn.isChecked():
+                self.post_response_toggle_btn.setStyleSheet(active_style)
+            else:
+                self.post_response_toggle_btn.setStyleSheet(inactive_style)
 

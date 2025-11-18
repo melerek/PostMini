@@ -258,14 +258,51 @@ class HighlightedLineEdit(QLineEdit):
         
         return False
     
+    def _is_path_param_defined(self, param_name):
+        """Check if a path parameter is defined in variables.
+        Path parameters use the same variable system: extracted > collection > environment
+        """
+        if not self.environment_manager:
+            return False
+        
+        # Check extracted variables first
+        try:
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            if param_name in extracted_vars and extracted_vars[param_name] not in (None, '', '❌ Undefined'):
+                return True
+        except:
+            pass
+        
+        # Check collection variables
+        try:
+            from PyQt6.QtWidgets import QWidget
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                    if hasattr(parent, 'db'):
+                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                        if param_name in col_vars and col_vars[param_name] not in (None, '', '❌ Undefined'):
+                            return True
+                parent = parent.parent() if isinstance(parent, QWidget) else None
+        except:
+            pass
+        
+        # Check environment variables
+        if self.environment_manager.has_active_environment():
+            env_vars = self.environment_manager.get_active_variables()
+            if param_name in env_vars and env_vars[param_name] not in (None, '', '❌ Undefined'):
+                return True
+        
+        return False
+    
     def paintEvent(self, event):
-        """Custom paint event to highlight variables."""
+        """Custom paint event to highlight variables and path parameters."""
         # Call the parent paint event to draw the normal text
         super().paintEvent(event)
         
         # Now paint highlights on top
         text = self.text()
-        if not text or '{{' not in text or '}}' not in text:
+        if not text or ('{{' not in text and ':' not in text):
             self._variable_regions = []  # Clear regions when no variables
             return
         
@@ -340,7 +377,7 @@ class HighlightedLineEdit(QLineEdit):
             
             # Store region for hover detection
             region_rect = QRect(int(x), int(y), int(var_width), int(height))
-            self._variable_regions.append((region_rect, var_full_ref))
+            self._variable_regions.append((region_rect, var_full_ref, 'variable'))
             
             # Check if variable is defined (using full reference with prefix)
             is_defined = self._is_variable_defined(var_full_ref)
@@ -365,24 +402,87 @@ class HighlightedLineEdit(QLineEdit):
                 3, 3
             )
         
+        # Find all path parameters (:paramName syntax)
+        path_param_pattern = re.compile(r':([a-zA-Z_][a-zA-Z0-9_]*)')
+        
+        for match in path_param_pattern.finditer(text):
+            start_pos = match.start()
+            end_pos = match.end()
+            param_text = match.group(0)  # Full :paramName
+            param_name = match.group(1)  # Just paramName
+            
+            # Calculate pixel position from start of text
+            text_before = text[:start_pos]
+            x_offset = fm.horizontalAdvance(text_before)
+            param_width = fm.horizontalAdvance(param_text)
+            
+            # Calculate actual screen position accounting for scroll
+            x = base_x + x_offset - scroll_offset + 6
+            y = content_rect.y()
+            height = content_rect.height()
+            
+            # Only draw if visible within the content rect
+            if x + param_width < content_rect.x() or x > content_rect.right():
+                continue
+            
+            # Store region for hover detection
+            region_rect = QRect(int(x), int(y), int(param_width), int(height))
+            self._variable_regions.append((region_rect, param_name, 'path_param'))
+            
+            # Check if path parameter is defined
+            is_defined = self._is_path_param_defined(param_name)
+            
+            # Choose color based on whether path parameter is defined
+            color = self.var_defined_color if is_defined else self.var_undefined_color
+            
+            # Draw rounded rectangle background behind the path parameter
+            painter.setPen(Qt.PenStyle.NoPen)
+            highlight_bg = QColor(color)
+            highlight_bg.setAlpha(50)  # Semi-transparent background
+            painter.setBrush(highlight_bg)
+            
+            # Draw with slight padding around the text
+            padding = 2
+            painter.drawRoundedRect(
+                int(x - padding), 
+                int(y + 2), 
+                int(param_width + padding * 2), 
+                int(height - 4), 
+                3, 3
+            )
+        
         painter.end()
     
     def mouseMoveEvent(self, event):
-        """Handle mouse move to show tooltips for variables."""
+        """Handle mouse move to show tooltips for variables and path parameters."""
         super().mouseMoveEvent(event)
         
-        # Check if mouse is over a variable
+        # Check if mouse is over a variable or path parameter
         pos = event.pos()
         tooltip_shown = False
         
-        for region_rect, var_ref in self._variable_regions:
+        for region_data in self._variable_regions:
+            if len(region_data) == 3:
+                region_rect, identifier, param_type = region_data
+            else:
+                # Old format (backward compatibility)
+                region_rect, identifier = region_data
+                param_type = 'variable'
+            
             if region_rect.contains(pos):
-                # Get variable value using new prefix-based lookup
-                value = self._get_variable_value_by_ref(var_ref)
+                # Get value based on type
+                if param_type == 'path_param':
+                    # Path parameter - look up as variable
+                    value = self._get_path_param_value(identifier)
+                    display_ref = f":{identifier}"
+                else:
+                    # Regular variable
+                    value = self._get_variable_value_by_ref(identifier)
+                    display_ref = identifier
                 
                 if value and value != "❌ Undefined":
-                    # Apply nested variable resolution to the value
-                    if self.environment_manager:
+                    # Apply nested variable resolution to the value (for variables only)
+                    if param_type == 'variable' and self.environment_manager:
                         env_vars = self.environment_manager.get_active_variables()
                         col_vars = {}
                         ext_vars = {}
@@ -406,12 +506,12 @@ class HighlightedLineEdit(QLineEdit):
                     
                     # Show custom tooltip with copy button
                     if not hasattr(self, '_tooltip_widget') or self._tooltip_widget is None:
-                        self._tooltip_widget = VariableTooltipWidget(var_ref, value)
+                        self._tooltip_widget = VariableTooltipWidget(display_ref, value)
                     else:
                         # Update existing tooltip
                         self._tooltip_widget.var_value = value
-                        self._tooltip_widget.findChild(QLabel).setText(f"<b>{var_ref}</b>")
-                        value_labels = [w for w in self._tooltip_widget.findChildren(QLabel) if w.text() != f"<b>{var_ref}</b>"]
+                        self._tooltip_widget.findChild(QLabel).setText(f"<b>{display_ref}</b>")
+                        value_labels = [w for w in self._tooltip_widget.findChildren(QLabel) if w.text() != f"<b>{display_ref}</b>"]
                         if value_labels:
                             value_labels[0].setText(value)
                     
@@ -507,6 +607,49 @@ class HighlightedLineEdit(QLineEdit):
             env_vars = self.environment_manager.get_active_variables()
             if var_name in env_vars:
                 return env_vars[var_name]
+        
+        return "❌ Undefined"
+    
+    def _get_path_param_value(self, param_name):
+        """Get path parameter value from variables.
+        Path parameters use the same variable system: extracted > collection > environment
+        
+        Args:
+            param_name: Parameter name (without the : prefix)
+        
+        Returns:
+            The parameter value or "❌ Undefined" if not found
+        """
+        if not self.environment_manager:
+            return "❌ Undefined"
+        
+        # Check extracted variables first (highest priority)
+        try:
+            extracted_vars = self.environment_manager.get_extracted_variables()
+            if param_name in extracted_vars:
+                return extracted_vars[param_name]
+        except:
+            pass
+        
+        # Check collection variables
+        try:
+            from PyQt6.QtWidgets import QWidget
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
+                    if hasattr(parent, 'db'):
+                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
+                        if param_name in col_vars:
+                            return col_vars[param_name]
+                parent = parent.parent() if isinstance(parent, QWidget) else None
+        except:
+            pass
+        
+        # Check environment variables (lowest priority)
+        if self.environment_manager.has_active_environment():
+            env_vars = self.environment_manager.get_active_variables()
+            if param_name in env_vars:
+                return env_vars[param_name]
         
         return "❌ Undefined"
 

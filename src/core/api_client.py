@@ -248,6 +248,147 @@ class ApiClient:
         """
         return self.execute_request('PATCH', url, **kwargs)
     
+    # ============= Cookie Management Methods =============
+    
+    def get_cookies(self, domain: str = None):
+        """
+        Get cookies from the session.
+        
+        Args:
+            domain: Filter cookies by domain (None = all cookies)
+            
+        Returns:
+            List of cookie dictionaries with keys: domain, name, value, path, expires, secure, httponly, samesite
+        """
+        from http.cookiejar import Cookie
+        cookies = []
+        
+        for cookie in self.session.cookies:
+            # Filter by domain if specified
+            if domain and not (cookie.domain == domain or cookie.domain == f".{domain}" or domain.endswith(cookie.domain.lstrip('.'))):
+                continue
+            
+            cookie_dict = {
+                'domain': cookie.domain,
+                'name': cookie.name,
+                'value': cookie.value,
+                'path': cookie.path or '/',
+                'expires': cookie.expires,  # Unix timestamp or None
+                'secure': cookie.secure,
+                'httponly': cookie.has_nonstandard_attr('HttpOnly') or False,
+                'samesite': cookie.get_nonstandard_attr('SameSite', None)
+            }
+            cookies.append(cookie_dict)
+        
+        return cookies
+    
+    def set_cookie(self, domain: str, name: str, value: str, path: str = '/', 
+                   expires: int = None, secure: bool = False, httponly: bool = False,
+                   samesite: str = None):
+        """
+        Manually add a cookie to the session.
+        
+        Args:
+            domain: Cookie domain
+            name: Cookie name
+            value: Cookie value
+            path: Cookie path (default: '/')
+            expires: Expiration timestamp (None = session cookie)
+            secure: Secure flag
+            httponly: HttpOnly flag
+            samesite: SameSite attribute ('Strict', 'Lax', 'None', or None)
+        """
+        from http.cookiejar import Cookie
+        
+        cookie = Cookie(
+            version=0,
+            name=name,
+            value=value,
+            port=None,
+            port_specified=False,
+            domain=domain,
+            domain_specified=True,
+            domain_initial_dot=domain.startswith('.'),
+            path=path,
+            path_specified=True,
+            secure=secure,
+            expires=expires,
+            discard=expires is None,
+            comment=None,
+            comment_url=None,
+            rest={'HttpOnly': httponly, 'SameSite': samesite} if (httponly or samesite) else {},
+            rfc2109=False
+        )
+        
+        self.session.cookies.set_cookie(cookie)
+    
+    def clear_cookies(self, domain: str = None):
+        """
+        Clear cookies from the session.
+        
+        Args:
+            domain: Clear cookies for specific domain (None = clear all)
+        """
+        if domain:
+            # Clear cookies for specific domain
+            self.session.cookies.clear(domain=domain)
+        else:
+            # Clear all cookies
+            self.session.cookies.clear()
+    
+    def load_cookies_from_db(self, db_manager):
+        """
+        Load cookies from database into session.
+        
+        Args:
+            db_manager: DatabaseManager instance
+        """
+        cookies = db_manager.get_all_cookies()
+        
+        for cookie_row in cookies:
+            # Convert Row to dict
+            cookie = dict(cookie_row) if cookie_row else {}
+            if not cookie:
+                continue
+            
+            # Skip expired cookies
+            if cookie.get('expires') is not None:
+                import time
+                if cookie['expires'] < time.time():
+                    continue
+            
+            self.set_cookie(
+                domain=cookie.get('domain', ''),
+                name=cookie.get('name', ''),
+                value=cookie.get('value', ''),
+                path=cookie.get('path') or '/',
+                expires=cookie.get('expires'),
+                secure=bool(cookie.get('secure', 0)),
+                httponly=bool(cookie.get('http_only', 0)),
+                samesite=cookie.get('same_site')
+            )
+    
+    def save_cookies_to_db(self, db_manager):
+        """
+        Save current session cookies to database.
+        
+        Args:
+            db_manager: DatabaseManager instance
+        """
+        cookies = self.get_cookies()
+        
+        for cookie in cookies:
+            db_manager.create_cookie(
+                domain=cookie['domain'],
+                name=cookie['name'],
+                value=cookie['value'],
+                path=cookie['path'],
+                expires=cookie['expires'],
+                secure=cookie['secure'],
+                http_only=cookie['httponly'],
+                same_site=cookie['samesite']
+            )
+    
     def close(self):
         """Close the session and clean up resources."""
         self.session.close()

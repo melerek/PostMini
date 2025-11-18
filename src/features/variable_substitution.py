@@ -33,6 +33,10 @@ class VariableSubstitution:
     # Legacy pattern for backward compatibility (kept for reference but handled by main pattern)
     LEGACY_VARIABLE_PATTERN = re.compile(r'\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
     
+    # Path parameter pattern for Postman-style :paramName syntax
+    # Matches :paramName in URLs (e.g., /users/:userId/posts/:postId)
+    PATH_PARAM_PATTERN = re.compile(r':([a-zA-Z_][a-zA-Z0-9_]*)')
+    
     @staticmethod
     def substitute(text: str, env_variables: Dict[str, str] = None, 
                    collection_variables: Dict[str, str] = None,
@@ -197,6 +201,60 @@ class VariableSubstitution:
         all_unresolved = list(set(all_unresolved))
         
         return result, all_unresolved
+    
+    @staticmethod
+    def substitute_path_params(url: str, env_variables: Dict[str, str] = None,
+                               collection_variables: Dict[str, str] = None,
+                               extracted_variables: Dict[str, str] = None) -> Tuple[str, List[str]]:
+        """
+        Substitute path parameters in URL using Postman-style :paramName syntax.
+        Path parameters are resolved from variables in priority order:
+        extracted > collection > environment
+        
+        Example:
+            URL: https://api.example.com/users/:userId/posts/:postId
+            Variables: {'userId': '123', 'postId': '456'}
+            Result: https://api.example.com/users/123/posts/456
+        
+        Args:
+            url: URL containing :paramName path parameters
+            env_variables: Dictionary of environment variable names to values
+            collection_variables: Dictionary of collection variable names to values
+            extracted_variables: Dictionary of extracted variable names to values
+            
+        Returns:
+            Tuple of (substituted_url, list_of_unresolved_path_params)
+        """
+        if not url:
+            return url, []
+        
+        if env_variables is None:
+            env_variables = {}
+        if collection_variables is None:
+            collection_variables = {}
+        if extracted_variables is None:
+            extracted_variables = {}
+        
+        unresolved = []
+        result = url
+        
+        def replace_path_param(match):
+            param_name = match.group(1)
+            
+            # Check all scopes in priority order: extracted > collection > environment
+            if param_name in extracted_variables:
+                return str(extracted_variables[param_name])
+            elif param_name in collection_variables:
+                return str(collection_variables[param_name])
+            elif param_name in env_variables:
+                return str(env_variables[param_name])
+            else:
+                unresolved.append(f':{param_name}')
+                return match.group(0)  # Keep original :param if not found
+        
+        result = VariableSubstitution.PATH_PARAM_PATTERN.sub(replace_path_param, result)
+        
+        return result, unresolved
     
     @staticmethod
     def find_variables(text: str) -> List[str]:
@@ -386,11 +444,17 @@ class EnvironmentManager:
         
         all_unresolved = []
         
-        # Substitute URL
+        # Substitute URL (first regular {{variables}}, then :pathParams)
         new_url, unresolved = VariableSubstitution.substitute(
             url, self.active_variables, collection_variables, self.extracted_variables
         )
         all_unresolved.extend(unresolved)
+        
+        # Substitute path parameters (:paramName syntax) in URL
+        new_url, unresolved_path = VariableSubstitution.substitute_path_params(
+            new_url, self.active_variables, collection_variables, self.extracted_variables
+        )
+        all_unresolved.extend(unresolved_path)
         
         # Substitute params
         new_params, unresolved = VariableSubstitution.substitute_dict(

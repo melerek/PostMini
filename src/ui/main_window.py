@@ -34,6 +34,7 @@ from src.features.auto_updater import UpdateChecker, UpdateDownloader, UpdateIns
 from src.ui.widgets.test_tab_widget import TestTabWidget
 from src.ui.widgets.test_results_viewer import TestResultsViewer
 from src.ui.widgets.script_tab_widget import ScriptTabWidget
+from src.ui.widgets.cookie_tab_widget import CookieTabWidget
 from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
 from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
 from src.ui.widgets.method_badge import MethodBadge, StatusBadge
@@ -2580,6 +2581,7 @@ class MainWindow(QMainWindow):
         self.body_input.environment_manager = self.env_manager
         self.body_input.setPlaceholderText("Enter request body (e.g., JSON)")
         self.body_input.textChanged.connect(self._mark_as_changed)
+        self.body_input.textChanged.connect(self._update_tab_indicators)
         
         # Add variable syntax highlighting to body with status colors
         self.body_highlighter = VariableSyntaxHighlighter(self.body_input.document(), self.current_theme)
@@ -2596,7 +2598,15 @@ class MainWindow(QMainWindow):
         # Scripts tab
         self.scripts_tab = ScriptTabWidget(theme=self.current_theme)
         self.scripts_tab.scripts_changed.connect(self._mark_as_changed)
+        self.scripts_tab.scripts_changed.connect(self._update_tab_indicators)
         self.inner_tabs.addTab(self.scripts_tab, "Scripts")
+        
+        # Cookies tab
+        self.cookies_tab = CookieTabWidget(theme=self.current_theme)
+        self.cookies_tab.set_db_manager(self.db)
+        self.cookies_tab.cookies_changed.connect(self._mark_as_changed)
+        self.cookies_tab.cookies_changed.connect(self._update_tab_indicators)
+        self.inner_tabs.addTab(self.cookies_tab, "Cookies")
         
         # Initialize tab counts
         self._update_tab_counts()
@@ -4563,6 +4573,12 @@ class MainWindow(QMainWindow):
             # Always clear console when loading a request
             self.scripts_tab._clear_console()
             
+            # Load cookies from database
+            self.cookies_tab.load_cookies()
+            
+            # Update tab indicators after loading
+            self._update_tab_indicators()
+            
             # Clear test results
             self.test_results_viewer.clear()
             self._current_test_results = None  # Clear stored test results
@@ -4912,6 +4928,35 @@ class MainWindow(QMainWindow):
         self.inner_tabs.setTabText(1, headers_label)
         self.inner_tabs.setTabText(2, auth_label)
         self.inner_tabs.setTabText(4, tests_label)
+    
+    def _update_tab_indicators(self):
+        """Update content indicators (dots) on Body and Scripts tabs."""
+        # Body tab indicator - show dot if body has content
+        body_index = self.inner_tabs.indexOf(self.body_input.parent())
+        if body_index != -1:
+            has_body_content = bool(self.body_input.toPlainText().strip())
+            body_text = "Body ·" if has_body_content else "Body"
+            self.inner_tabs.setTabText(body_index, body_text)
+        
+        # Scripts tab indicator - show dot if either script has content
+        scripts_index = self.inner_tabs.indexOf(self.scripts_tab)
+        if scripts_index != -1:
+            has_pre_script = bool(self.scripts_tab.get_pre_request_script())
+            has_post_script = bool(self.scripts_tab.get_post_response_script())
+            has_any_script = has_pre_script or has_post_script
+            scripts_text = "Scripts ·" if has_any_script else "Scripts"
+            self.inner_tabs.setTabText(scripts_index, scripts_text)
+        
+        # Cookies tab indicator - show dot if any cookies exist
+        cookies_index = self.inner_tabs.indexOf(self.cookies_tab)
+        if cookies_index != -1:
+            cookies = self.cookies_tab.get_cookies_as_list()
+            has_cookies = len(cookies) > 0
+            cookies_text = "Cookies ·" if has_cookies else "Cookies"
+            self.inner_tabs.setTabText(cookies_index, cookies_text)
+        
+        # Update script toggle button indicators
+        self.scripts_tab.update_toggle_indicators()
     
     def _auto_add_table_rows(self, table: QTableWidget):
         """Dynamically manage table rows: show only filled rows + 1 empty row (no sorting during editing)."""
@@ -5731,6 +5776,13 @@ class MainWindow(QMainWindow):
         print(f"  Params: {params}")
         print(f"  Headers: {headers}")
         
+        # Load cookies from database into ApiClient session before sending request
+        try:
+            self.api_client.load_cookies_from_db(self.db)
+            print("[DEBUG] Loaded cookies from database into session")
+        except Exception as e:
+            print(f"[DEBUG] Error loading cookies: {e}")
+        
         # Create and start request thread
         self.request_thread = RequestThread(
             self.api_client, method, url, params, headers, body, auth_type, auth_token
@@ -5876,6 +5928,15 @@ class MainWindow(QMainWindow):
         
         # Execute tests
         self._execute_tests_on_response(response)
+        
+        # Save cookies from response to database
+        try:
+            self.api_client.save_cookies_to_db(self.db)
+            self.cookies_tab.load_cookies()  # Reload cookies in UI
+            self._update_tab_indicators()  # Update cookie tab indicator
+            print("[DEBUG] Saved cookies from response to database")
+        except Exception as e:
+            print(f"[DEBUG] Error saving cookies: {e}")
         
         # Save to history
         self._save_to_history(response=response)
@@ -6272,6 +6333,28 @@ class MainWindow(QMainWindow):
                 if len(token) > 20:
                     token = token[:20] + "..."
                 request_text += f"Auth Token: {token}\n"
+        
+        # Show cookies sent with request
+        try:
+            cookies = self.api_client.get_cookies()
+            if cookies:
+                # Filter cookies that match the request domain
+                from urllib.parse import urlparse
+                url_parsed = urlparse(details.get('url', ''))
+                domain = url_parsed.netloc
+                
+                matching_cookies = []
+                for cookie in cookies:
+                    cookie_domain = cookie.get('domain', '')
+                    if domain == cookie_domain or domain.endswith(cookie_domain.lstrip('.')):
+                        matching_cookies.append(cookie)
+                
+                if matching_cookies:
+                    request_text += f"\nCookies Sent ({len(matching_cookies)}):  \n"
+                    for cookie in matching_cookies:
+                        request_text += f"  {cookie['name']}: {cookie['value'][:50]}{'...' if len(cookie['value']) > 50 else ''}\n"
+        except Exception as e:
+            print(f"[DEBUG] Error showing cookies in request details: {e}")
         
         self.request_details_viewer.setPlainText(request_text)
     
