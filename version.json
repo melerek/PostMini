@@ -1,19 +1,19 @@
 {
-  "latest_version": "1.9.5",
+  "latest_version": "1.9.6",
   "release_date": "2025-11-18",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.5/PostMini_Setup_v1.9.5.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.5",
-  "checksum": "sha256:99370E1EC3411DA707E747AF6E9867299B42FA01AD464FF356068057C0E8B3D6",
-  "exe_sha256": "E5E78A3F2C9EC18CBD02EE39482A7FB97A7B570E1AAEFE90A44C2FCC5CD6D6CE",
-  "installer_sha256": "99370E1EC3411DA707E747AF6E9867299B42FA01AD464FF356068057C0E8B3D6",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.6/PostMini_Setup_v1.9.6.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.6",
+  "checksum": "sha256:9356A60138717FB800F46B21644F0C9667753D65ADCEF239D18579E02776589C",
+  "exe_sha256": "A2D6A4757521EFED82BEF1A9E320584CD05A904A3F57F3182E6F9D532E512D1A",
+  "installer_sha256": "9356A60138717FB800F46B21644F0C9667753D65ADCEF239D18579E02776589C",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "FIXED: Light theme button styling - Scripts and Response section buttons now display correctly",
-    "FIXED: Pre-request script headers - Headers added via pm.request.headers.add() are now included in requests",
-    "FIXED: Button alignment - Clear button and Snippets dropdown perfectly aligned",
-    "IMPROVED: Theme consistency - All buttons adapt properly when switching between light/dark themes",
-    "IMPROVED: Button density - Light theme buttons now match dark theme compact sizing"
+    "IMPROVED: Consolidated notification system - removed popup toasts, status bar only",
+    "ENHANCED: Color-coded status messages - green (success), red (error), orange (warning), blue (info)",
+    "BETTER UX: Less intrusive notifications with auto-reset to 'Ready' after 5 seconds",
+    "SIMPLIFIED: Unified notification method improves consistency and reduces visual clutter",
+    "TECHNICAL: Removed ToastManager from codebase, consolidated 90+ notification calls"
   ]
 }
 

@@ -11,6 +11,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.6] - 2025-11-18
+
+### 🎨 UI/UX Enhancements
+
+#### 🔔 Consolidated Notification System
+- **Improved** - Removed popup toast notifications entirely; all notifications now use status bar only
+- **Enhanced** - Color-coded status bar messages for better visibility:
+  - 🟢 Green (#4CAF50) for success messages
+  - 🔴 Red (#F44336) for error messages
+  - 🟠 Orange (#FF9800) for warning messages
+  - 🔵 Blue (#2196F3) for informational messages
+- **Better UX** - Less intrusive notifications with automatic reset to "Ready" state after 5 seconds
+- **Cleaner UI** - Single notification method improves consistency and reduces visual clutter
+
+### 🔧 Technical Improvements
+- **Removed** - ToastManager and ToastNotification widgets from codebase
+- **Simplified** - Consolidated 90+ notification calls to use unified `_show_status()` method
+- **Refactored** - Status bar now handles all user feedback with proper color coding and auto-reset
+
+---
+
 ## [1.9.5] - 2025-11-18
 
 ### 🐛 Bug Fixes

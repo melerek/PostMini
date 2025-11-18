@@ -34,7 +34,6 @@ from src.features.auto_updater import UpdateChecker, UpdateDownloader, UpdateIns
 from src.ui.widgets.test_tab_widget import TestTabWidget
 from src.ui.widgets.test_results_viewer import TestResultsViewer
 from src.ui.widgets.script_tab_widget import ScriptTabWidget
-from src.ui.widgets.toast_notification import ToastManager
 from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
 from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
 from src.ui.widgets.method_badge import MethodBadge, StatusBadge
@@ -776,11 +775,6 @@ class MainWindow(QMainWindow):
         self.search_matches = []
         self.current_match_index = -1
         
-        # Initialize toast notification system EARLY (before UI setup)
-        # Create a temporary widget for toast until centralWidget is ready
-        temp_widget = QWidget()
-        self.toast = ToastManager(temp_widget)
-        
         # Setup UI
         self.setWindowTitle("PostMini - Desktop API Client")
         self.setGeometry(100, 100, 1400, 750)  # Reduced height for better fit on 1920x1080 screens
@@ -801,9 +795,6 @@ class MainWindow(QMainWindow):
         # Connect environment manager to test tab for variable highlighting in test fields
         if hasattr(self, 'test_tab'):
             self.test_tab.set_environment_manager(self.env_manager)
-        
-        # Reinitialize toast with the actual central widget (was created early with temp widget)
-        self.toast = ToastManager(self.centralWidget())
         
         self._setup_shortcuts()
         self._load_collections()
@@ -1073,7 +1064,7 @@ class MainWindow(QMainWindow):
         )
         print(f"[DEBUG] variable_deleted connected via lambda wrapper")
         
-        # Test the connection immediately (toast is now available)
+        # Test the connection immediately (status bar is now available)
         print(f"[DEBUG] Testing connection by emitting test signal")
         self.variable_inspector_pane.variable_deleted.emit("test_scope", "test_name")
         print(f"[DEBUG] Test signal emitted")
@@ -1381,6 +1372,36 @@ class MainWindow(QMainWindow):
         if duration > 0:
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(duration, lambda: self.save_status_label.setText("Ready"))
+    
+    def _show_status(self, message: str, status_type: str = "info", duration: int = 5000):
+        """
+        Show a status message in the status bar with appropriate color coding.
+        
+        Args:
+            message: The message to display
+            status_type: Type of message - "success", "error", "warning", or "info"
+            duration: How long to show the message (milliseconds), 0 for permanent
+        """
+        # Color mapping matching toast notification colors
+        colors = {
+            "success": "#4CAF50",  # Green
+            "error": "#F44336",    # Red
+            "warning": "#FF9800",  # Orange
+            "info": "#2196F3"      # Blue
+        }
+        
+        color = colors.get(status_type, colors["info"])
+        self.save_status_label.setStyleSheet(f"padding: 0 12px; color: {color}; font-weight: 500;")
+        self.save_status_label.setText(message)
+        
+        if duration > 0:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(duration, lambda: self._reset_status())
+    
+    def _reset_status(self):
+        """Reset status bar to default state."""
+        self.save_status_label.setStyleSheet("padding: 0 12px; color: #2196F3;")
+        self.save_status_label.setText("Ready")
     
     def _update_status_bar(self):
         """Update status bar with current state."""
@@ -4115,10 +4136,10 @@ class MainWindow(QMainWindow):
                 self.db.create_collection(name)
                 self._auto_sync_to_filesystem()
                 self._load_collections()
-                # Show success toast
-                self.toast.success(f"Collection '{name}' created")
+                # Show success status
+                self._show_status(f"Collection '{name}' created", "success")
             except Exception as e:
-                self.toast.error(f"Failed to create collection: {str(e)[:30]}...")
+                self._show_status(f"Failed to create collection: {str(e)[:30]}...", "error")
                 QMessageBox.critical(self, "Error", f"Failed to create collection: {str(e)}")
     
     def _add_request(self):
@@ -4231,7 +4252,7 @@ class MainWindow(QMainWindow):
                     url=''
                 )
                 self._load_collections()
-                self.toast.success(f"Request '{name}' created")
+                self._show_status(f"Request '{name}' created", "success")
                 
                 # Load the newly created request and show workspace
                 self.current_request_id = request_id
@@ -4239,7 +4260,7 @@ class MainWindow(QMainWindow):
                 self.center_stack.setCurrentWidget(self.tabs_container)
                 self._load_request(request_id)
             except Exception as e:
-                self.toast.error(f"Failed to create request: {str(e)[:50]}...")
+                self._show_status(f"Failed to create request: {str(e)[:50]}...", "error")
                 QMessageBox.critical(self, "Error", f"Failed to create request: {str(e)}")
     
     # ==================== Folder Management ====================
@@ -4262,9 +4283,9 @@ class MainWindow(QMainWindow):
                     self._collections_to_keep_expanded = set()
                 self._collections_to_keep_expanded.add(collection_id)
                 self._load_collections()
-                self.toast.success(f"Folder '{name}' created")
+                self._show_status(f"Folder '{name}' created", "success")
             except Exception as e:
-                self.toast.error(f"Failed to create folder: {str(e)[:50]}...")
+                self._show_status(f"Failed to create folder: {str(e)[:50]}...", "error")
                 QMessageBox.critical(self, "Error", f"Failed to create folder: {str(e)}")
     
     def _add_folder_to_folder(self, collection_id: int, parent_folder_id: int):
@@ -4289,9 +4310,9 @@ class MainWindow(QMainWindow):
                     self._collections_to_keep_expanded = set()
                 self._collections_to_keep_expanded.add(collection_id)
                 self._load_collections()
-                self.toast.success(f"Subfolder '{name}' created")
+                self._show_status(f"Subfolder '{name}' created", "success")
             except Exception as e:
-                self.toast.error(f"Failed to create subfolder: {str(e)[:50]}...")
+                self._show_status(f"Failed to create subfolder: {str(e)[:50]}...", "error")
                 QMessageBox.critical(self, "Error", f"Failed to create subfolder: {str(e)}")
     
     def _add_request_to_folder(self, collection_id: int, folder_id: int):
@@ -4318,7 +4339,7 @@ class MainWindow(QMainWindow):
                 # Move request to folder
                 self.db.move_request_to_folder(request_id, folder_id)
                 self._load_collections()
-                self.toast.success(f"Request '{name}' created in folder '{folder_name}'")
+                self._show_status(f"Request '{name}' created in folder '{folder_name}'", "success")
                 
                 # Load the newly created request
                 self.current_request_id = request_id
@@ -4326,7 +4347,7 @@ class MainWindow(QMainWindow):
                 self.center_stack.setCurrentWidget(self.tabs_container)
                 self._load_request(request_id)
             except Exception as e:
-                self.toast.error(f"Failed to create request: {str(e)[:50]}...")
+                self._show_status(f"Failed to create request: {str(e)[:50]}...", "error")
                 QMessageBox.critical(self, "Error", f"Failed to create request: {str(e)}")
     
     def _rename_folder(self, folder_id: int):
@@ -4346,9 +4367,9 @@ class MainWindow(QMainWindow):
             try:
                 self.db.update_folder(folder_id, name=name.strip())
                 self._load_collections()
-                self.toast.success(f"Folder renamed to '{name}'")
+                self._show_status(f"Folder renamed to '{name}'", "success")
             except Exception as e:
-                self.toast.error(f"Failed to rename folder: {str(e)[:50]}...")
+                self._show_status(f"Failed to rename folder: {str(e)[:50]}...", "error")
                 QMessageBox.critical(self, "Error", f"Failed to rename folder: {str(e)}")
     
     def _delete_folder_from_menu(self, folder_id: int):
@@ -4371,9 +4392,9 @@ class MainWindow(QMainWindow):
             try:
                 self.db.delete_folder(folder_id)
                 self._load_collections()
-                self.toast.success(f"Folder '{folder['name']}' deleted")
+                self._show_status(f"Folder '{folder['name']}' deleted", "success")
             except Exception as e:
-                self.toast.error(f"Failed to delete folder: {str(e)[:50]}...")
+                self._show_status(f"Failed to delete folder: {str(e)[:50]}...", "error")
                 QMessageBox.critical(self, "Error", f"Failed to delete folder: {str(e)}")
     
     def _move_request_to_folder(self, request_id: int, folder_id: Optional[int]):
@@ -4383,13 +4404,13 @@ class MainWindow(QMainWindow):
             self._load_collections()
             
             if folder_id is None:
-                self.toast.success("Request moved to collection root")
+                self._show_status("Request moved to collection root", "success")
             else:
                 folder = self.db.get_folder(folder_id)
                 folder_name = folder.get('name', 'folder') if folder else 'folder'
-                self.toast.success(f"Request moved to '{folder_name}'")
+                self._show_status(f"Request moved to '{folder_name}'", "success")
         except Exception as e:
-            self.toast.error(f"Failed to move request: {str(e)[:50]}...")
+            self._show_status(f"Failed to move request: {str(e)[:50]}...", "error")
             QMessageBox.critical(self, "Error", f"Failed to move request: {str(e)}")
     
     def _manage_collection_variables(self, collection_id: int):
@@ -4432,24 +4453,24 @@ class MainWindow(QMainWindow):
                     self.current_request_id = None
                     self._clear_request_editor()
                     self.center_stack.setCurrentWidget(self.no_request_empty_state)
-                    self.toast.success(f"Collection '{item_name}' deleted")
+                    self._show_status(f"Collection '{item_name}' deleted", "success")
                 elif data['type'] == 'folder':
                     self.db.delete_folder(data['id'])
-                    self.toast.success(f"Folder '{item_name}' deleted")
+                    self._show_status(f"Folder '{item_name}' deleted", "success")
                 elif data['type'] == 'request':
                     self.db.delete_request(data['id'])
                     if self.current_request_id == data['id']:
                         self.current_request_id = None
                         self._clear_request_editor()
                         self.center_stack.setCurrentWidget(self.no_request_empty_state)
-                    self.toast.success(f"Request '{item_name}' deleted")
+                    self._show_status(f"Request '{item_name}' deleted", "success")
                 
                 # Auto-sync to filesystem if Git sync is enabled
                 self._auto_sync_to_filesystem()
                 
                 self._load_collections()
             except Exception as e:
-                self.toast.error(f"Failed to delete: {str(e)[:30]}...")
+                self._show_status(f"Failed to delete: {str(e)[:30]}...", "error")
                 QMessageBox.critical(self, "Error", f"Failed to delete: {str(e)}")
     
     # ==================== Request Editor Management ====================
@@ -5085,8 +5106,8 @@ class MainWindow(QMainWindow):
             # Update status bar
             self._update_save_status("✓ Request saved successfully")
             
-            # Show success toast
-            self.toast.success("Request saved successfully")
+            # Show success status
+            self._show_status("Request saved successfully", "success")
             
             # Auto-sync to filesystem if Git sync is enabled
             self._auto_sync_to_filesystem()
@@ -5098,7 +5119,7 @@ class MainWindow(QMainWindow):
             self._ensure_request_visible_in_tree(self.current_request_id)
         except Exception as e:
             self._update_save_status("✗ Failed to save request", duration=5000)
-            self.toast.error(f"Failed to save: {str(e)[:40]}...")
+            self._show_status(f"Failed to save: {str(e)[:40]}...", "error")
     
     def _save_new_request(self):
         """Save a new unsaved request by prompting for collection."""
@@ -5245,9 +5266,9 @@ class MainWindow(QMainWindow):
                 print(f"[DEBUG] Updating current request highlight...")
                 self._update_current_request_highlight()
                 
-                # Show success toast
-                print(f"[DEBUG] Showing success toast...")
-                self.toast.success(f"Request '{request_name}' saved successfully")
+                # Show success status
+                print(f"[DEBUG] Showing success status...")
+                self._show_status(f"Request '{request_name}' saved successfully", "success")
                 
                 # Auto-sync to filesystem if Git sync is enabled
                 print(f"[DEBUG] Auto-syncing to filesystem...")
@@ -5263,9 +5284,9 @@ class MainWindow(QMainWindow):
             traceback.print_exc()
             QMessageBox.critical(self, "Error", f"Failed to save request: {str(e)}\n\nPlease check the console for details.")
             try:
-                self.toast.error(f"Failed to save: {str(e)[:40]}...")
+                self._show_status(f"Failed to save: {str(e)[:40]}...", "error")
             except:
-                pass  # Toast might also fail
+                pass  # Status might also fail
     
     # ==================== Request Execution ====================
     
@@ -5276,7 +5297,7 @@ class MainWindow(QMainWindow):
         
         url = self.url_input.text().strip()
         if not url:
-            self.toast.warning("Please enter a URL!")
+            self._show_status("Please enter a URL!", "warning")
             return
         
         # Show loading state with enhanced visual feedback
@@ -5296,8 +5317,8 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        # Show loading toast
-        self.toast.info(f"Sending {self.method_combo.currentText()} request...")
+        # Show loading status
+        self._show_status(f"Sending {self.method_combo.currentText()} request...", "info")
         
         # Auto-expand response panel when sending
         self._expand_response_panel()
@@ -5455,13 +5476,13 @@ class MainWindow(QMainWindow):
                 timeout = 300
             self.api_client.timeout = timeout
         except ValueError:
-            self.toast.warning("Invalid timeout value, using default (30s)")
+            self._show_status("Invalid timeout value, using default (30s)", "warning")
             self.api_client.timeout = 30
         
         # Set SSL verification option
         self.api_client.verify_ssl = self.verify_ssl_checkbox.isChecked()
         if not self.api_client.verify_ssl:
-            self.toast.warning("SSL verification disabled - not recommended for production!")
+            self._show_status("SSL verification disabled - not recommended for production!", "warning")
         
         # Clean up existing thread if still running
         if self.request_thread and self.request_thread.isRunning():
@@ -5658,14 +5679,14 @@ class MainWindow(QMainWindow):
                 
             except ScriptTimeoutError as e:
                 self.scripts_tab.append_console_text(f"⏱️ {str(e)}", "error")
-                self.toast.error("Pre-request script timed out!")
+                self._show_status("Pre-request script timed out!", "error")
                 self.send_btn.setEnabled(True)
                 self.send_btn.setText("Send")
                 self._reset_send_button()
                 return
             except ScriptExecutionError as e:
                 self.scripts_tab.append_console_text(f"❌ {str(e)}", "error")
-                self.toast.error(f"Pre-request script failed: {str(e)[:50]}...")
+                self._show_status(f"Pre-request script failed: {str(e)[:50]}...", "error")
                 self.send_btn.setEnabled(True)
                 self.send_btn.setText("Send")
                 self._reset_send_button()
@@ -5673,7 +5694,7 @@ class MainWindow(QMainWindow):
             except AttributeError as e:
                 error_msg = f"Internal error: {str(e)}"
                 self.scripts_tab.append_console_text(f"❌ {error_msg}", "error")
-                self.toast.error(f"Pre-request script failed: {str(e)[:50]}...")
+                self._show_status(f"Pre-request script failed: {str(e)[:50]}...", "error")
                 print(f"[ERROR] Pre-request script AttributeError: {e}")
                 import traceback
                 traceback.print_exc()
@@ -5684,7 +5705,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 error_msg = f"Unexpected error: {str(e)}"
                 self.scripts_tab.append_console_text(f"❌ {error_msg}", "error")
-                self.toast.error(f"Pre-request script failed: {str(e)[:50]}...")
+                self._show_status(f"Pre-request script failed: {str(e)[:50]}...", "error")
                 print(f"[ERROR] Pre-request script unexpected error: {e}")
                 import traceback
                 traceback.print_exc()
@@ -5736,7 +5757,7 @@ class MainWindow(QMainWindow):
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(1500, lambda: self._reset_send_button())
         
-        # Show success toast with status code
+        # Show success status with status code
         try:
             status_code = response.status_code if hasattr(response, 'status_code') else response.response.status_code
             elapsed_time = response.elapsed_time if hasattr(response, 'elapsed_time') else 0
@@ -5746,13 +5767,13 @@ class MainWindow(QMainWindow):
             time_ms = 0
         
         if 200 <= status_code < 300:
-            self.toast.success(f"{status_code} OK • {time_ms}ms")
+            self._show_status(f"{status_code} OK • {time_ms}ms", "success")
         elif 300 <= status_code < 400:
-            self.toast.info(f"{status_code} Redirect • {time_ms}ms")
+            self._show_status(f"{status_code} Redirect • {time_ms}ms", "info")
         elif 400 <= status_code < 500:
-            self.toast.warning(f"{status_code} Client Error • {time_ms}ms")
+            self._show_status(f"{status_code} Client Error • {time_ms}ms", "warning")
         else:
-            self.toast.error(f"{status_code} Server Error • {time_ms}ms")
+            self._show_status(f"{status_code} Server Error • {time_ms}ms", "error")
         
         # Display response
         self._display_response(response)
@@ -5834,21 +5855,21 @@ class MainWindow(QMainWindow):
                 
             except ScriptTimeoutError as e:
                 self.scripts_tab.append_console_text(f"⏱️ {str(e)}", "error")
-                self.toast.warning("Post-response script timed out!")
+                self._show_status("Post-response script timed out!", "warning")
             except ScriptExecutionError as e:
                 self.scripts_tab.append_console_text(f"❌ {str(e)}", "error")
-                self.toast.warning(f"Post-response script error: {str(e)[:50]}...")
+                self._show_status(f"Post-response script error: {str(e)[:50]}...", "error")
             except AttributeError as e:
                 error_msg = f"Internal error: {str(e)}"
                 self.scripts_tab.append_console_text(f"❌ {error_msg}", "error")
-                self.toast.error(f"Script execution failed: {str(e)[:50]}...")
+                self._show_status(f"Script execution failed: {str(e)[:50]}...", "error")
                 print(f"[ERROR] Post-response script AttributeError: {e}")
                 import traceback
                 traceback.print_exc()
             except Exception as e:
                 error_msg = f"Unexpected error: {str(e)}"
                 self.scripts_tab.append_console_text(f"❌ {error_msg}", "error")
-                self.toast.error(f"Script execution failed: {str(e)[:50]}...")
+                self._show_status(f"Script execution failed: {str(e)[:50]}...", "error")
                 print(f"[ERROR] Post-response script unexpected error: {e}")
                 import traceback
                 traceback.print_exc()
@@ -5885,8 +5906,8 @@ class MainWindow(QMainWindow):
         # Get helpful error message with suggestions
         enhanced_error = self._enhance_error_message(error_message)
         
-        # Show error toast with helpful message
-        self.toast.error(f"Request failed: {enhanced_error['short'][:50]}...")
+        # Show error status with helpful message
+        self._show_status(f"Request failed: {enhanced_error['short'][:50]}...", "error")
         
         # Display error in response viewer with full details and suggestions
         self.status_label.setText(f"Status: Error")
@@ -6120,7 +6141,7 @@ class MainWindow(QMainWindow):
         if response.size > 1_000_000:  # > 1MB
             self.size_label.setText(f"📦 {size_text} ⚠️")
             self.size_label.setStyleSheet("color: #FF9800; font-weight: bold;")
-            self.toast.warning(f"Large response: {size_text}")
+            self._show_status(f"Large response: {size_text}", "warning")
         else:
             self.size_label.setText(f"📦 {size_text}")
             self.size_label.setStyleSheet("font-weight: bold;")
@@ -6975,17 +6996,17 @@ class MainWindow(QMainWindow):
             
             if success:
                 format_name = "Postman Collection v2.1" if export_format == 'postman' else "Internal Format"
-                self.toast.success(f"Collection '{collection['name']}' exported successfully")
+                self._show_status(f"Collection '{collection['name']}' exported successfully", "success")
                 QMessageBox.information(
                     self, "Success",
                     f"Collection '{collection['name']}' exported successfully!\n\nFormat: {format_name}\nFile: {file_path}"
                 )
             else:
-                self.toast.error("Failed to export collection")
+                self._show_status("Failed to export collection", "error")
                 QMessageBox.critical(self, "Error", "Failed to export collection!")
                 
         except Exception as e:
-            self.toast.error(f"Export failed: {str(e)[:30]}...")
+            self._show_status(f"Export failed: {str(e)[:30]}...", "error")
             QMessageBox.critical(self, "Error", f"Export failed: {str(e)}")
     
     def _import_collection(self):
@@ -7036,14 +7057,14 @@ class MainWindow(QMainWindow):
                 if collection_id:
                     self._select_collection_by_id(collection_id)
                 
-                self.toast.success("Collection imported successfully")
+                self._show_status("Collection imported successfully", "success")
                 QMessageBox.information(self, "Success", message)
             else:
-                self.toast.warning("Import was not completed")
+                self._show_status("Import was not completed", "warning")
                 QMessageBox.warning(self, "Import Failed", message)
                 
         except Exception as e:
-            self.toast.error(f"Import failed: {str(e)[:30]}...")
+            self._show_status(f"Import failed: {str(e)[:30]}...", "error")
             QMessageBox.critical(self, "Error", f"Import failed: {str(e)}")
     
     def _import_curl(self):
@@ -7505,7 +7526,7 @@ class MainWindow(QMainWindow):
                             self.db.update_environment(env_id, env['name'], variables)
                             # Refresh environment manager
                             self.env_manager.set_active_environment(self.db.get_environment(env_id))
-                            self.toast.success(f"Updated variable: {name}")
+                            self._show_status(f"Updated variable: {name}", "success")
             elif scope == 'collection':
                 # Update collection variable
                 # Find the variable ID by name
@@ -7514,7 +7535,7 @@ class MainWindow(QMainWindow):
                     for var in collection_vars:
                         if var['key'] == name:
                             self.db.update_collection_variable(var['id'], value=new_value)
-                            self.toast.success(f"Updated collection variable: {name}")
+                            self._show_status(f"Updated collection variable: {name}", "success")
                             break
             elif scope == 'extracted':
                 # Find and update extracted variable
@@ -7538,14 +7559,14 @@ class MainWindow(QMainWindow):
                             self.body_highlighter.rehighlight()
                         if hasattr(self, 'auth_token_input'):
                             self.auth_token_input.update()
-                        self.toast.success(f"Updated variable: {name}")
+                        self._show_status(f"Updated variable: {name}", "success")
                         break
             
             # Refresh panel
             self._refresh_variable_inspector_panel()
         except Exception as e:
             print(f"Error updating variable: {e}")
-            self.toast.error(f"Failed to update: {str(e)}")
+            self._show_status(f"Failed to update: {str(e)}", "error")
     
     def _handle_variable_deleted(self, scope: str, name: str):
         """Wrapper for _on_variable_deleted to help debug signal connection."""
@@ -7585,10 +7606,10 @@ class MainWindow(QMainWindow):
                                     print(f"[DEBUG] Reloaded environment from DB: {list(updated_env.get('variables', {}).keys())}")
                                     self.env_manager.set_active_environment(updated_env)
                                     print(f"[DEBUG] Updated env_manager")
-                                self.toast.success(f"Deleted variable: {name}")
+                                self._show_status(f"Deleted variable: {name}", "success")
                             else:
                                 print(f"[DEBUG] Variable {name} not found in environment variables")
-                                self.toast.warning(f"Variable {name} not found")
+                                self._show_status(f"Variable {name} not found", "warning")
                         else:
                             print(f"[DEBUG] Environment not found")
                     else:
@@ -7603,12 +7624,12 @@ class MainWindow(QMainWindow):
                         if var['key'] == name:
                             self.db.delete_collection_variable(var['id'])
                             print(f"[DEBUG] Deleted collection variable with ID: {var['id']}")
-                            self.toast.success(f"Deleted collection variable: {name}")
+                            self._show_status(f"Deleted collection variable: {name}", "success")
                             found = True
                             break
                     if not found:
                         print(f"[DEBUG] Variable {name} not found in collection variables")
-                        self.toast.warning(f"Variable {name} not found")
+                        self._show_status(f"Variable {name} not found", "warning")
             elif scope == 'extracted':
                 # Find and delete extracted variable
                 extracted_vars = self.db.get_all_extracted_variables()
@@ -7624,7 +7645,7 @@ class MainWindow(QMainWindow):
                             self.body_highlighter.rehighlight()
                         if hasattr(self, 'auth_token_input'):
                             self.auth_token_input.update()
-                        self.toast.success(f"Deleted variable: {name}")
+                        self._show_status(f"Deleted variable: {name}", "success")
                         break
             
             # Refresh panel
@@ -7634,7 +7655,7 @@ class MainWindow(QMainWindow):
             print(f"[ERROR] Error deleting variable: {e}")
             import traceback
             traceback.print_exc()
-            self.toast.error(f"Failed to delete: {str(e)}")
+            self._show_status(f"Failed to delete: {str(e)}", "error")
     
     def _on_variable_added(self, name: str, value: str):
         """Handle adding a new variable to the current environment."""
@@ -7673,13 +7694,13 @@ class MainWindow(QMainWindow):
                             print(f"[DEBUG] Reloaded environment from DB: {list(updated_env.get('variables', {}).keys())}")
                             self.env_manager.set_active_environment(updated_env)
                             print(f"[DEBUG] Updated env_manager")
-                        self.toast.success(f"Added variable: {name}")
+                        self._show_status(f"Added variable: {name}", "success")
                     else:
                         print(f"[DEBUG] Environment not found")
-                        self.toast.error("Environment not found")
+                        self._show_status("Environment not found", "error")
                 else:
                     print(f"[DEBUG] No active environment")
-                    self.toast.error("No active environment")
+                    self._show_status("No active environment", "error")
             
             # Refresh panel
             print(f"[DEBUG] Refreshing variables panel")
@@ -7688,7 +7709,7 @@ class MainWindow(QMainWindow):
             print(f"[ERROR] Error adding variable: {e}")
             import traceback
             traceback.print_exc()
-            self.toast.error(f"Failed to add: {str(e)}")
+            self._show_status(f"Failed to add: {str(e)}", "error")
     
     def _on_collection_variable_added(self, collection_id: int, name: str, value: str):
         """Handle adding a new variable to a collection."""
@@ -7714,7 +7735,7 @@ class MainWindow(QMainWindow):
             # Add the variable to the collection
             self.db.create_collection_variable(collection_id, name, value)
             print(f"[DEBUG] Added collection variable to database")
-            self.toast.success(f"Added collection variable: {name}")
+            self._show_status(f"Added collection variable: {name}", "success")
             
             # Refresh panel
             print(f"[DEBUG] Refreshing variables panel")
@@ -7723,7 +7744,7 @@ class MainWindow(QMainWindow):
             print(f"[ERROR] Error adding collection variable: {e}")
             import traceback
             traceback.print_exc()
-            self.toast.error(f"Failed to add collection variable: {str(e)}")
+            self._show_status(f"Failed to add collection variable: {str(e)}", "error")
     
     def _update_environments_var_counts(self):
         """Update variable counts in the environments panel without full refresh."""
@@ -7788,8 +7809,8 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'auth_token_input'):
                 self.auth_token_input.update()
             
-            # Show success toast
-            self.toast.success(f"Variable '{name}' saved! Use {{{{extracted.{name}}}}} in requests")
+            # Show success status
+            self._show_status(f"Variable '{name}' saved! Use {{{{extracted.{name}}}}} in requests", "success")
             
         except Exception as e:
             QMessageBox.critical(
@@ -7812,7 +7833,7 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'auth_token_input'):
                 self.auth_token_input.update()
             
-            self.toast.success("Variable deleted")
+            self._show_status("Variable deleted", "success")
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -7949,9 +7970,9 @@ class MainWindow(QMainWindow):
             self.center_stack.setCurrentWidget(self.tabs_container)
             
             # Show success message
-            self.toast.success(
+            self._show_status(
                 f"Request loaded from history: {history_entry['method']} {history_entry['url']}"
-            )
+            , "success")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to replay request: {str(e)}")
@@ -9035,9 +9056,9 @@ class MainWindow(QMainWindow):
                 )
                 self.db.connection.commit()
                 self._load_collections()
-                self.toast.success(f"Collection renamed to '{new_name}'")
+                self._show_status(f"Collection renamed to '{new_name}'", "success")
             except Exception as e:
-                self.toast.error(f"Failed to rename: {str(e)[:30]}...")
+                self._show_status(f"Failed to rename: {str(e)[:30]}...", "error")
     
     def _duplicate_collection(self, collection_id: int):
         """Duplicate a collection."""
@@ -9067,9 +9088,9 @@ class MainWindow(QMainWindow):
             
             self._auto_sync_to_filesystem()
             self._load_collections()
-            self.toast.success(f"Collection '{collection['name']}' duplicated")
+            self._show_status(f"Collection '{collection['name']}' duplicated", "success")
         except Exception as e:
-            self.toast.error(f"Failed to duplicate: {str(e)[:30]}...")
+            self._show_status(f"Failed to duplicate: {str(e)[:30]}...", "error")
     
     def _delete_collection_from_menu(self, collection_id: int):
         """Delete collection from context menu."""
@@ -9093,9 +9114,9 @@ class MainWindow(QMainWindow):
                     self.center_stack.setCurrentWidget(self.no_request_empty_state)
                 self._auto_sync_to_filesystem()
                 self._load_collections()
-                self.toast.success(f"Collection '{collection['name']}' deleted")
+                self._show_status(f"Collection '{collection['name']}' deleted", "success")
             except Exception as e:
-                self.toast.error(f"Failed to delete: {str(e)[:30]}...")
+                self._show_status(f"Failed to delete: {str(e)[:30]}...", "error")
     
     def _copy_request_as_curl(self, request_id: int):
         """Copy request as cURL command."""
@@ -9129,9 +9150,9 @@ class MainWindow(QMainWindow):
             # Copy to clipboard
             clipboard = QApplication.clipboard()
             clipboard.setText(curl_command)
-            self.toast.success("cURL command copied to clipboard")
+            self._show_status("cURL command copied to clipboard", "success")
         except Exception as e:
-            self.toast.error(f"Failed to copy: {str(e)[:30]}...")
+            self._show_status(f"Failed to copy: {str(e)[:30]}...", "error")
     
     def _rename_current_request(self):
         """Rename the currently active request using the breadcrumb button."""
@@ -9398,9 +9419,9 @@ class MainWindow(QMainWindow):
                         self.tab_states[current_tab_index]['name'] = new_name
                         self._update_tab_title(current_tab_index)
                 
-                self.toast.success(f"Request renamed to '{new_name}'")
+                self._show_status(f"Request renamed to '{new_name}'", "success")
             except Exception as e:
-                self.toast.error(f"Failed to rename: {str(e)[:30]}...")
+                self._show_status(f"Failed to rename: {str(e)[:30]}...", "error")
     
     def _duplicate_request(self, request_id: int):
         """Duplicate a request."""
@@ -9430,9 +9451,9 @@ class MainWindow(QMainWindow):
             )
             self._auto_sync_to_filesystem()
             self._load_collections()
-            self.toast.success(f"Request duplicated as '{new_name}'")
+            self._show_status(f"Request duplicated as '{new_name}'", "success")
         except Exception as e:
-            self.toast.error(f"Failed to duplicate: {str(e)[:30]}...")
+            self._show_status(f"Failed to duplicate: {str(e)[:30]}...", "error")
     
     def _delete_request_from_menu(self, request_id: int):
         """Delete request from context menu."""
@@ -9484,9 +9505,9 @@ class MainWindow(QMainWindow):
                 self._auto_sync_to_filesystem()
                 self._load_collections()
                 
-                self.toast.success(f"Request '{request['name']}' deleted")
+                self._show_status(f"Request '{request['name']}' deleted", "success")
             except Exception as e:
-                self.toast.error(f"Failed to delete: {str(e)[:30]}...")
+                self._show_status(f"Failed to delete: {str(e)[:30]}...", "error")
     
     def _show_response_context_menu(self, position):
         """Show context menu for response viewer."""
@@ -9586,14 +9607,14 @@ class MainWindow(QMainWindow):
         """Copy entire response to clipboard."""
         clipboard = QApplication.clipboard()
         clipboard.setText(self.response_body.toPlainText())
-        self.toast.success("Response copied to clipboard")
+        self._show_status("Response copied to clipboard", "success")
     
     def _save_response_to_file(self):
         """Save response to file."""
         # Check if there's any response text to save
         response_text = self.response_body.toPlainText()
         if not response_text:
-            self.toast.warning("No response to save")
+            self._show_status("No response to save", "warning")
             return
         
         # Suggest file extension based on content type
@@ -9632,9 +9653,9 @@ class MainWindow(QMainWindow):
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(response_text)
-                self.toast.success(f"Response saved to file")
+                self._show_status(f"Response saved to file", "success")
             except Exception as e:
-                self.toast.error(f"Failed to save: {str(e)[:30]}...")
+                self._show_status(f"Failed to save: {str(e)[:30]}...", "error")
     
     def eventFilter(self, obj, event):
         """Event filter to handle middle-click on tabs for closing."""
