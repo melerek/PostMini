@@ -6,7 +6,7 @@ A simple and powerful desktop API client built with PyQt6. PostMini allows you t
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4%2B-green)
-![Version](https://img.shields.io/badge/version-1.9.4-brightgreen)
+![Version](https://img.shields.io/badge/version-1.9.5-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Tests](https://img.shields.io/badge/tests-374%2B%20passing-success)
 

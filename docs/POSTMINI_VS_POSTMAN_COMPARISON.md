@@ -1,7 +1,7 @@
 # PostMini vs Postman - Feature Comparison
 
-**Last Updated:** November 14, 2025  
-**PostMini Version:** 1.9.2
+**Last Updated:** November 18, 2025  
+**PostMini Version:** 1.9.5
 
 This document provides a detailed comparison between PostMini, Postman Free, and Postman Enterprise to help you choose the right API testing tool for your needs.
 
@@ -46,7 +46,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **SSL Verification** | ✅ **Per-request toggle** | ✅ Global only | ✅ Global + per-request |
 | **GraphQL Support** | ❌ (Planned) | ✅ Full support | ✅ Full support |
 
-**Winner:** 🥇 **PostMini v1.9.2** - Request documentation, flexible timeout/SSL, better table UX!
+**Winner:** 🥇 **PostMini v1.9.5** - Request documentation, flexible timeout/SSL, better table UX!
 
 ---
 
@@ -69,7 +69,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Duplicate Detection** | ✅ **Smart duplicate prevention** | ❌ | ✅ |
 | **Context Menus** | ✅ **Right-click quick actions** | ✅ | ✅ |
 
-**Winner:** 🥇 **PostMini v1.9.2** - Drag & drop + temporary tabs + keyboard shortcuts!
+**Winner:** 🥇 **PostMini v1.9.5** - Drag & drop + temporary tabs + keyboard shortcuts!
 
 ---
 
@@ -96,7 +96,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Secrets Management** | ✅ **Git-ignored secrets** | ⚠️ Cloud-stored | ✅ Vault integration |
 | **Secret Detection** | ✅ **Automatic keyword-based** | ❌ | ✅ Manual |
 
-**Winner:** 🥇 **PostMini v1.9.2** - Advanced nested variables + Postman import/export + local secrets!
+**Winner:** 🥇 **PostMini v1.9.5** - Advanced nested variables + Postman import/export + local secrets!
 
 ---
 
@@ -137,7 +137,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Script Execution** | ✅ **V8 sandbox with timeout** | ✅ Secure | ✅ Secure |
 | **Script Migration** | ✅ **Copy-paste from Postman** | ✅ Native | ✅ Native |
 
-**Winner:** 🥇 **PostMini v1.9.2** - Full scripting parity with Postman + better local privacy!
+**Winner:** 🥇 **PostMini v1.9.5** - Full scripting parity with Postman + better local privacy!
 
 ---
 
@@ -185,7 +185,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **CI/CD Integration** | ✅ **JUnit XML support** | ✅ Newman CLI | ✅ Newman + native |
 | **Scheduled Tests** | ❌ | ❌ | ✅ Cloud monitors |
 
-**Winner:** 🥇 **PostMini v1.9.2** - Best of both worlds: Visual builder + scripting + enterprise reporting for FREE!
+**Winner:** 🥇 **PostMini v1.9.5** - Best of both worlds: Visual builder + scripting + enterprise reporting for FREE!
 
 ---
 
@@ -289,7 +289,7 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 | **Auto-Updates** | ✅ **GitHub-based** | ✅ Auto-update | ✅ Auto-update |
 | **Open Source** | ✅ **MIT License** | ❌ Closed source | ❌ Closed source |
 
-**Winner:** 🥇 **PostMini v1.9.2** - Cleaner UI, better space usage, open source!
+**Winner:** 🥇 **PostMini v1.9.5** - Cleaner UI, better space usage, open source!
 
 ---
 
@@ -297,18 +297,18 @@ This document provides a detailed comparison between PostMini, Postman Free, and
 
 | Category | Winner |
 |----------|--------|
-| **Core API Testing** | 🥇 PostMini v1.9.2 (description, timeout, SSL) |
-| **Collections & Organization** | 🥇 PostMini v1.9.2 (drag & drop ordering) |
-| **Environment & Variables** | 🥇 PostMini v1.9.2 (nested vars + import/export) |
+| **Core API Testing** | 🥇 PostMini v1.9.5 (description, timeout, SSL) |
+| **Collections & Organization** | 🥇 PostMini v1.9.5 (drag & drop ordering) |
+| **Environment & Variables** | 🥇 PostMini v1.9.5 (nested vars + import/export) |
 | **Authentication & Security** | 🥇 PostMini (privacy-first) |
-| **Scripting & Automation** | 🥇 PostMini v1.9.2 (full parity + local) |
+| **Scripting & Automation** | 🥇 PostMini v1.9.5 (full parity + local) |
 | **Code Generation** | 🥈 Postman (more languages) |
-| **Testing & QA** | 🥇 PostMini v1.9.2 (visual + scripts + reports) |
+| **Testing & QA** | 🥇 PostMini v1.9.5 (visual + scripts + reports) |
 | **Collaboration** | 🥇 PostMini (for Git users) |
 | **Data & Privacy** | 🥇 PostMini (100% local) |
-| **Import/Export** | 🥇 PostMini v1.9.2 (Postman env compatibility) |
+| **Import/Export** | 🥇 PostMini v1.9.5 (Postman env compatibility) |
 | **Platform & Compatibility** | 🥇 PostMini (lighter, offline) |
-| **User Experience** | 🥇 PostMini v1.9.2 (cleaner, open source) |
+| **User Experience** | 🥇 PostMini v1.9.5 (cleaner, open source) |
 
 **🎉 PostMini wins 11 categories, Postman wins 1!**
 

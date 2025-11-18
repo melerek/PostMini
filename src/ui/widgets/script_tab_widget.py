@@ -60,6 +60,9 @@ class ScriptTabWidget(QWidget):
         # ========== Console Output Section (bottom) ==========
         self.console_widget = self._create_console_output()
         main_layout.addWidget(self.console_widget)
+        
+        # Apply initial theme-aware button styles
+        self._update_clear_button_styles()
     
     def _create_script_section(self, title: str, script_type: str, help_text: str) -> QWidget:
         """Create a script editor section with header and controls."""
@@ -92,6 +95,19 @@ class ScriptTabWidget(QWidget):
         
         snippets_combo = QComboBox()
         snippets_combo.setMinimumWidth(200)
+        snippets_combo.setFixedHeight(24)  # Match button height for alignment
+        snippets_combo.setStyleSheet("""
+            QComboBox {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 20px;
+                padding: 4px 8px;
+            }
+        """)
         snippets_combo.addItem("-- Select snippet --")
         
         # Populate snippets
@@ -108,27 +124,10 @@ class ScriptTabWidget(QWidget):
         )
         header_layout.addWidget(snippets_combo)
         
-        # Clear button with modern styling
+        # Clear button
         clear_btn = QPushButton("Clear")
         clear_btn.setFixedWidth(60)
-        clear_btn.setFixedHeight(24)
-        clear_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2D2D2D;
-                color: #CCCCCC;
-                border: 1px solid #3C3C3C;
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #3C3C3C;
-                border-color: #007ACC;
-            }
-            QPushButton:pressed {
-                background-color: #007ACC;
-            }
-        """)
+        clear_btn.setFixedHeight(24)  # Match snippets dropdown height
         clear_btn.clicked.connect(
             lambda: self._clear_script(script_type)
         )
@@ -142,13 +141,15 @@ class ScriptTabWidget(QWidget):
         editor.textChanged.connect(self.scripts_changed.emit)
         editor.setMinimumHeight(100)  # Reduced for better window sizing
         
-        # Store reference to editor
+        # Store reference to editor and clear button
         if script_type == "pre_request":
             self.pre_request_editor = editor
             self.pre_request_snippets_combo = snippets_combo
+            self.pre_request_clear_btn = clear_btn
         else:
             self.post_response_editor = editor
             self.post_response_snippets_combo = snippets_combo
+            self.post_response_clear_btn = clear_btn
         
         layout.addWidget(editor, 1)  # Stretch to fill
         
@@ -171,51 +172,17 @@ class ScriptTabWidget(QWidget):
         
         header_layout.addStretch()
         
-        # Clear console button with modern styling
-        clear_console_btn = QPushButton("Clear Console")
-        clear_console_btn.setFixedWidth(100)
-        clear_console_btn.setFixedHeight(24)
-        clear_console_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2D2D2D;
-                color: #CCCCCC;
-                border: 1px solid #3C3C3C;
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #3C3C3C;
-                border-color: #007ACC;
-            }
-            QPushButton:pressed {
-                background-color: #007ACC;
-            }
-        """)
-        clear_console_btn.clicked.connect(self._clear_console)
-        header_layout.addWidget(clear_console_btn)
+        # Clear console button
+        self.clear_console_btn = QPushButton("Clear Console")
+        self.clear_console_btn.setFixedWidth(100)
+        self.clear_console_btn.setFixedHeight(24)
+        self.clear_console_btn.clicked.connect(self._clear_console)
+        header_layout.addWidget(self.clear_console_btn)
         
-        # Toggle visibility button with modern styling
+        # Toggle visibility button
         self.toggle_console_btn = QPushButton("▼ Hide")
         self.toggle_console_btn.setFixedWidth(70)
         self.toggle_console_btn.setFixedHeight(24)
-        self.toggle_console_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2D2D2D;
-                color: #CCCCCC;
-                border: 1px solid #3C3C3C;
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #3C3C3C;
-                border-color: #007ACC;
-            }
-            QPushButton:pressed {
-                background-color: #007ACC;
-            }
-        """)
         self.toggle_console_btn.clicked.connect(self._toggle_console)
         header_layout.addWidget(self.toggle_console_btn)
         
@@ -410,4 +377,57 @@ class ScriptTabWidget(QWidget):
                 padding: 5px;
             }}
         """)
+        
+        # Update Clear button styles
+        self._update_clear_button_styles()
+    
+    def _update_clear_button_styles(self):
+        """Update Clear button styles based on current theme."""
+        if self.theme == 'dark':
+            button_style = """
+                QPushButton {
+                    background-color: #2D2D2D;
+                    color: #CCCCCC;
+                    border: 1px solid #3C3C3C;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: #3C3C3C;
+                    border-color: #007ACC;
+                }
+                QPushButton:pressed {
+                    background-color: #007ACC;
+                }
+            """
+        else:
+            button_style = """
+                QPushButton {
+                    background-color: #F5F5F5;
+                    color: #212121;
+                    border: 1px solid #BDBDBD;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: #E8E8E8;
+                    border-color: #1976D2;
+                }
+                QPushButton:pressed {
+                    background-color: #1976D2;
+                    color: #FFFFFF;
+                }
+            """
+        
+        # Apply to all buttons
+        if hasattr(self, 'pre_request_clear_btn'):
+            self.pre_request_clear_btn.setStyleSheet(button_style)
+        if hasattr(self, 'post_response_clear_btn'):
+            self.post_response_clear_btn.setStyleSheet(button_style)
+        if hasattr(self, 'clear_console_btn'):
+            self.clear_console_btn.setStyleSheet(button_style)
+        if hasattr(self, 'toggle_console_btn'):
+            self.toggle_console_btn.setStyleSheet(button_style)
 

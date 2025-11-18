@@ -16,9 +16,3 @@ Track all changes here as they're implemented. This will become the changelog en
 
 ## 🎨 UI/UX Enhancements
 - (No UI improvements yet)
-
-- Modern button styling applied to Scripts tab (Clear, Clear Console, Hide buttons)
-- Added code snippets for setting and getting collection variables in both pre-request and post-response scripts
-
-## 📚 Documentation
-- (Track documentation updates here as they're implemented)

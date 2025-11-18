@@ -277,6 +277,59 @@ When fixing a bug in AI-generated code:
 - **Comments**: Explain "why" not "what" (code should be self-documenting)
 - **Documentation Files**: **DO NOT create markdown files** to document each change or summarize work unless explicitly requested by the user. This wastes time and cost without adding value. Make changes directly in code and respond concisely.
 
+## Styling & Theme Management
+
+**CRITICAL**: PostMini supports BOTH light and dark themes. **ALL UI/styling changes MUST be applied to BOTH themes.**
+
+### Theme Files
+- **Dark Theme**: `styles_dark.qss` (default theme)
+- **Light Theme**: `styles.qss` (alternative theme)
+- **Theme Toggle**: User can switch via Settings panel
+
+### Dual-Theme Update Checklist
+When making ANY UI/styling changes:
+1. ✅ **Apply to `styles_dark.qss` first** (primary development theme)
+2. ✅ **Apply identical changes to `styles.qss`** (must match exactly)
+3. ✅ **For Python inline styles**: Ensure styles work on both light/dark backgrounds
+4. ✅ **Test color values**: Dark theme uses light colors (#E0E0E0), light theme uses dark colors (#212121)
+5. ✅ **Verify font sizes match**: Both themes must have identical font-size values
+
+### Common Styling Patterns That Need Dual-Theme Support
+- QComboBox font-size and dropdown styling
+- QTabWidget tab font-size and padding  
+- QTableWidget item font-size
+- QPushButton font-size and height
+- QLabel font-size for metadata/tertiary text
+- Any QSS rule with `font-size`, `padding`, `min-height`, `max-height`
+
+### Example: Applying a Font Size Change
+```css
+/* In styles_dark.qss */
+QTabWidget#innerTabs QTabBar::tab {
+    font-size: 12px;
+    padding: 6px 12px;
+}
+
+/* MUST ALSO add to styles.qss with IDENTICAL values */
+QTabWidget#innerTabs QTabBar::tab {
+    font-size: 12px;
+    padding: 6px 12px;
+}
+```
+
+### Inline Python Styles (Theme-Agnostic)
+When setting inline styles in Python code, ensure they work for both themes:
+```python
+# Good - uses relative font-size, works on both themes
+button.setStyleSheet("font-size: 11px; padding: 4px 8px;")
+
+# Bad - uses theme-specific colors in Python (should be in QSS)
+button.setStyleSheet("font-size: 11px; color: #E0E0E0;")  # Won't work in light theme
+```
+
+### Critical Reminder
+**NEVER apply styling changes to only one theme.** This creates visual inconsistencies and breaks the user experience when switching themes. Always check both `styles.qss` and `styles_dark.qss` when making UI changes.
+
 ## Project Structure & File Organization
 
 **Critical**: Maintain clean project structure. Files MUST be in proper locations.

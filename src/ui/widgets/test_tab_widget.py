@@ -110,10 +110,10 @@ class TestTabWidget(QWidget):
         
         layout.addLayout(form_layout)
         
-        # Separator
+        # Separator (uses theme-aware styling from QSS)
         separator = QLabel()
         separator.setFixedHeight(1)
-        separator.setStyleSheet("background-color: #3e3e42;")
+        separator.setStyleSheet("background-color: palette(mid);")
         layout.addWidget(separator)
         
         # Assertions table header

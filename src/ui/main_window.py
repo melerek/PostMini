@@ -816,6 +816,7 @@ class MainWindow(QMainWindow):
         self._update_tab_bar_button_styles()
         self._update_save_button_style()
         self._update_env_combo_style()
+        self._update_response_buttons_style()
         
         # Initialize method combo styling
         self._update_method_style('GET')
@@ -2323,7 +2324,7 @@ class MainWindow(QMainWindow):
         
         self.request_title_label = QLabel("New Request (not saved)")
         self.request_title_label.setObjectName("requestTitleLabel")
-        self.request_title_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))  # Reduced font size
+        self.request_title_label.setStyleSheet("font-size: 13px; font-weight: 500;")  # Use consistent font sizing
         self.request_title_label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)  # Changed to Minimum so it doesn't expand
         self.request_title_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Vertical center
         title_layout.addWidget(self.request_title_label)
@@ -2627,14 +2628,17 @@ class MainWindow(QMainWindow):
         # Metadata labels - use tertiary color for less prominence
         self.status_label = QLabel("Status: -")
         self.status_label.setProperty("class", "tertiary")  # Tertiary text for metadata
+        self.status_label.setStyleSheet("font-size: 11px;")
         status_layout.addWidget(self.status_label)
         
         self.time_label = QLabel("Time: -")
         self.time_label.setProperty("class", "tertiary")  # Tertiary text for metadata
+        self.time_label.setStyleSheet("font-size: 11px;")
         status_layout.addWidget(self.time_label)
         
         self.size_label = QLabel("Size: -")
         self.size_label.setProperty("class", "tertiary")  # Tertiary text for metadata
+        self.size_label.setStyleSheet("font-size: 11px;")
         status_layout.addWidget(self.size_label)
         
         status_layout.addStretch()
@@ -2645,6 +2649,13 @@ class MainWindow(QMainWindow):
         self.copy_response_btn.setProperty("class", "secondary")
         self.copy_response_btn.clicked.connect(self._copy_response)
         self.copy_response_btn.setMaximumWidth(150)
+        self.copy_response_btn.setFixedHeight(24)
+        self.copy_response_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 11px;
+                padding: 4px 8px;
+            }
+        """)
         status_layout.addWidget(self.copy_response_btn)
         
         layout.addLayout(status_layout)
@@ -2680,6 +2691,8 @@ class MainWindow(QMainWindow):
         # Search navigation buttons
         self.search_prev_btn = QPushButton("◀")
         self.search_prev_btn.setMaximumWidth(30)
+        self.search_prev_btn.setFixedHeight(24)
+        self.search_prev_btn.setStyleSheet("font-size: 11px; padding: 4px;")
         self.search_prev_btn.setToolTip("Previous match (Shift+Enter)")
         self.search_prev_btn.clicked.connect(self._search_previous)
         self.search_prev_btn.setEnabled(False)
@@ -2687,6 +2700,8 @@ class MainWindow(QMainWindow):
         
         self.search_next_btn = QPushButton("▶")
         self.search_next_btn.setMaximumWidth(30)
+        self.search_next_btn.setFixedHeight(24)
+        self.search_next_btn.setStyleSheet("font-size: 11px; padding: 4px;")
         self.search_next_btn.setToolTip("Next match (Enter)")
         self.search_next_btn.clicked.connect(self._search_next)
         self.search_next_btn.setEnabled(False)
@@ -2705,6 +2720,13 @@ class MainWindow(QMainWindow):
         self.pretty_raw_btn.setCheckable(True)
         self.pretty_raw_btn.setChecked(True)  # Pretty mode by default
         self.pretty_raw_btn.setMaximumWidth(100)
+        self.pretty_raw_btn.setFixedHeight(24)
+        self.pretty_raw_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 11px;
+                padding: 4px 8px;
+            }
+        """)
         self.pretty_raw_btn.setToolTip("Toggle between Pretty (formatted) and Raw view")
         self.pretty_raw_btn.clicked.connect(self._toggle_pretty_raw)
         toolbar_layout.addWidget(self.pretty_raw_btn)
@@ -2713,6 +2735,13 @@ class MainWindow(QMainWindow):
         self.word_wrap_btn.setCheckable(True)
         self.word_wrap_btn.setChecked(False)  # No wrap by default
         self.word_wrap_btn.setMaximumWidth(100)
+        self.word_wrap_btn.setFixedHeight(24)
+        self.word_wrap_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 11px;
+                padding: 4px 8px;
+            }
+        """)
         self.word_wrap_btn.setToolTip("Toggle word wrap")
         self.word_wrap_btn.clicked.connect(self._toggle_word_wrap)
         toolbar_layout.addWidget(self.word_wrap_btn)
@@ -5521,6 +5550,11 @@ class MainWindow(QMainWindow):
                 # Re-apply variable substitution after script execution
                 # CRITICAL: Re-substitute from ORIGINAL values (before first substitution)
                 # This ensures variables set by the script are properly substituted
+                # IMPORTANT: Must preserve headers/params/body added by the script
+                script_modified_headers = headers.copy()  # Save script-modified headers
+                script_modified_params = params.copy() if params else {}
+                script_modified_body = body
+                
                 if self.env_manager.has_active_environment():
                     print(f"[DEBUG] Re-applying substitution from ORIGINAL values after pre-request script")
                     
@@ -5539,6 +5573,27 @@ class MainWindow(QMainWindow):
                     body = substituted['body']
                     if auth_type == 'Bearer Token':
                         auth_token = substituted['auth_token']
+                    
+                    # CRITICAL FIX: Merge script-added headers back in (script modifications take priority)
+                    # This ensures headers added via pm.request.headers.add() are preserved
+                    for key, value in script_modified_headers.items():
+                        if key not in original_headers:
+                            # Header was added by script, not in original - preserve it
+                            headers[key] = value
+                        elif script_modified_headers[key] != original_headers.get(key):
+                            # Header was modified by script - use script value
+                            headers[key] = value
+                    
+                    # Similarly for params added by script
+                    for key, value in script_modified_params.items():
+                        if original_params and key not in original_params:
+                            params[key] = value
+                        elif original_params and script_modified_params[key] != original_params.get(key):
+                            params[key] = value
+                    
+                    # If script modified body and it's not just variable substitution, preserve script body
+                    if script_modified_body != body and script_modified_body != original_body:
+                        body = script_modified_body
                     
                     print(f"[DEBUG] After re-substitution:")
                     print(f"  URL: {url}")
@@ -5566,6 +5621,22 @@ class MainWindow(QMainWindow):
                     # Re-substitute auth token
                     if original_auth_token:
                         auth_token, _ = VariableSubstitution.substitute(original_auth_token, None, collection_variables, extracted_variables)
+                    
+                    # CRITICAL FIX: Merge script-added headers/params back in
+                    for key, value in script_modified_headers.items():
+                        if key not in (original_headers or {}):
+                            headers[key] = value
+                        elif script_modified_headers[key] != (original_headers or {}).get(key):
+                            headers[key] = value
+                    
+                    for key, value in script_modified_params.items():
+                        if key not in (original_params or {}):
+                            params[key] = value
+                        elif script_modified_params[key] != (original_params or {}).get(key):
+                            params[key] = value
+                    
+                    if script_modified_body != body and script_modified_body != original_body:
+                        body = script_modified_body
                     
                     print(f"[DEBUG] After re-substitution:")
                     print(f"  URL: {url}")
@@ -8520,6 +8591,9 @@ class MainWindow(QMainWindow):
             # Update environment combo
             self._update_env_combo_style()
             
+            # Update response section buttons
+            self._update_response_buttons_style()
+            
             # Update rename button style for new theme
             self._update_rename_button_style()
             
@@ -8857,6 +8931,75 @@ class MainWindow(QMainWindow):
             """
         
         self.env_combo.setStyleSheet(env_combo_style)
+    
+    def _update_response_buttons_style(self):
+        """Update response section button styles based on current theme."""
+        if self.current_theme == 'dark':
+            # Dark theme - transparent with light text
+            button_style = """
+                QPushButton {
+                    background-color: transparent;
+                    color: #E0E0E0;
+                    border: 1px solid #444444;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: #2A2A2A;
+                    border-color: #555555;
+                }
+                QPushButton:pressed {
+                    background-color: #2D2D2D;
+                }
+            """
+            search_btn_style = """
+                background-color: transparent;
+                color: #E0E0E0;
+                border: 1px solid #444444;
+                border-radius: 4px;
+                padding: 4px;
+                font-size: 11px;
+            """
+        else:
+            # Light theme - white background with dark text
+            button_style = """
+                QPushButton {
+                    background-color: #FFFFFF;
+                    color: #212121;
+                    border: 1px solid #BDBDBD;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: #F5F5F5;
+                    border-color: #757575;
+                }
+                QPushButton:pressed {
+                    background-color: #E8E8E8;
+                }
+            """
+            search_btn_style = """
+                background-color: #FFFFFF;
+                color: #212121;
+                border: 1px solid #BDBDBD;
+                border-radius: 4px;
+                padding: 4px;
+                font-size: 11px;
+            """
+        
+        # Apply to all response section buttons
+        if hasattr(self, 'copy_response_btn'):
+            self.copy_response_btn.setStyleSheet(button_style)
+        if hasattr(self, 'pretty_raw_btn'):
+            self.pretty_raw_btn.setStyleSheet(button_style)
+        if hasattr(self, 'word_wrap_btn'):
+            self.word_wrap_btn.setStyleSheet(button_style)
+        if hasattr(self, 'search_prev_btn'):
+            self.search_prev_btn.setStyleSheet(search_btn_style)
+        if hasattr(self, 'search_next_btn'):
+            self.search_next_btn.setStyleSheet(search_btn_style)
     
     # ==================== Context Menu Helpers ====================
     

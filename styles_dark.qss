@@ -226,6 +226,7 @@ QComboBox QAbstractItemView {
     selection-background-color: #2A2A2A;
     selection-color: #E0E0E0;
     padding: 4px;
+    font-size: 11px;  /* Match small UI elements */
 }
 
 QComboBox QAbstractItemView::item {
@@ -248,6 +249,7 @@ QTableWidget {
     color: #E0E0E0;  /* Primary text for data */
     gridline-color: #2D2D2D;  /* Subtle borders */
     border: 1px solid #2D2D2D;
+    font-size: 12px;  /* Match tab headers */
 }
 
 QTableWidget::item {
@@ -516,6 +518,17 @@ QTabWidget#requestTabs QTabBar::tab {
     padding: 8px 28px 8px 8px;  /* Reduced padding, right padding for close button */
     min-width: 40px;
     max-width: 250px;  /* Maximum width limit */
+}
+
+/* Inner tabs (Params, Headers, Body, etc.) - Match font sizing */
+QTabWidget#innerTabs QTabBar::tab {
+    font-size: 12px;
+    padding: 6px 12px;
+}
+
+/* Response tabs - Match font sizing */
+QTabWidget QTabBar::tab {
+    font-size: 12px;
 }
 
 /* Method Combo */

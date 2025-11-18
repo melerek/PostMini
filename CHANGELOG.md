@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.5] - 2025-11-18
+
+### 🐛 Bug Fixes
+
+#### 🎨 Light Theme Button Styling (Critical Fix)
+- **Fixed** - Scripts tab buttons (Clear, Clear Console, Hide) now display correctly in light theme
+- **Fixed** - Response section buttons (Copy Response, Pretty, Wrap, Search) now use proper light theme colors
+- **Fixed** - Button sizes consistent across both themes (reduced light theme padding from 4px 12px to 4px 8px)
+- **Fixed** - Clear button and Snippets dropdown now perfectly vertically aligned
+- **Fixed** - Test tab separator no longer uses hardcoded dark theme color
+
+#### 🔧 Pre-request Script Headers Preservation
+- **Fixed** - Headers added via `pm.request.headers.add()` in pre-request scripts are now correctly included in HTTP requests
+- **Root cause** - Variable re-substitution was discarding script-modified headers
+- **Solution** - Script-modified headers are preserved and merged after variable re-substitution with proper priority
+
+### 🔧 Technical Improvements
+- **Theme-aware button system** - Added `_update_response_buttons_style()` method for dynamic theme switching
+- **Console button theme support** - Extended `_update_clear_button_styles()` to include Clear Console and Hide buttons
+- **Button reference storage** - Stored references to all theme-dependent buttons for proper updates
+- **Dual-theme consistency** - All inline button styles now properly adapt to active theme
+
+### 📚 Documentation
+- **Added** comprehensive "Styling & Theme Management" section to copilot-instructions.md
+- **Documented** dual-theme update checklist and critical patterns
+- **Added** bug prevention guidelines for theme-related changes
+
+---
+
 ## [1.9.4] - 2025-11-17
 
 ### ✨ New Features
