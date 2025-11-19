@@ -11,6 +11,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.9] - 2025-11-19
+
+### ✨ New Features
+
+#### 🔒 Security Scanner (OWASP-based Vulnerability Detection)
+**Major new feature for API security testing - fully local, no data leaves your network!**
+
+- **Built-in OWASP Security Checks** - Analyze API responses for 25+ common vulnerabilities:
+  - Missing security headers (HSTS, X-Frame-Options, CSP, X-Content-Type-Options, etc.)
+  - Insecure cookie configurations (missing HttpOnly, Secure, SameSite flags)
+  - Sensitive data exposure (credit cards, SSNs, API keys, private keys, AWS credentials)
+  - SQL injection error messages (MySQL, PostgreSQL, Oracle, SQL Server, SQLite)
+  - Server version disclosure (Server, X-Powered-By, X-AspNet-Version headers)
+  - Directory listing exposure
+  - Verbose error messages and stack traces
+  - Dangerous HTTP methods (PUT, DELETE, TRACE)
+  - CORS misconfigurations
+  - Content-Type mismatches
+  
+- **Comprehensive Reporting**:
+  - Severity levels: Critical, High, Medium, Low, Info
+  - CWE (Common Weakness Enumeration) identifiers
+  - OWASP Top 10 2021 category mapping
+  - Evidence capture for each finding
+  - Detailed remediation recommendations
+  
+- **Professional Report Generation**:
+  - Export to HTML (beautiful, print-ready reports)
+  - Export to JSON (machine-readable for CI/CD integration)
+  - Summary statistics dashboard
+  - Severity-based color coding and filtering
+  
+- **Privacy-First Design**:
+  - ✅ 100% local execution - no external API calls
+  - ✅ No data sent outside your organization
+  - ✅ Perfect for VPN/air-gapped environments
+  - ✅ All scans stored locally in SQLite database
+  
+- **Seamless Workflow Integration**:
+  - **Auto-scan on every request** (optional) - Enable in Settings → "Automatically run security scan on each request"
+  - View scan results in "Security Scan" tab within response panel (always visible, right next to Response Body, Headers)
+  - Tab badge shows severity: "X Critical", "X High", "X issues", or "✓" for all clear
+  - Scans automatically linked to request history for audit trail
+  - Export reports to HTML (beautiful, print-ready) or JSON (CI/CD integration)
+
+### 🐛 Bug Fixes
+- **Fixed** - Query parameter display inconsistency in Request Details tab after pre-request script execution
+- **Fixed** - Request history now displays correct collection names instead of request names
+- **Fixed** - Request history REQUEST column shows "METHOD + Request Name" (matching collections tree display)
+- **Fixed** - Request history STATUS column properly labeled
+- **Fixed** - Request Details tab now first/default tab in history panel
+- **Fixed** - History saves actual substituted variable values (not template {{variables}})
+
+### 🔧 Technical Improvements
+- **New Components**:
+  - `SecurityScanner` - 25 OWASP vulnerability checks with CWE/OWASP mapping (660 lines)
+  - `SecurityScanTab` - Response panel widget for displaying scan results (249 lines)
+  - `test_security_integration.py` - 8 integration tests validating API contracts
+- **Enhanced Components**:
+  - `HistoryPanelWidget` - Now includes 4-tab interface (Request Details, Response Body, Headers, Security Scan)
+  - Database schema - Added `security_scans`, `security_findings` tables with FK to `request_history`
+- **Code Quality**:
+  - 19 new tests (11 unit + 8 integration) - all passing
+  - Integration tests prevent parameter name mismatches between components
+  - Type-safe API contracts validated in test suite
+
+### 📚 Documentation
+- **Added macOS installation instructions** - Complete guide for running PostMini on macOS from source
+
+---
+
 ## [1.9.8] - 2025-11-18
 
 ### ✨ New Features

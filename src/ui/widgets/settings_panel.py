@@ -17,7 +17,7 @@ class SettingsPanel(QWidget):
     setting_changed = pyqtSignal(str, str)  # key, value
     check_updates_requested = pyqtSignal()  # Emitted when user clicks "Check for Updates"
     
-    APP_VERSION = "1.9.8"  # Current application version
+    APP_VERSION = "1.9.9"  # Current application version
     
     def __init__(self, db):
         super().__init__()
@@ -81,6 +81,13 @@ class SettingsPanel(QWidget):
         
         protocol_row.addStretch()
         request_layout.addLayout(protocol_row)
+        
+        # Security Scan on each request
+        self.auto_security_scan = QCheckBox("Perform security scan on each request")
+        self.auto_security_scan.setToolTip("Automatically run OWASP security checks on every API response")
+        self.auto_security_scan.setChecked(False)  # Default disabled
+        self.auto_security_scan.stateChanged.connect(self._on_auto_security_scan_changed)
+        request_layout.addWidget(self.auto_security_scan)
         
         request_group.setLayout(request_layout)
         content_layout.addWidget(request_group)
@@ -186,6 +193,12 @@ class SettingsPanel(QWidget):
             self.auto_check_updates.blockSignals(True)
             self.auto_check_updates.setChecked(auto_check.lower() == 'true')
             self.auto_check_updates.blockSignals(False)
+            
+            # Load auto security scan setting
+            auto_scan = self.db.get_setting('auto_security_scan', 'false')
+            self.auto_security_scan.blockSignals(True)
+            self.auto_security_scan.setChecked(auto_scan.lower() == 'true')
+            self.auto_security_scan.blockSignals(False)
         except Exception as e:
             print(f"Failed to load settings: {e}")
     
@@ -211,6 +224,15 @@ class SettingsPanel(QWidget):
             print(f"[Settings] Auto-check updates: {'enabled' if enabled else 'disabled'}")
         except Exception as e:
             print(f"Failed to save auto-check setting: {e}")
+    
+    def _on_auto_security_scan_changed(self):
+        """Handle auto security scan setting change."""
+        enabled = self.auto_security_scan.isChecked()
+        try:
+            self.db.set_setting('auto_security_scan', 'true' if enabled else 'false')
+            print(f"[Settings] Auto security scan: {'enabled' if enabled else 'disabled'}")
+        except Exception as e:
+            print(f"Failed to save auto security scan setting: {e}")
     
     def _on_check_updates_clicked(self):
         """Handle Check for Updates button click."""
@@ -250,4 +272,12 @@ class SettingsPanel(QWidget):
     def should_auto_check_updates(self) -> bool:
         """Check if auto-update check is enabled."""
         return self.auto_check_updates.isChecked()
+    
+    def get_auto_security_scan_enabled(self) -> bool:
+        """Get whether auto security scan is enabled"""
+        try:
+            value = self.db.get_setting('auto_security_scan', 'false')
+            return value.lower() == 'true'
+        except Exception:
+            return False
 

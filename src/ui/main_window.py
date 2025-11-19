@@ -39,6 +39,7 @@ from src.ui.widgets.syntax_highlighter import apply_syntax_highlighting
 from src.ui.widgets.recent_requests_widget import RecentRequestsWidget
 from src.ui.widgets.method_badge import MethodBadge, StatusBadge
 from src.ui.widgets.variable_extraction_widget import VariableExtractionWidget
+from src.ui.widgets.security_scan_tab import SecurityScanTab
 from src.ui.widgets.variable_inspector_widget import VariableInspectorDialog
 from src.ui.widgets.settings_panel import SettingsPanel
 from src.ui.widgets.git_sync_panel import GitSyncPanel
@@ -48,6 +49,8 @@ from src.ui.widgets.variable_library_widget import VariableLibraryWidget
 from src.ui.widgets.variable_highlight_delegate import VariableSyntaxHighlighter, VariableHighlightDelegate, HighlightedLineEdit
 from src.ui.widgets.empty_state import NoRequestEmptyState, NoResponseEmptyState, NoCollectionsEmptyState
 from src.features.test_engine import TestEngine, TestAssertion
+from src.features.security_scanner import SecurityScanner
+from src.features.security_report_generator import SecurityReportGenerator
 from src.ui.dialogs.collection_test_runner import CollectionTestRunnerDialog
 from src.ui.dialogs.git_sync_dialog import GitSyncDialog
 from src.ui.dialogs.conflict_resolution_dialog import ConflictResolutionDialog
@@ -728,6 +731,10 @@ class MainWindow(QMainWindow):
         # Initialize script engine
         self.script_engine = ScriptEngine(timeout_ms=5000)
         
+        # Initialize security scanner
+        self.security_scanner = SecurityScanner()
+        self.security_report_generator = SecurityReportGenerator(self.db)
+        
         # Initialize environment manager with database reference for variable persistence
         self.env_manager = EnvironmentManager(db=self.db)
         
@@ -825,9 +832,9 @@ class MainWindow(QMainWindow):
         """Fix splitter sizes after window is shown."""
         print(f"[DEBUG] _fix_splitter_sizes called after window shown")
         if hasattr(self, 'main_splitter'):
-            self.main_splitter.setSizes([400, 0, 0, 0, 0, 1000, 0])
+            self.main_splitter.setSizes([400, 0, 0, 0, 0, 1000])
             actual = self.main_splitter.sizes()
-            print(f"[DEBUG] Splitter sizes fixed to: [400, 0, 0, 0, 0, 1000, 0]")
+            print(f"[DEBUG] Splitter sizes fixed to: [400, 0, 0, 0, 0, 1000]")
             print(f"[DEBUG] Actual sizes after fix: {actual}")
     
     def _get_icon_path(self, icon_name: str) -> str:
@@ -1272,7 +1279,7 @@ class MainWindow(QMainWindow):
         self.history_panel_widget.setGraphicsEffect(history_shadow)
         
         # Set splitter sizes for ALL widgets (including hidden ones)
-        # Splitter now has 6 widgets: collections(0), settings(1), git(2), variables(3), environments(4), center(5)
+        # Splitter now has 7 widgets: collections(0), settings(1), git(2), variables(3), environments(4), security(5), center(6)
         # Set size to 0 for hidden widgets, proper sizes for visible ones
         print(f"[DEBUG] main_splitter widget count: {main_splitter.count()}")
         for i in range(main_splitter.count()):
@@ -1286,7 +1293,7 @@ class MainWindow(QMainWindow):
         self.center_container = center_container
         
         # Set initial sizes (Qt may adjust these until window is shown)
-        # Now only 6 widgets: collections, settings, git, variables, environments, center
+        # Now 6 widgets: collections(0), settings(1), git(2), variables(3), environments(4), center(5)
         main_splitter.setSizes([400, 0, 0, 0, 0, 1000])
         actual_sizes = main_splitter.sizes()
         print(f"[DEBUG] Splitter sizes set to: [400, 0, 0, 0, 0, 1000]")
@@ -2834,6 +2841,12 @@ class MainWindow(QMainWindow):
         self.variable_extraction_widget = VariableExtractionWidget()
         self.variable_extraction_widget.variable_extracted.connect(self._on_variable_extracted)
         self.response_tabs.addTab(self.variable_extraction_widget, "Extract Variables from Response")
+        
+        # Security Scan tab
+        self.security_scan_tab = SecurityScanTab()
+        self.security_scan_tab.export_requested.connect(self._on_security_report_export)
+        self.security_scan_tab_index = self.response_tabs.addTab(self.security_scan_tab, "Security Scan")
+        # Security scan tab visible by default - shows empty state until scan is run
         
         # Test Results tab - moved from collapsible panel to tab
         self.test_results_viewer = TestResultsViewer()
@@ -5652,11 +5665,24 @@ class MainWindow(QMainWindow):
                             headers[key] = value
                     
                     # Similarly for params added by script
+                    # CRITICAL: Merge script-modified params properly
+                    # Re-substituted params from original_params will have updated variable values
+                    # We need to preserve params that were:
+                    # 1. Added by script (not in original)
+                    # 2. Modified by script to a literal value (not a variable reference)
                     for key, value in script_modified_params.items():
                         if original_params and key not in original_params:
+                            # Param was added by script
                             params[key] = value
-                        elif original_params and script_modified_params[key] != original_params.get(key):
-                            params[key] = value
+                        elif original_params and key in original_params:
+                            # Param existed in original - check if script modified it
+                            # If the original had a variable reference and script set a literal value, use script value
+                            # Otherwise, use the re-substituted value (which has updated variable values)
+                            original_value = original_params[key]
+                            if '{{' not in str(original_value) and script_modified_params[key] != original_value:
+                                # Original was literal and script changed it - use script value
+                                params[key] = value
+                            # If original had {{variable}}, params[key] already has the re-substituted value with updated variable
                     
                     # If script modified body and it's not just variable substitution, preserve script body
                     if script_modified_body != body and script_modified_body != original_body:
@@ -5689,7 +5715,11 @@ class MainWindow(QMainWindow):
                     if original_auth_token:
                         auth_token, _ = VariableSubstitution.substitute(original_auth_token, None, collection_variables, extracted_variables)
                     
-                    # CRITICAL FIX: Merge script-added headers/params back in
+                    # CRITICAL FIX: Merge script-added headers/params back in properly
+                    # After re-substitution, params will have updated variable values
+                    # We only need to preserve params that were:
+                    # 1. Added by script (not in original)
+                    # 2. Modified by script to a literal value (not a variable reference)
                     for key, value in script_modified_headers.items():
                         if key not in (original_headers or {}):
                             headers[key] = value
@@ -5698,9 +5728,15 @@ class MainWindow(QMainWindow):
                     
                     for key, value in script_modified_params.items():
                         if key not in (original_params or {}):
+                            # Param was added by script
                             params[key] = value
-                        elif script_modified_params[key] != (original_params or {}).get(key):
-                            params[key] = value
+                        elif key in (original_params or {}):
+                            # Param existed in original - check if script modified it
+                            original_value = (original_params or {})[key]
+                            if '{{' not in str(original_value) and script_modified_params[key] != original_value:
+                                # Original was literal and script changed it - use script value
+                                params[key] = value
+                            # If original had {{variable}}, params[key] already has the re-substituted value
                     
                     if script_modified_body != body and script_modified_body != original_body:
                         body = script_modified_body
@@ -5794,6 +5830,9 @@ class MainWindow(QMainWindow):
     
     def _on_request_finished(self, response: ApiResponse):
         """Handle successful request completion."""
+        # Store response for security scanning
+        self.last_response = response
+        
         # Re-enable send button with success indicator
         self.send_btn.setEnabled(True)
         self.send_btn.setText("✓ Send")
@@ -5930,6 +5969,13 @@ class MainWindow(QMainWindow):
         # Execute tests
         self._execute_tests_on_response(response)
         
+        # Auto-run security scan if enabled in settings
+        scan_id = None
+        if hasattr(self, 'settings_pane'):
+            auto_scan_enabled = self.settings_pane.get_auto_security_scan_enabled()
+            if auto_scan_enabled:
+                scan_id = self._auto_run_security_scan(response)
+        
         # Save cookies from response to database
         try:
             self.api_client.save_cookies_to_db(self.db)
@@ -5939,8 +5985,8 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"[DEBUG] Error saving cookies: {e}")
         
-        # Save to history
-        self._save_to_history(response=response)
+        # Save to history (with scan_id if scan was performed)
+        self._save_to_history(response=response, scan_id=scan_id)
     
     def _reset_send_button(self):
         """Reset the send button to its default state."""
@@ -7409,17 +7455,29 @@ class MainWindow(QMainWindow):
     # ==================== Request History ====================
     
     def _save_to_history(self, response: Optional[ApiResponse] = None, 
-                        error_message: Optional[str] = None):
+                        error_message: Optional[str] = None,
+                        scan_id: Optional[int] = None):
         """Save the current request to history."""
         try:
-            # Get request details
-            method = self.method_combo.currentText()
-            url = self.url_input.text()
-            params = self._get_table_as_dict(self.params_table)
-            headers = self._get_table_as_dict(self.headers_table)
-            body = self.body_input.toPlainText()
-            auth_type = self.auth_type_combo.currentText()
-            auth_token = self.auth_token_input.text()
+            # Get ACTUAL request details that were sent (after variable substitution)
+            # Use current_request_details if available (contains substituted values)
+            if hasattr(self, 'current_request_details') and self.current_request_details:
+                method = self.current_request_details.get('method', self.method_combo.currentText())
+                url = self.current_request_details.get('url', self.url_input.text())
+                params = self.current_request_details.get('params') or self._get_table_as_dict(self.params_table)
+                headers = self.current_request_details.get('headers') or self._get_table_as_dict(self.headers_table)
+                body = self.current_request_details.get('body', self.body_input.toPlainText())
+                auth_type = self.current_request_details.get('auth_type', self.auth_type_combo.currentText())
+                auth_token = self.current_request_details.get('auth_token', self.auth_token_input.text())
+            else:
+                # Fallback to UI values if current_request_details not available
+                method = self.method_combo.currentText()
+                url = self.url_input.text()
+                params = self._get_table_as_dict(self.params_table)
+                headers = self._get_table_as_dict(self.headers_table)
+                body = self.body_input.toPlainText()
+                auth_type = self.auth_type_combo.currentText()
+                auth_token = self.auth_token_input.text()
             
             # Get request name if available
             request_name = None
@@ -7468,7 +7526,8 @@ class MainWindow(QMainWindow):
                 response_body=response_body,
                 response_time=response_time,
                 response_size=response_size,
-                error_message=error_message
+                error_message=error_message,
+                scan_id=scan_id
             )
         except Exception as e:
             print(f"Failed to save history: {e}")
@@ -7924,6 +7983,154 @@ class MainWindow(QMainWindow):
                 "Error",
                 f"Failed to delete variable: {str(e)}"
             )
+    
+    def _on_security_report_export(self, format_type: str):
+        """Handle security report export request."""
+        try:
+            # Get current scan results from security scan tab
+            scan_results = self.security_scan_tab.get_scan_results()
+            if not scan_results:
+                QMessageBox.warning(
+                    self,
+                    "No Scan Results",
+                    "No security scan results to export. Run a security scan first."
+                )
+                return
+            
+            # Prepare default filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if format_type == "html":
+                default_name = f"security_report_{timestamp}.html"
+                file_filter = "HTML Files (*.html);;All Files (*)"
+            else:  # json
+                default_name = f"security_report_{timestamp}.json"
+                file_filter = "JSON Files (*.json);;All Files (*)"
+            
+            # Get save path
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Security Report",
+                default_name,
+                file_filter
+            )
+            
+            if not file_path:
+                return
+            
+            # Generate and save report
+            report_generator = SecurityReportGenerator()
+            if format_type == "html":
+                report_content = report_generator.generate_html_report(scan_results)
+            else:
+                report_content = report_generator.generate_json_report(scan_results)
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(report_content)
+            
+            self._show_status(f"Security report exported to {file_path}", "success")
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"Failed to export security report: {str(e)}"
+            )
+    
+    def _auto_run_security_scan(self, response: ApiResponse) -> Optional[int]:
+        """
+        Automatically run security scan on response if auto-scan is enabled.
+        
+        Args:
+            response: The API response to scan
+            
+        Returns:
+            scan_id if scan was performed, None otherwise
+        """
+        try:
+            # Get request details
+            url = self.url_input.text().strip()
+            method = self.method_combo.currentText()
+            request_headers = self._get_table_as_dict(self.headers_table)
+            
+            # Get response data
+            response_headers = dict(response.headers) if hasattr(response, 'headers') else dict(response.response.headers)
+            response_body = response.text if hasattr(response, 'text') else str(response.response.text)
+            response_status = response.status_code if hasattr(response, 'status_code') else response.response.status_code
+            
+            # Perform security scan
+            scan_results = self.security_scanner.scan_response(
+                url=url,
+                method=method,
+                response_headers=response_headers,
+                response_body=response_body,
+                response_status=response_status,
+                request_headers=request_headers
+            )
+            
+            # Save to database
+            scan_id = self.db.create_security_scan(
+                request_id=self.current_request_id if hasattr(self, 'current_request_id') else None,
+                url=url,
+                method=method,
+                timestamp=datetime.now().isoformat(),
+                findings_count=len(scan_results),
+                critical_count=sum(1 for f in scan_results if f.severity == 'Critical'),
+                high_count=sum(1 for f in scan_results if f.severity == 'High'),
+                medium_count=sum(1 for f in scan_results if f.severity == 'Medium'),
+                low_count=sum(1 for f in scan_results if f.severity == 'Low'),
+                info_count=sum(1 for f in scan_results if f.severity == 'Info')
+            )
+            
+            # Save findings
+            for finding in scan_results:
+                self.db.create_security_finding(
+                    scan_id=scan_id,
+                    check_id=finding.check_id,
+                    title=finding.title,
+                    severity=finding.severity,
+                    description=finding.description,
+                    recommendation=finding.recommendation,
+                    timestamp=finding.timestamp,
+                    evidence=finding.evidence,
+                    cwe_id=finding.cwe_id,
+                    owasp_category=finding.owasp_category
+                )
+            
+            # Get findings from database (includes id field needed by UI)
+            findings_from_db = self.db.get_security_findings(scan_id)
+            
+            # Display results in SecurityScanTab
+            severity_stats = {
+                'critical': sum(1 for f in scan_results if f.severity == 'critical'),
+                'high': sum(1 for f in scan_results if f.severity == 'high'),
+                'medium': sum(1 for f in scan_results if f.severity == 'medium'),
+                'low': sum(1 for f in scan_results if f.severity == 'low'),
+                'info': sum(1 for f in scan_results if f.severity == 'info')
+            }
+            self.security_scan_tab.set_scan_results(scan_id, findings_from_db, severity_stats)
+            
+            # Update tab text with finding summary (tab is always visible)
+            if scan_results:
+                critical_count = severity_stats['critical']
+                high_count = severity_stats['high']
+                if critical_count > 0:
+                    self.response_tabs.setTabText(self.security_scan_tab_index, f"Security Scan ({critical_count} Critical)")
+                elif high_count > 0:
+                    self.response_tabs.setTabText(self.security_scan_tab_index, f"Security Scan ({high_count} High)")
+                else:
+                    self.response_tabs.setTabText(self.security_scan_tab_index, f"Security Scan ({len(scan_results)} issues)")
+            else:
+                # No findings - show success checkmark
+                self.response_tabs.setTabText(self.security_scan_tab_index, "Security Scan ✓")
+            
+            print(f"[Security] Auto-scan complete: {len(scan_results)} findings")
+            
+            return scan_id  # Return scan_id for linking to history
+            
+        except Exception as e:
+            print(f"[Security] Auto-scan failed: {str(e)}")
+            # Don't show error to user - auto-scan is background operation
+            return None
     
     def _show_shortcuts_help(self):
         """Show keyboard shortcuts help dialog."""
@@ -9886,6 +10093,193 @@ class MainWindow(QMainWindow):
             f"Failed to download update:\n\n{error_msg}\n\n"
             "Please try again later or download manually from the website."
         )
+    
+    # ==================== Security Scanner Methods ====================
+    
+    def _run_security_scan(self):
+        """Run security scan on the current response."""
+        if not hasattr(self, 'last_response') or not self.last_response:
+            QMessageBox.warning(
+                self,
+                "No Response",
+                "Please send a request first before running a security scan."
+            )
+            return
+        
+        # Get request details
+        if not hasattr(self, 'current_request_details') or not self.current_request_details:
+            QMessageBox.warning(
+                self,
+                "No Request Details",
+                "Request details are not available for scanning."
+            )
+            return
+        
+        details = self.current_request_details
+        response = self.last_response
+        
+        try:
+            # Perform security scan
+            findings = self.security_scanner.scan_response(
+                method=details['method'],
+                url=details['url'],
+                request_headers=details.get('headers', {}),
+                response_status=response.status_code,
+                response_headers=dict(response.headers),
+                response_body=response.text,
+                request_secure=details['url'].startswith('https://')
+            )
+            
+            # Get severity stats
+            stats = self.security_scanner.get_severity_stats(findings)
+            
+            # Save scan to database
+            timestamp = datetime.now().isoformat()
+            scan_id = self.db.create_security_scan(
+                url=details['url'],
+                method=details['method'],
+                timestamp=timestamp,
+                request_id=self.current_request_id,
+                collection_id=self.current_collection_id,
+                scan_name=self.current_request_name,
+                findings_count=len(findings),
+                critical_count=stats['critical'],
+                high_count=stats['high'],
+                medium_count=stats['medium'],
+                low_count=stats['low'],
+                info_count=stats['info']
+            )
+            
+            # Save findings
+            for finding in findings:
+                self.db.create_security_finding(
+                    scan_id=scan_id,
+                    check_id=finding.check_id,
+                    title=finding.title,
+                    severity=finding.severity,
+                    description=finding.description,
+                    recommendation=finding.recommendation,
+                    timestamp=finding.timestamp,
+                    evidence=finding.evidence,
+                    cwe_id=finding.cwe_id,
+                    owasp_category=finding.owasp_category
+                )
+            
+            # Show results
+            if len(findings) == 0:
+                self._show_status("✅ Security scan complete: No issues found", "success")
+            else:
+                self._show_status(f"🔒 Security scan complete: {len(findings)} issues found", "warning")
+            
+            # Update security panel if visible
+            if self.security_pane.isVisible():
+                self.security_pane.display_scan_results(scan_id)
+            else:
+                # Show security panel with results
+                self._switch_left_panel('security')
+                self.security_pane.display_scan_results(scan_id)
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Scan Error",
+                f"An error occurred during security scanning:\n\n{str(e)}"
+            )
+            print(f"[ERROR] Security scan failed: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _export_security_report(self, scan_id: int):
+        """Export security scan report."""
+        try:
+            # Ask user for format
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QRadioButton, QDialogButtonBox
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Export Security Report")
+            dialog.setModal(True)
+            
+            layout = QVBoxLayout()
+            layout.addWidget(QLabel("Select export format:"))
+            
+            html_radio = QRadioButton("HTML Report (Recommended)")
+            html_radio.setChecked(True)
+            json_radio = QRadioButton("JSON (Machine-readable)")
+            
+            layout.addWidget(html_radio)
+            layout.addWidget(json_radio)
+            
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            layout.addWidget(buttons)
+            
+            dialog.setLayout(layout)
+            
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            
+            # Get format
+            if html_radio.isChecked():
+                format_type = "html"
+                file_filter = "HTML Files (*.html)"
+                default_ext = ".html"
+            else:
+                format_type = "json"
+                file_filter = "JSON Files (*.json)"
+                default_ext = ".json"
+            
+            # Ask for save location
+            scan = self.db.get_security_scan(scan_id)
+            if not scan:
+                QMessageBox.warning(self, "Error", "Scan not found.")
+                return
+            
+            timestamp = datetime.fromisoformat(scan['timestamp']).strftime("%Y%m%d_%H%M%S")
+            default_filename = f"security_report_{timestamp}{default_ext}"
+            
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Security Report",
+                default_filename,
+                file_filter
+            )
+            
+            if not file_path:
+                return
+            
+            # Generate and save report
+            if format_type == "html":
+                report_content = self.security_report_generator.generate_html_report(scan_id)
+            else:
+                report_content = self.security_report_generator.generate_json_report(scan_id)
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(report_content)
+            
+            self._show_status(f"✅ Security report exported to {file_path}", "success")
+            
+            # Ask if user wants to open it
+            reply = QMessageBox.question(
+                self,
+                "Report Exported",
+                f"Security report exported successfully.\n\nDo you want to open it now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                import os
+                os.startfile(file_path)
+        
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"An error occurred while exporting the report:\n\n{str(e)}"
+            )
+            print(f"[ERROR] Report export failed: {e}")
+            import traceback
+            traceback.print_exc()
     
     def closeEvent(self, event):
         """Handle application close event."""

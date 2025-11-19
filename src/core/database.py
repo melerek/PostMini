@@ -301,6 +301,54 @@ class DatabaseManager:
             # Column already exists, ignore
             pass
         
+        # Create security scans table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS security_scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER,
+                collection_id INTEGER,
+                scan_name TEXT,
+                url TEXT NOT NULL,
+                method TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                findings_count INTEGER DEFAULT 0,
+                critical_count INTEGER DEFAULT 0,
+                high_count INTEGER DEFAULT 0,
+                medium_count INTEGER DEFAULT 0,
+                low_count INTEGER DEFAULT 0,
+                info_count INTEGER DEFAULT 0,
+                scan_enabled INTEGER DEFAULT 1,
+                FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE,
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Create security findings table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS security_findings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scan_id INTEGER NOT NULL,
+                check_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                description TEXT NOT NULL,
+                recommendation TEXT NOT NULL,
+                evidence TEXT,
+                cwe_id TEXT,
+                owasp_category TEXT,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY (scan_id) REFERENCES security_scans(id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Add scan_id column to request_history table if it doesn't exist (migration)
+        try:
+            cursor.execute("ALTER TABLE request_history ADD COLUMN scan_id INTEGER REFERENCES security_scans(id) ON DELETE SET NULL")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
         self.connection.commit()
     
     # ==================== Collection Operations ====================
@@ -673,7 +721,8 @@ class DatabaseManager:
                             response_body: Optional[str] = None,
                             response_time: Optional[float] = None,
                             response_size: Optional[int] = None,
-                            error_message: Optional[str] = None) -> int:
+                            error_message: Optional[str] = None,
+                            scan_id: Optional[int] = None) -> int:
         """
         Save a request execution to history.
         
@@ -695,6 +744,7 @@ class DatabaseManager:
             response_time: Response time in seconds
             response_size: Response size in bytes
             error_message: Error message if request failed
+            scan_id: ID of security scan (if applicable)
             
         Returns:
             ID of the history entry
@@ -715,12 +765,12 @@ class DatabaseManager:
             (timestamp, collection_id, request_id, request_name, method, url,
              request_params, request_headers, request_body, request_auth_type,
              request_auth_token, response_status, response_headers, response_body,
-             response_time, response_size, error_message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             response_time, response_size, error_message, scan_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (timestamp, collection_id, request_id, request_name, method, url,
               params_json, req_headers_json, request_body, request_auth_type,
               request_auth_token, response_status, resp_headers_json, response_body,
-              response_time, response_size, error_message))
+              response_time, response_size, error_message, scan_id))
         
         self.connection.commit()
         return cursor.lastrowid
@@ -2022,6 +2072,236 @@ class DatabaseManager:
         cursor = self.connection.cursor()
         cursor.execute("SELECT key, value FROM app_settings")
         return {row[0]: row[1] for row in cursor.fetchall()}
+    
+    # ==================== Security Scan Operations ====================
+    
+    def create_security_scan(
+        self,
+        url: str,
+        method: str,
+        timestamp: str,
+        request_id: Optional[int] = None,
+        collection_id: Optional[int] = None,
+        scan_name: Optional[str] = None,
+        findings_count: int = 0,
+        critical_count: int = 0,
+        high_count: int = 0,
+        medium_count: int = 0,
+        low_count: int = 0,
+        info_count: int = 0
+    ) -> int:
+        """
+        Create a new security scan record.
+        
+        Args:
+            url: The URL that was scanned
+            method: HTTP method used
+            timestamp: ISO timestamp of scan
+            request_id: Optional ID of associated request
+            collection_id: Optional ID of associated collection
+            scan_name: Optional name for the scan
+            findings_count: Total number of findings
+            critical_count: Number of critical findings
+            high_count: Number of high severity findings
+            medium_count: Number of medium severity findings
+            low_count: Number of low severity findings
+            info_count: Number of informational findings
+        
+        Returns:
+            ID of the newly created scan
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            INSERT INTO security_scans 
+            (request_id, collection_id, scan_name, url, method, timestamp, findings_count,
+             critical_count, high_count, medium_count, low_count, info_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (request_id, collection_id, scan_name, url, method, timestamp, findings_count,
+              critical_count, high_count, medium_count, low_count, info_count))
+        self.connection.commit()
+        return cursor.lastrowid
+    
+    def create_security_finding(
+        self,
+        scan_id: int,
+        check_id: str,
+        title: str,
+        severity: str,
+        description: str,
+        recommendation: str,
+        timestamp: str,
+        evidence: Optional[str] = None,
+        cwe_id: Optional[str] = None,
+        owasp_category: Optional[str] = None
+    ) -> int:
+        """
+        Create a new security finding record.
+        
+        Args:
+            scan_id: ID of the parent security scan
+            check_id: Unique identifier for the check (e.g., SEC001)
+            title: Finding title
+            severity: Severity level (critical, high, medium, low, info)
+            description: Detailed description of the issue
+            recommendation: How to fix the issue
+            timestamp: ISO timestamp of finding
+            evidence: Optional evidence/proof of the issue
+            cwe_id: Optional CWE identifier
+            owasp_category: Optional OWASP category
+        
+        Returns:
+            ID of the newly created finding
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            INSERT INTO security_findings 
+            (scan_id, check_id, title, severity, description, recommendation, 
+             evidence, cwe_id, owasp_category, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (scan_id, check_id, title, severity, description, recommendation,
+              evidence, cwe_id, owasp_category, timestamp))
+        self.connection.commit()
+        return cursor.lastrowid
+    
+    def get_security_scans(
+        self,
+        request_id: Optional[int] = None,
+        collection_id: Optional[int] = None,
+        limit: int = 100
+    ) -> List[Dict]:
+        """
+        Retrieve security scans.
+        
+        Args:
+            request_id: Optional filter by request ID
+            collection_id: Optional filter by collection ID
+            limit: Maximum number of scans to return
+        
+        Returns:
+            List of security scan dictionaries
+        """
+        cursor = self.connection.cursor()
+        
+        if request_id is not None:
+            cursor.execute("""
+                SELECT * FROM security_scans 
+                WHERE request_id = ? 
+                ORDER BY timestamp DESC 
+                LIMIT ?
+            """, (request_id, limit))
+        elif collection_id is not None:
+            cursor.execute("""
+                SELECT * FROM security_scans 
+                WHERE collection_id = ? 
+                ORDER BY timestamp DESC 
+                LIMIT ?
+            """, (collection_id, limit))
+        else:
+            cursor.execute("""
+                SELECT * FROM security_scans 
+                ORDER BY timestamp DESC 
+                LIMIT ?
+            """, (limit,))
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    
+    def get_security_scan(self, scan_id: int) -> Optional[Dict]:
+        """
+        Retrieve a specific security scan by ID.
+        
+        Args:
+            scan_id: ID of the scan
+        
+        Returns:
+            Dictionary containing scan data or None if not found
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM security_scans WHERE id = ?", (scan_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    
+    def get_security_findings(self, scan_id: int) -> List[Dict]:
+        """
+        Retrieve all findings for a specific security scan.
+        
+        Args:
+            scan_id: ID of the security scan
+        
+        Returns:
+            List of finding dictionaries
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT * FROM security_findings 
+            WHERE scan_id = ? 
+            ORDER BY 
+                CASE severity
+                    WHEN 'critical' THEN 1
+                    WHEN 'high' THEN 2
+                    WHEN 'medium' THEN 3
+                    WHEN 'low' THEN 4
+                    WHEN 'info' THEN 5
+                END,
+                id
+        """, (scan_id,))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    
+    def delete_security_scan(self, scan_id: int) -> bool:
+        """
+        Delete a security scan and all its findings.
+        
+        Args:
+            scan_id: ID of the scan to delete
+        
+        Returns:
+            True if scan was deleted, False if not found
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM security_scans WHERE id = ?", (scan_id,))
+        self.connection.commit()
+        return cursor.rowcount > 0
+    
+    def get_latest_scan_for_request(self, request_id: int) -> Optional[Dict]:
+        """
+        Get the most recent security scan for a specific request.
+        
+        Args:
+            request_id: ID of the request
+        
+        Returns:
+            Dictionary containing scan data or None if no scans found
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT * FROM security_scans 
+            WHERE request_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT 1
+        """, (request_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    
+    def toggle_security_scanning(self, request_id: int, enabled: bool) -> bool:
+        """
+        Enable or disable security scanning for a request.
+        
+        Args:
+            request_id: ID of the request
+            enabled: True to enable scanning, False to disable
+        
+        Returns:
+            True if updated successfully
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            UPDATE security_scans 
+            SET scan_enabled = ? 
+            WHERE request_id = ?
+        """, (1 if enabled else 0, request_id))
+        self.connection.commit()
+        return True
     
     def close(self):
         """Close the database connection."""

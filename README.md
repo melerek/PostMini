@@ -261,7 +261,74 @@ PostMini/
 
 See [INSTALLER_GUIDE.md](docs/guides/INSTALLER_GUIDE.md) for complete installation documentation.
 
-### For Developers (From Source)
+### For macOS Users (From Source) 🍎
+
+PostMini runs natively on macOS! Follow these steps:
+
+#### Prerequisites
+
+- Python 3.8 or higher (check with `python3 --version`)
+- pip (comes with Python)
+- Xcode Command Line Tools: `xcode-select --install`
+
+#### Installation Steps
+
+1. **Clone or download this repository:**
+   ```bash
+   git clone https://github.com/yourusername/PostMini.git
+   cd PostMini
+   ```
+
+2. **Create a virtual environment:**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+   
+   **Note:** PyMiniRacer (JavaScript engine) includes pre-built binaries for macOS. Installation should work out-of-the-box.
+
+4. **Run PostMini:**
+   ```bash
+   python main.py
+   ```
+
+#### macOS-Specific Notes
+
+- **Data Storage:** Your collections, environments, and settings are stored in `~/Library/Application Support/PostMini/`
+- **First Launch:** macOS may prompt you to allow network access - click "Allow"
+- **Keyboard Shortcuts:** Use Cmd instead of Ctrl (e.g., Cmd+S to save, Cmd+N for new request)
+- **Retina Display:** PostMini automatically scales to look sharp on Retina displays
+
+#### Troubleshooting macOS Issues
+
+**If PyQt6 fails to install:**
+```bash
+# Install Homebrew if you haven't already
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Qt dependencies
+brew install python-tk
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**If you get "Operation not permitted" errors:**
+```bash
+# Grant Terminal full disk access in System Preferences > Security & Privacy > Privacy
+```
+
+**If PyMiniRacer installation fails:**
+```bash
+# Try installing with explicit architecture
+pip install py-mini-racer --no-cache-dir
+```
+
+### For Windows/Linux Developers (From Source)
 
 #### Prerequisites
 
@@ -281,7 +348,7 @@ See [INSTALLER_GUIDE.md](docs/guides/INSTALLER_GUIDE.md) for complete installati
    python -m venv venv
    venv\Scripts\activate
 
-   # On macOS/Linux
+   # On Linux
    python3 -m venv venv
    source venv/bin/activate
    ```

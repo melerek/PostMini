@@ -1,19 +1,19 @@
 {
-  "latest_version": "1.9.8",
-  "release_date": "2025-11-18",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.8/PostMini_Setup_v1.9.8.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.8",
-  "checksum": "sha256:BCD72B3DAEDD204F0AB2214323061D9FE66E2D29E1FAA85507BFD75CFD88A482",
-  "exe_sha256": "57F3AAAD23CA524F8F348064F599C5C0EAA7859F4596C205C753ACDE544CEC99",
-  "installer_sha256": "BCD72B3DAEDD204F0AB2214323061D9FE66E2D29E1FAA85507BFD75CFD88A482",
+  "latest_version": "1.9.9",
+  "release_date": "2025-11-19",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.9/PostMini_Setup_v1.9.9.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.9",
+  "checksum": "sha256:6E4F32547CB794ACA3835998AC8970F42080EB1FE74D139480DBE96DF26CE404",
+  "exe_sha256": "7DE245974F0D3C1432813B6B56DAAB0179AC2E61CA5A6524240961D94BEC3320",
+  "installer_sha256": "6E4F32547CB794ACA3835998AC8970F42080EB1FE74D139480DBE96DF26CE404",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "✨ NEW: Variable autocomplete system with {{ and : triggers",
-    "🔍 ENHANCED: Smart variable search with scope-based filtering",
-    "⌨️ IMPROVED: Full keyboard navigation (Tab/Shift+Tab/Enter/Escape)",
-    "💬 NEW: Variable tooltips with copy button and value preview",
-    "🎨 POLISHED: Color-coded scope badges and refined styling"
+    "🔒 NEW: OWASP-based Security Scanner with 25 vulnerability checks",
+    "🤖 AUTO-SCAN: Optional automatic scanning on every request",
+    "📊 REPORTS: Export security findings to HTML or JSON",
+    "📜 HISTORY: Enhanced request history with Security Scan tab",
+    "🐛 FIXED: Request history now shows correct collection names"
   ]
 }
 

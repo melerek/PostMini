@@ -11,11 +11,13 @@ from PyQt6.QtWidgets import (
     QTextEdit, QSplitter, QTabWidget, QScrollArea
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
-from typing import Dict, Optional
+from PyQt6.QtGui import QColor, QFont
+from typing import Dict, Optional, List
 from datetime import datetime
+import json
 
 from src.core.database import DatabaseManager
+from src.features.security_scanner import SecurityFinding
 
 
 class HistoryPanelWidget(QWidget):
@@ -115,7 +117,7 @@ class HistoryPanelWidget(QWidget):
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(6)
         self.history_table.setHorizontalHeaderLabels([
-            'TIME', 'REQUEST', '', 'TIME (S)', 'SIZE', 'COLLECTION'
+            'TIME', 'REQUEST', 'STATUS', 'TIME (S)', 'SIZE', 'COLLECTION'
         ])
         self.history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -173,35 +175,65 @@ class HistoryPanelWidget(QWidget):
         self.setMinimumWidth(700)
     
     def _create_details_panel(self) -> QWidget:
-        """Create the details panel for showing request/response details."""
+        """Create the details panel for showing request/response details with tabs."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(8)
+        layout.setContentsMargins(0, 0, 0, 0)
         
         details_label = QLabel("Request Details")
         details_label.setStyleSheet("font-size: 12px; font-weight: 600;")
         layout.addWidget(details_label)
         
-        # Tabs for request and response
+        # Tabs for different views (Request Details first, then response tabs)
         self.details_tabs = QTabWidget()
         
-        # Request tab
-        request_widget = QWidget()
-        request_layout = QVBoxLayout(request_widget)
-        self.request_details = QTextEdit()
-        self.request_details.setReadOnly(True)
-        self.request_details.setMaximumHeight(200)
-        request_layout.addWidget(self.request_details)
-        self.details_tabs.addTab(request_widget, "Request")
+        # Request Details tab (FIRST - default)
+        self.request_details_viewer = QTextEdit()
+        self.request_details_viewer.setReadOnly(True)
+        self.request_details_viewer.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.request_details_viewer.setFont(QFont("JetBrains Mono", 10))
+        self.details_tabs.addTab(self.request_details_viewer, "Request Details")
         
-        # Response tab
-        response_widget = QWidget()
-        response_layout = QVBoxLayout(response_widget)
-        self.response_details = QTextEdit()
-        self.response_details.setReadOnly(True)
-        self.response_details.setMaximumHeight(200)
-        response_layout.addWidget(self.response_details)
-        self.details_tabs.addTab(response_widget, "Response")
+        # Response Body tab
+        self.response_body_viewer = QTextEdit()
+        self.response_body_viewer.setReadOnly(True)
+        self.response_body_viewer.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.response_body_viewer.setFont(QFont("JetBrains Mono", 10))
+        self.details_tabs.addTab(self.response_body_viewer, "Response Body")
+        
+        # Response Headers tab
+        self.response_headers_table = QTableWidget()
+        self.response_headers_table.setColumnCount(2)
+        self.response_headers_table.setHorizontalHeaderLabels(['Header', 'Value'])
+        self.response_headers_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.response_headers_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.response_headers_table.verticalHeader().setVisible(False)
+        self.details_tabs.addTab(self.response_headers_table, "Response Headers")
+        
+        # Security Scan tab (will be populated if scan_id exists)
+        security_widget = QWidget()
+        security_layout = QVBoxLayout(security_widget)
+        security_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Security findings table
+        self.security_findings_table = QTableWidget()
+        self.security_findings_table.setColumnCount(3)
+        self.security_findings_table.setHorizontalHeaderLabels(['Severity', 'Title', 'Category'])
+        self.security_findings_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.security_findings_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.security_findings_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.security_findings_table.itemSelectionChanged.connect(self._on_security_finding_selected)
+        security_layout.addWidget(self.security_findings_table, 2)
+        
+        # Security finding details
+        self.security_details_viewer = QTextEdit()
+        self.security_details_viewer.setReadOnly(True)
+        self.security_details_viewer.setMaximumHeight(150)
+        security_layout.addWidget(self.security_details_viewer, 1)
+        
+        self.details_tabs.addTab(security_widget, "Security Scan")
+        self.security_scan_tab_index = self.details_tabs.count() - 1
         
         layout.addWidget(self.details_tabs)
         
@@ -260,11 +292,11 @@ class HistoryPanelWidget(QWidget):
                 # Time
                 self.history_table.setItem(i, 0, QTableWidgetItem(time_str))
                 
-                # Request (METHOD + URL combined)
-                url = entry['url']
-                if len(url) > 80:
-                    url = url[:77] + "..."
-                request_str = f"{entry['method']} {url}"
+                # Request (METHOD + Request Name)
+                request_name = entry.get('request_name', 'Untitled Request')
+                if not request_name or request_name == '-':
+                    request_name = 'Untitled Request'
+                request_str = f"{entry['method']} {request_name}"
                 request_item = QTableWidgetItem(request_str)
                 request_item.setData(Qt.ItemDataRole.UserRole, entry['id'])
                 self.history_table.setItem(i, 1, request_item)
@@ -308,9 +340,14 @@ class HistoryPanelWidget(QWidget):
                 else:
                     self.history_table.setItem(i, 4, QTableWidgetItem("-"))
                 
-                # Collection
-                req_name = entry.get('request_name', '-')
-                self.history_table.setItem(i, 5, QTableWidgetItem(req_name))
+                # Collection (get collection name from collection_id)
+                collection_name = '-'
+                collection_id = entry.get('collection_id')
+                if collection_id:
+                    collection = self.db.get_collection(collection_id)
+                    if collection:
+                        collection_name = collection['name']
+                self.history_table.setItem(i, 5, QTableWidgetItem(collection_name))
             
             # Resize columns
             self.history_table.resizeColumnsToContents()
@@ -341,15 +378,48 @@ class HistoryPanelWidget(QWidget):
         self._load_entry_details(history_id)
     
     def _load_entry_details(self, history_id: int):
-        """Load and display details for a history entry."""
+        """Load and display details for a history entry in all tabs."""
         try:
             entry = self.db.get_history_entry(history_id)
             if not entry:
                 return
             
-            # Format request details
+            # ===== Response Body Tab =====
+            response_body = entry.get('response_body', '')
+            if response_body:
+                self.response_body_viewer.setPlainText(response_body)
+            else:
+                self.response_body_viewer.setPlainText("(No response body)")
+            
+            # ===== Response Headers Tab =====
+            response_headers = entry.get('response_headers')
+            if response_headers and isinstance(response_headers, dict):
+                self.response_headers_table.setRowCount(len(response_headers))
+                for i, (key, value) in enumerate(response_headers.items()):
+                    self.response_headers_table.setItem(i, 0, QTableWidgetItem(key))
+                    self.response_headers_table.setItem(i, 1, QTableWidgetItem(str(value)))
+            else:
+                self.response_headers_table.setRowCount(0)
+            
+            # ===== Request Details Tab =====
             request_text = f"Method: {entry['method']}\n"
             request_text += f"URL: {entry['url']}\n"
+            
+            if entry.get('response_status'):
+                request_text += f"Status: {entry['response_status']}\n"
+            
+            if entry.get('response_time'):
+                request_text += f"Response Time: {entry['response_time']:.3f}s\n"
+            
+            if entry.get('response_size'):
+                size = entry['response_size']
+                if size < 1024:
+                    size_str = f"{size} B"
+                elif size < 1024 * 1024:
+                    size_str = f"{size/1024:.1f} KB"
+                else:
+                    size_str = f"{size/(1024*1024):.1f} MB"
+                request_text += f"Response Size: {size_str}\n"
             
             if entry.get('request_params'):
                 request_text += "\nQuery Parameters:\n"
@@ -357,45 +427,104 @@ class HistoryPanelWidget(QWidget):
                     request_text += f"  {key}: {value}\n"
             
             if entry.get('request_headers'):
-                request_text += "\nHeaders:\n"
+                request_text += "\nRequest Headers:\n"
                 for key, value in entry['request_headers'].items():
                     request_text += f"  {key}: {value}\n"
             
             if entry.get('request_body'):
-                request_text += f"\nBody:\n{entry['request_body']}\n"
+                request_text += f"\nRequest Body:\n{entry['request_body']}\n"
             
             if entry.get('request_auth_type') and entry['request_auth_type'] != 'None':
                 request_text += f"\nAuth Type: {entry['request_auth_type']}\n"
             
-            self.request_details.setPlainText(request_text)
-            
-            # Format response details
-            response_text = ""
-            
-            if entry.get('response_status'):
-                response_text += f"Status: {entry['response_status']}\n"
-            
-            if entry.get('response_time'):
-                response_text += f"Time: {entry['response_time']:.3f}s\n"
-            
-            if entry.get('response_size'):
-                response_text += f"Size: {entry['response_size']} bytes\n"
-            
-            if entry.get('response_headers'):
-                response_text += "\nResponse Headers:\n"
-                for key, value in entry['response_headers'].items():
-                    response_text += f"  {key}: {value}\n"
-            
-            if entry.get('response_body'):
-                response_text += f"\nResponse Body:\n{entry['response_body']}\n"
-            
             if entry.get('error_message'):
-                response_text += f"\nError: {entry['error_message']}\n"
+                request_text += f"\n=== ERROR ===\n{entry['error_message']}\n"
             
-            self.response_details.setPlainText(response_text)
+            self.request_details_viewer.setPlainText(request_text)
+            
+            # ===== Security Scan Tab =====
+            scan_id = entry.get('scan_id')
+            if scan_id:
+                # Load security findings
+                findings = self.db.get_security_findings(scan_id)
+                if findings:
+                    self._populate_security_findings(findings)
+                    # Update tab text to show finding count
+                    self.details_tabs.setTabText(self.security_scan_tab_index, f"Security Scan ({len(findings)} findings)")
+                else:
+                    self._clear_security_findings()
+                    self.details_tabs.setTabText(self.security_scan_tab_index, "Security Scan ✓")
+            else:
+                self._clear_security_findings()
+                self.details_tabs.setTabText(self.security_scan_tab_index, "Security Scan")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load details: {str(e)}")
+    
+    def _populate_security_findings(self, findings: List[Dict]):
+        """Populate security findings table."""
+        self.security_findings_table.setRowCount(len(findings))
+        
+        severity_colors = {
+            'Critical': QColor(244, 67, 54),    # Red
+            'High': QColor(255, 152, 0),        # Orange
+            'Medium': QColor(255, 193, 7),      # Yellow
+            'Low': QColor(33, 150, 243),        # Blue
+            'Info': QColor(158, 158, 158)       # Gray
+        }
+        
+        for i, finding in enumerate(findings):
+            # Severity
+            severity_item = QTableWidgetItem(finding['severity'])
+            severity_color = severity_colors.get(finding['severity'], QColor(158, 158, 158))
+            severity_item.setForeground(severity_color)
+            severity_item.setFont(QFont("", -1, QFont.Weight.Bold))
+            severity_item.setData(Qt.ItemDataRole.UserRole, finding)  # Store full finding
+            self.security_findings_table.setItem(i, 0, severity_item)
+            
+            # Title
+            self.security_findings_table.setItem(i, 1, QTableWidgetItem(finding['title']))
+            
+            # Category
+            self.security_findings_table.setItem(i, 2, QTableWidgetItem(finding.get('check_id', 'Unknown')))
+        
+        self.security_findings_table.resizeColumnsToContents()
+        self.security_details_viewer.setPlainText("Select a finding to view details")
+    
+    def _clear_security_findings(self):
+        """Clear security findings table and details."""
+        self.security_findings_table.setRowCount(0)
+        self.security_details_viewer.setPlainText("No security scan performed for this request")
+    
+    def _on_security_finding_selected(self):
+        """Handle security finding selection."""
+        selected = self.security_findings_table.selectedItems()
+        if not selected:
+            return
+        
+        # Get finding data from first column
+        row = selected[0].row()
+        severity_item = self.security_findings_table.item(row, 0)
+        finding = severity_item.data(Qt.ItemDataRole.UserRole)
+        
+        if finding:
+            # Format finding details
+            details = f"Severity: {finding['severity']}\n"
+            details += f"Category: {finding.get('check_id', 'Unknown')}\n"
+            details += f"Title: {finding['title']}\n\n"
+            details += f"Description:\n{finding['description']}\n\n"
+            details += f"Recommendation:\n{finding['recommendation']}\n"
+            
+            if finding.get('evidence'):
+                details += f"\nEvidence:\n{finding['evidence']}\n"
+            
+            if finding.get('cwe_id'):
+                details += f"\nCWE: {finding['cwe_id']}\n"
+            
+            if finding.get('owasp_category'):
+                details += f"OWASP: {finding['owasp_category']}\n"
+            
+            self.security_details_viewer.setPlainText(details)
     
     def _on_double_click(self):
         """Handle double-click on history entry (replay)."""
