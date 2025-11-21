@@ -581,35 +581,85 @@ class ColoredTabBar(QTabBar):
     def _show_context_menu(self, pos):
         """Show context menu for tab operations."""
         from PyQt6.QtWidgets import QMenu
-        from PyQt6.QtGui import QCursor
+        from PyQt6.QtGui import QCursor, QAction
         
         # Get the tab index at the click position
         tab_index = self.tabAt(pos)
         if tab_index == -1:
             return  # No tab at this position
         
+        # Walk up the parent chain to find the MainWindow
+        main_window = self.parent()
+        while main_window and not isinstance(main_window, MainWindow):
+            main_window = main_window.parent()
+        
+        if not main_window:
+            return
+        
+        # Get tab state
+        tab_state = main_window.tab_states.get(tab_index, {})
+        request_id = tab_state.get('request_id')
+        
         # Create context menu
         menu = QMenu(self)
         
-        # Add menu actions
+        # Add New Request
+        new_request_action = menu.addAction("➕ New Request")
+        
+        # Duplicate Request (only if request is saved)
+        duplicate_action = None
+        if request_id:
+            duplicate_action = menu.addAction("📋 Duplicate Request")
+        
+        menu.addSeparator()
+        
+        # Pin/Unpin Request (only if request is saved/persisted)
+        pin_action = None
+        unpin_action = None
+        if request_id and not tab_state.get('is_temporary', False):
+            # Check if request is already pinned
+            is_pinned = main_window._is_request_pinned(request_id)
+            if is_pinned:
+                unpin_action = menu.addAction("📍 Unpin Request")
+            else:
+                pin_action = menu.addAction("📌 Pin Request")
+            menu.addSeparator()
+        
+        # Close operations
         close_others_action = menu.addAction("Close All But This")
+        
+        # Close tabs on the left (only if there are tabs on the left)
+        close_left_action = None
+        if tab_index > 0:
+            close_left_action = menu.addAction("Close All to the Left")
+        
+        # Close tabs on the right (only if there are tabs on the right)
+        close_right_action = None
+        if tab_index < self.count() - 1:
+            close_right_action = menu.addAction("Close All to the Right")
+        
         close_all_action = menu.addAction("Close All")
         
         # Show menu and get selected action
         action = menu.exec(QCursor.pos())
         
         # Handle the selected action
-        if action == close_others_action or action == close_all_action:
-            # Walk up the parent chain to find the MainWindow
-            main_window = self.parent()
-            while main_window and not isinstance(main_window, MainWindow):
-                main_window = main_window.parent()
-            
-            if main_window:
-                if action == close_others_action:
-                    main_window._close_all_tabs_except(tab_index)
-                elif action == close_all_action:
-                    main_window._close_all_tabs()
+        if action == new_request_action:
+            main_window._create_new_request()
+        elif action == duplicate_action:
+            main_window._duplicate_request_to_temp_tab(request_id)
+        elif action == pin_action:
+            main_window._pin_request_from_tab(request_id)
+        elif action == unpin_action:
+            main_window._unpin_request_from_tab(request_id)
+        elif action == close_others_action:
+            main_window._close_all_tabs_except(tab_index)
+        elif action == close_left_action:
+            main_window._close_tabs_on_left(tab_index)
+        elif action == close_right_action:
+            main_window._close_tabs_on_right(tab_index)
+        elif action == close_all_action:
+            main_window._close_all_tabs()
     
     def tabInserted(self, index: int):
         """Called when a tab is inserted - hide close button initially."""
@@ -1134,10 +1184,10 @@ class MainWindow(QMainWindow):
         tab_bar_layout.addWidget(self.request_tabs)
         
         # Add New Request button - independent of tabs, always visible
-        self.new_request_btn = QPushButton("+ New request")
+        self.new_request_btn = QPushButton("➕")
         self.new_request_btn.setToolTip("Create new request (Ctrl+N)")
         self.new_request_btn.setFixedHeight(35)  # Match tab bar height
-        self.new_request_btn.setMinimumWidth(120)
+        self.new_request_btn.setFixedWidth(40)
         self.new_request_btn.clicked.connect(self._create_new_request)
         tab_bar_layout.addWidget(self.new_request_btn)
         
@@ -1221,7 +1271,7 @@ class MainWindow(QMainWindow):
         # Create the recent requests widget as an overlay on top of center_container
         # instead of adding it to the splitter
         self.recent_requests_widget = RecentRequestsWidget(self.db)
-        self.recent_requests_widget.request_selected.connect(self._load_request)
+        self.recent_requests_widget.request_selected.connect(self._load_request_persistent)  # Single click - persistent tab
         self.recent_requests_widget.close_btn.clicked.connect(self._toggle_recent_requests)  # Connect close button
         
         # Set parent to center_container to make it an overlay
@@ -1958,6 +2008,104 @@ class MainWindow(QMainWindow):
         # Show empty state
         self.center_stack.setCurrentWidget(self.no_request_empty_state)
         self._clear_request_editor()
+    
+    def _close_tabs_on_left(self, tab_index: int):
+        """Close all tabs to the left of the specified tab."""
+        if tab_index <= 0:
+            return  # No tabs on the left
+        
+        # Check for unsaved changes in tabs on the left
+        has_unsaved = False
+        for i in range(tab_index):
+            if i in self.tab_states and self.tab_states[i].get('has_changes', False):
+                has_unsaved = True
+                break
+        
+        # Confirm if there are unsaved changes
+        if has_unsaved:
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "Some tabs have unsaved changes. Close them anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        # Block signals to avoid triggering multiple updates
+        self.request_tabs.blockSignals(True)
+        
+        # Close tabs from left to the target (working backwards to avoid index shifting)
+        for i in range(tab_index - 1, -1, -1):
+            self.request_tabs.removeTab(i)
+        
+        self.request_tabs.blockSignals(False)
+        
+        # Update tab states (shift indices down)
+        new_states = {}
+        for old_index, state in self.tab_states.items():
+            if old_index >= tab_index:
+                new_index = old_index - tab_index
+                new_states[new_index] = state
+        self.tab_states = new_states
+        
+        # Update tab bar data for all remaining tabs
+        for index, state in self.tab_states.items():
+            method = state.get('method', 'GET')
+            name = state.get('name', 'Untitled')
+            has_changes = state.get('has_changes', False)
+            is_temporary = state.get('is_temporary', False)
+            tab_bar = self.request_tabs.tabBar()
+            if isinstance(tab_bar, ColoredTabBar):
+                tab_bar.set_tab_data(index, method, name, has_changes, is_temporary)
+        
+        # Ensure correct tab is selected (the target tab is now at index 0)
+        self.request_tabs.setCurrentIndex(0)
+    
+    def _close_tabs_on_right(self, tab_index: int):
+        """Close all tabs to the right of the specified tab."""
+        if tab_index >= self.request_tabs.count() - 1:
+            return  # No tabs on the right
+        
+        # Check for unsaved changes in tabs on the right
+        has_unsaved = False
+        for i in range(tab_index + 1, self.request_tabs.count()):
+            if i in self.tab_states and self.tab_states[i].get('has_changes', False):
+                has_unsaved = True
+                break
+        
+        # Confirm if there are unsaved changes
+        if has_unsaved:
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "Some tabs have unsaved changes. Close them anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        # Block signals to avoid triggering multiple updates
+        self.request_tabs.blockSignals(True)
+        
+        # Close tabs from right to left (working backwards)
+        for i in range(self.request_tabs.count() - 1, tab_index, -1):
+            self.request_tabs.removeTab(i)
+        
+        self.request_tabs.blockSignals(False)
+        
+        # Update tab states (only keep states up to tab_index)
+        new_states = {}
+        for old_index, state in self.tab_states.items():
+            if old_index <= tab_index:
+                new_states[old_index] = state
+        self.tab_states = new_states
+        
+        # Ensure correct tab is selected
+        if tab_index in self.tab_states:
+            self.request_tabs.setCurrentIndex(tab_index)
         
         # Update collections tree highlighting
         self._update_current_request_highlight()
@@ -4488,6 +4636,8 @@ class MainWindow(QMainWindow):
                         self._clear_request_editor()
                         self.center_stack.setCurrentWidget(self.no_request_empty_state)
                     self._show_status(f"Request '{item_name}' deleted", "success")
+                    # Refresh recent requests to remove deleted entry
+                    self.recent_requests_widget.refresh()
                 
                 # Auto-sync to filesystem if Git sync is enabled
                 self._auto_sync_to_filesystem()
@@ -4507,6 +4657,21 @@ class MainWindow(QMainWindow):
             # Open the request in temporary tab mode (will switch if already open)
             # This also handles loading the request data via _on_tab_changed
             self._open_request_in_new_tab(request_id, is_temporary=True)
+            
+            # Track in recent requests
+            self.recent_requests_widget.add_request(request_id)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load request: {str(e)}")
+    
+    def _load_request_persistent(self, request_id: int):
+        """Load a request's details into the editor in persistent mode (e.g., from double-click in recent requests).
+        If the request is already open in a tab, switch to that tab and make it persistent.
+        Otherwise, open it in a new persistent tab."""
+        try:
+            # Open the request in persistent tab mode (not temporary)
+            # This also handles loading the request data via _on_tab_changed
+            self._open_request_in_new_tab(request_id, is_temporary=False)
             
             # Track in recent requests
             self.recent_requests_widget.add_request(request_id)
@@ -4592,6 +4757,8 @@ class MainWindow(QMainWindow):
             
             # Update tab indicators after loading
             self._update_tab_indicators()
+            # Explicitly update script toggle indicators
+            self.scripts_tab.update_toggle_indicators()
             
             # Clear test results
             self.test_results_viewer.clear()
@@ -5969,12 +6136,8 @@ class MainWindow(QMainWindow):
         # Execute tests
         self._execute_tests_on_response(response)
         
-        # Auto-run security scan if enabled in settings
-        scan_id = None
-        if hasattr(self, 'settings_pane'):
-            auto_scan_enabled = self.settings_pane.get_auto_security_scan_enabled()
-            if auto_scan_enabled:
-                scan_id = self._auto_run_security_scan(response)
+        # Always run security scan on each request
+        scan_id = self._auto_run_security_scan(response)
         
         # Save cookies from response to database
         try:
@@ -6017,13 +6180,48 @@ class MainWindow(QMainWindow):
         # Show error status with helpful message
         self._show_status(f"Request failed: {enhanced_error['short'][:50]}...", "error")
         
+        # Make response viewer visible when we have an error
+        if hasattr(self, 'request_response_splitter'):
+            response_viewer = self.request_response_splitter.widget(1)
+            if response_viewer and not response_viewer.isVisible():
+                response_viewer.setVisible(True)
+                # Ensure panel is expanded when showing error
+                if hasattr(self, 'response_panel_collapsed') and self.response_panel_collapsed:
+                    self._toggle_response_panel()
+        
+        # Display error in status with proper styling
+        self.status_label.setText(f"Status: Connection Error")
+        self.status_label.setStyleSheet("color: #F44336; font-weight: bold; font-size: 13px;")
+        
+        # Hide status badge for errors
+        self.status_badge.setVisible(False)
+        
+        # Show time and size as N/A
+        self.time_label.setText(f"⏱ N/A")
+        self.time_label.setStyleSheet("color: #999; font-weight: bold;")
+        self.size_label.setText(f"📦 N/A")
+        self.size_label.setStyleSheet("color: #999; font-weight: bold;")
+        
         # Display error in response viewer with full details and suggestions
-        self.status_label.setText(f"Status: Error")
-        self.status_label.setStyleSheet("color: #F44336; font-weight: bold;")
         self.response_body.setPlainText(enhanced_error['full'])
         
-        # Update request details viewer
+        # Switch to response body view (from empty state)
+        self.response_stack.setCurrentWidget(self.response_body)
+        
+        # Clear response headers table
+        self.response_headers_table.clearContents()
+        self.response_headers_table.setRowCount(0)
+        
+        # Update request details viewer to show what was attempted
         self._update_request_details_viewer()
+        
+        # Switch to Request Details tab to show what was sent
+        if hasattr(self, 'response_tabs'):
+            # Find Request Details tab index
+            for i in range(self.response_tabs.count()):
+                if self.response_tabs.tabText(i) == "Request Details":
+                    self.response_tabs.setCurrentIndex(i)
+                    break
         
         # Save to history (with error)
         self._save_to_history(error_message=error_message)
@@ -9053,10 +9251,10 @@ class MainWindow(QMainWindow):
                     background: transparent;
                     border: 1px solid transparent;
                     border-radius: 4px;
-                    font-size: 13px;
+                    font-size: 18px;
                     font-weight: 500;
-                    padding: 0px 12px;
-                    text-align: left;
+                    padding: 0px;
+                    text-align: center;
                 }
                 QPushButton:hover {
                     background: rgba(255, 255, 255, 0.1);
@@ -9092,10 +9290,10 @@ class MainWindow(QMainWindow):
                     background: transparent;
                     border: 1px solid transparent;
                     border-radius: 4px;
-                    font-size: 13px;
+                    font-size: 18px;
                     font-weight: 500;
-                    padding: 0px 12px;
-                    text-align: left;
+                    padding: 0px;
+                    text-align: center;
                     color: #212121;
                 }
                 QPushButton:hover {
@@ -9740,13 +9938,144 @@ class MainWindow(QMainWindow):
                 headers=json.loads(request.get('headers', '{}')) if isinstance(request.get('headers'), str) else request.get('headers', {}),
                 body=request.get('body', ''),
                 auth_type=request.get('auth_type', 'No Auth'),
-                auth_token=request.get('auth_token', '')
+                auth_token=request.get('auth_token', ''),
+                pre_request_script=request.get('pre_request_script', ''),
+                post_response_script=request.get('post_response_script', '')
             )
             self._auto_sync_to_filesystem()
             self._load_collections()
             self._show_status(f"Request duplicated as '{new_name}'", "success")
         except Exception as e:
             self._show_status(f"Failed to duplicate: {str(e)[:30]}...", "error")
+    
+    def _duplicate_request_to_temp_tab(self, request_id: int):
+        """Duplicate a request and open it in a temporary tab."""
+        request = self.db.get_request(request_id)
+        if not request:
+            return
+        
+        try:
+            # Create a temporary tab with the duplicated data (unsaved)
+            # This creates a new tab WITHOUT saving to database first
+            
+            # Prepare request data
+            name = f"{request['name']} (Copy)"
+            method = request['method']
+            url = request['url']
+            params = json.loads(request.get('params', '{}')) if isinstance(request.get('params'), str) else request.get('params', {})
+            headers = json.loads(request.get('headers', '{}')) if isinstance(request.get('headers'), str) else request.get('headers', {})
+            body = request.get('body', '')
+            auth_type = request.get('auth_type', 'No Auth')
+            auth_token = request.get('auth_token', '')
+            pre_request_script = request.get('pre_request_script', '') or ''
+            post_response_script = request.get('post_response_script', '') or ''
+            
+            # Save current tab state
+            current_index = self.request_tabs.currentIndex()
+            if current_index >= 0 and current_index in self.tab_states:
+                self.tab_states[current_index]['ui_state'] = self._capture_current_tab_state()
+                self.tab_states[current_index]['has_changes'] = self.has_unsaved_changes
+            
+            # Block signals to prevent premature tab change
+            self.request_tabs.blockSignals(True)
+            
+            # Add new temporary tab
+            tab_index = self.request_tabs.addTab(QWidget(), f"{method} • {name}")
+            
+            # Store tab state (temporary, no request_id yet)
+            self.tab_states[tab_index] = {
+                'request_id': None,  # Not saved yet
+                'has_changes': True,  # Has unsaved data
+                'name': name,
+                'method': method,
+                'is_temporary': True,
+                'ui_state': {}
+            }
+            
+            # Unblock signals
+            self.request_tabs.blockSignals(False)
+            
+            # Switch to new tab
+            self.request_tabs.setCurrentIndex(tab_index)
+            
+            # Load the duplicated data into the editor
+            self.method_combo.setCurrentText(method)
+            self.url_input.setText(url)
+            self._load_dict_to_table(params, self.params_table)
+            self._load_dict_to_table(headers, self.headers_table)
+            self.body_input.setPlainText(body)
+            self.auth_type_combo.setCurrentText(auth_type)
+            self.auth_token_input.setText(auth_token)
+            
+            # Load scripts
+            self.scripts_tab.load_scripts(pre_request_script, post_response_script)
+            self.scripts_tab.update_toggle_indicators()
+            
+            # Clear response viewer
+            self._clear_response_viewer()
+            
+            # Show tabs view
+            self.center_stack.setCurrentWidget(self.tabs_container)
+            
+            # Mark as changed and update UI
+            self.has_unsaved_changes = True
+            self._update_request_title()
+            self._update_tab_title(tab_index)
+            
+            self._show_status(f"Request duplicated in temporary tab", "success")
+        except Exception as e:
+            self._show_status(f"Failed to duplicate: {str(e)[:30]}...", "error")
+    
+    def _is_request_pinned(self, request_id: int) -> bool:
+        """Check if a request is pinned in recent requests."""
+        try:
+            cursor = self.db.connection.cursor()
+            cursor.execute(
+                "SELECT is_pinned FROM recent_requests WHERE request_id = ?",
+                (request_id,)
+            )
+            result = cursor.fetchone()
+            return result and bool(result[0])
+        except Exception:
+            return False
+    
+    def _pin_request_from_tab(self, request_id: int):
+        """Pin a request to recent requests panel."""
+        try:
+            # Add to recent requests if not already there
+            self.recent_requests_widget.add_request(request_id)
+            
+            # Pin it
+            cursor = self.db.connection.cursor()
+            cursor.execute(
+                "UPDATE recent_requests SET is_pinned = 1 WHERE request_id = ?",
+                (request_id,)
+            )
+            self.db.connection.commit()
+            
+            # Refresh recent requests widget
+            self.recent_requests_widget.refresh()
+            
+            self._show_status("Request pinned to Recent Requests", "success")
+        except Exception as e:
+            self._show_status(f"Failed to pin: {str(e)[:30]}...", "error")
+    
+    def _unpin_request_from_tab(self, request_id: int):
+        """Unpin a request from recent requests panel."""
+        try:
+            cursor = self.db.connection.cursor()
+            cursor.execute(
+                "UPDATE recent_requests SET is_pinned = 0 WHERE request_id = ?",
+                (request_id,)
+            )
+            self.db.connection.commit()
+            
+            # Refresh recent requests widget
+            self.recent_requests_widget.refresh()
+            
+            self._show_status("Request unpinned from Recent Requests", "success")
+        except Exception as e:
+            self._show_status(f"Failed to unpin: {str(e)[:30]}...", "error")
     
     def _delete_request_from_menu(self, request_id: int):
         """Delete request from context menu."""
@@ -9794,6 +10123,9 @@ class MainWindow(QMainWindow):
                 
                 if self.current_request_id == request_id:
                     self.current_request_id = None
+                
+                # Refresh recent requests to remove deleted entry
+                self.recent_requests_widget.refresh()
                 
                 self._auto_sync_to_filesystem()
                 self._load_collections()

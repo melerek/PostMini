@@ -297,18 +297,11 @@ class HighlightedLineEdit(QLineEdit):
             pass
         
         # Check collection variables
-        try:
-            from PyQt6.QtWidgets import QWidget
-            parent = self.parent()
-            while parent:
-                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
-                    if hasattr(parent, 'db'):
-                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
-                        if param_name in col_vars and col_vars[param_name] not in (None, '', '❌ Undefined'):
-                            return True
-                parent = parent.parent() if isinstance(parent, QWidget) else None
-        except:
-            pass
+        if self.main_window and hasattr(self.main_window, 'current_collection_id'):
+            if self.main_window.current_collection_id and hasattr(self.main_window, 'db'):
+                col_vars = self.main_window.db.get_collection_variables(self.main_window.current_collection_id)
+                if param_name in col_vars and col_vars[param_name] not in (None, '', '❌ Undefined'):
+                    return True
         
         # Check environment variables
         if self.environment_manager.has_active_environment():
@@ -503,9 +496,10 @@ class HighlightedLineEdit(QLineEdit):
                     value = self._get_variable_value_by_ref(identifier)
                     display_ref = identifier
                 
-                if value and value != "❌ Undefined":
-                    # Apply nested variable resolution to the value (for variables only)
-                    if param_type == 'variable' and self.environment_manager:
+                # Show tooltip even if undefined (to inform user)
+                if value:
+                    # Apply nested variable resolution to the value (for variables only, and only if defined)
+                    if param_type == 'variable' and self.environment_manager and value != "❌ Undefined":
                         env_vars = self.environment_manager.get_active_variables()
                         col_vars = {}
                         ext_vars = {}
@@ -655,18 +649,11 @@ class HighlightedLineEdit(QLineEdit):
             pass
         
         # Check collection variables
-        try:
-            from PyQt6.QtWidgets import QWidget
-            parent = self.parent()
-            while parent:
-                if hasattr(parent, 'current_collection_id') and parent.current_collection_id:
-                    if hasattr(parent, 'db'):
-                        col_vars = parent.db.get_collection_variables(parent.current_collection_id)
-                        if param_name in col_vars:
-                            return col_vars[param_name]
-                parent = parent.parent() if isinstance(parent, QWidget) else None
-        except:
-            pass
+        if self.main_window and hasattr(self.main_window, 'current_collection_id'):
+            if self.main_window.current_collection_id and hasattr(self.main_window, 'db'):
+                col_vars = self.main_window.db.get_collection_variables(self.main_window.current_collection_id)
+                if param_name in col_vars:
+                    return col_vars[param_name]
         
         # Check environment variables (lowest priority)
         if self.environment_manager.has_active_environment():
@@ -1466,16 +1453,12 @@ class VariableHighlightDelegate(QStyledItemDelegate):
         return False
     
     def helpEvent(self, event, view, option, index):
-        """Show tooltip when hovering over variables."""
+        """Show tooltip when hovering over variables and path parameters."""
         if event.type() == event.Type.ToolTip:
             text = index.data(Qt.ItemDataRole.DisplayRole)
             
-            if text and '{{' in text and '}}' in text:
-                # Find if mouse is over a variable with new prefix syntax
+            if text:
                 import re
-                # Pattern matches: {{env.xxx}}, {{col.xxx}}, {{ext.xxx}}, {{$xxx}}, {{xxx}}
-                pattern = re.compile(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
-                
                 # Get font metrics to calculate positions
                 fm = view.fontMetrics()
                 
@@ -1484,45 +1467,85 @@ class VariableHighlightDelegate(QStyledItemDelegate):
                 mouse_pos = event.pos()
                 relative_x = mouse_pos.x() - cell_rect.x() - 5  # 5px left padding
                 
-                # Check each variable
-                for match in pattern.finditer(text):
-                    # Calculate position of text before this variable
+                # Check path parameters first (:paramName syntax)
+                path_param_pattern = re.compile(r':([a-zA-Z_][a-zA-Z0-9_]*)')
+                for match in path_param_pattern.finditer(text):
                     text_before = text[:match.start()]
-                    var_text = match.group(0)
-                    prefix = match.group(1)  # env, col, ext, $ or None
-                    var_name = match.group(2)  # The variable name
-                    
-                    # Build full variable reference
-                    if prefix:
-                        var_ref = f"{prefix}.{var_name}"
-                    else:
-                        var_ref = var_name
+                    param_text = match.group(0)  # Full :paramName
+                    param_name = match.group(1)  # Just paramName
                     
                     start_x = fm.horizontalAdvance(text_before)
-                    var_width = fm.horizontalAdvance(var_text)
-                    end_x = start_x + var_width
+                    param_width = fm.horizontalAdvance(param_text)
+                    end_x = start_x + param_width
                     
-                    # Check if mouse is over this variable
+                    # Check if mouse is over this path parameter
                     if start_x <= relative_x <= end_x:
-                        # Get variable value using prefix-based lookup
-                        value = self._get_variable_value_for_tooltip(var_ref)
+                        # Get path parameter value (looks up as variable)
+                        value = self._get_variable_value_for_tooltip(param_name)
                         
-                        if value and value != "❌ Undefined":
+                        # Show tooltip even if undefined (to inform user)
+                        if value:
                             # Show custom tooltip with copy button
                             if not hasattr(self, '_tooltip_widget') or self._tooltip_widget is None:
-                                self._tooltip_widget = VariableTooltipWidget(var_ref, value, view)
+                                self._tooltip_widget = VariableTooltipWidget(param_text, value, view)
                             else:
                                 # Update existing tooltip
                                 self._tooltip_widget.var_value = value
                                 labels = self._tooltip_widget.findChildren(QLabel)
                                 if len(labels) >= 2:
-                                    labels[0].setText(f"<b>{var_ref}</b>")
+                                    labels[0].setText(f"<b>{param_text}</b>")
                                     labels[1].setText(value)
                             
                             # Position tooltip near mouse
                             self._tooltip_widget.move(event.globalPos().x() + 10, event.globalPos().y() + 10)
                             self._tooltip_widget.show()
                             return True
+                
+                # Check {{...}} variables if no path parameter matched
+                if '{{' in text and '}}' in text:
+                    # Pattern matches: {{env.xxx}}, {{col.xxx}}, {{ext.xxx}}, {{$xxx}}, {{xxx}}
+                    pattern = re.compile(r'\{\{(?:(env|col|ext|\$)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\}\}')
+                    
+                    # Check each variable
+                    for match in pattern.finditer(text):
+                        # Calculate position of text before this variable
+                        text_before = text[:match.start()]
+                        var_text = match.group(0)
+                        prefix = match.group(1)  # env, col, ext, $ or None
+                        var_name = match.group(2)  # The variable name
+                        
+                        # Build full variable reference
+                        if prefix:
+                            var_ref = f"{prefix}.{var_name}"
+                        else:
+                            var_ref = var_name
+                        
+                        start_x = fm.horizontalAdvance(text_before)
+                        var_width = fm.horizontalAdvance(var_text)
+                        end_x = start_x + var_width
+                        
+                        # Check if mouse is over this variable
+                        if start_x <= relative_x <= end_x:
+                            # Get variable value using prefix-based lookup
+                            value = self._get_variable_value_for_tooltip(var_ref)
+                            
+                            # Show tooltip even if undefined (to inform user)
+                            if value:
+                                # Show custom tooltip with copy button
+                                if not hasattr(self, '_tooltip_widget') or self._tooltip_widget is None:
+                                    self._tooltip_widget = VariableTooltipWidget(var_ref, value, view)
+                                else:
+                                    # Update existing tooltip
+                                    self._tooltip_widget.var_value = value
+                                    labels = self._tooltip_widget.findChildren(QLabel)
+                                    if len(labels) >= 2:
+                                        labels[0].setText(f"<b>{var_ref}</b>")
+                                        labels[1].setText(value)
+                                
+                                # Position tooltip near mouse
+                                self._tooltip_widget.move(event.globalPos().x() + 10, event.globalPos().y() + 10)
+                                self._tooltip_widget.show()
+                                return True
                 
                 # Mouse not over a variable, hide tooltip
                 if hasattr(self, '_tooltip_widget') and self._tooltip_widget:

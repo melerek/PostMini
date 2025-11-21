@@ -11,6 +11,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2025-11-21
+
+### ✨ Major New Features
+
+#### 📌 Recent Requests Panel Enhancements
+- **"Open Pinned" Button** - Quickly open all pinned requests in separate tabs with one click
+- **Single-Click Opens Persistent Tabs** - Streamlined workflow: single-click to open requests permanently (no more temporary preview tabs)
+- **Automatic Cleanup** - Deleted requests are automatically removed from recent list
+- **Always-On Security Scanning** - Security scans now run automatically on every request (setting removed for simplicity)
+
+#### 🎨 Modern UI Improvements
+- **Modern Icon Button** - Replaced "+ New request" text button with clean ➕ icon for better visual hierarchy
+- **Enhanced Tab Context Menu** - Right-click on tabs for powerful operations:
+  - **New Request** - Create new request from any tab
+  - **Duplicate to Temp Tab** - Quickly experiment with request variations
+  - **Pin/Unpin Request** - Toggle pinned status directly from tab
+  - **Close Tabs on Left/Right** - Efficiently manage many open tabs
+  - **Close All But This** - Focus on single request
+  - **Close All** - Clean slate
+
+#### 🐛 Critical Bug Fixes
+
+**Scripts Tab Indicators**
+- Fixed script indicators (dots) not showing when opening requests from Recent Requests panel
+- Scripts now properly display indicator dots on Pre-request/Post-response toggle buttons
+
+**Request Duplication**
+- Fixed scripts not being copied when duplicating requests
+- Both "Duplicate" and "Duplicate to Temp Tab" now properly include pre-request and post-response scripts
+
+**Variable Tooltips**
+- Fixed variable value preview tooltips not working for `:paramName` path parameters
+- Tooltips now show values for both `{{variable}}` and `:pathParam` syntax
+- Tooltips display even for undefined variables (shows "❌ Undefined" message)
+- Works in both URL field and table cells (Params, Headers tabs)
+
+#### 🔍 Better Error Handling
+
+**Failed Request Debugging**
+- When request fails (connection error, invalid URL, unresolved variables, etc.):
+  - Response panel now shows automatically
+  - **Request Details tab** displays what parameters were attempted to be sent
+  - Helps quickly identify issues like:
+    - Unresolved variables in URL/headers/body
+    - Malformed URLs
+    - Connection problems
+    - Missing authentication
+  - Error details shown in Response tab with helpful troubleshooting suggestions
+  - Status displays "Connection Error" in red
+  - Time and Size show "N/A" to indicate no response received
+
+### 🔧 Technical Improvements
+- Improved path parameter variable resolution using direct `main_window` reference
+- Enhanced tooltip display logic for both defined and undefined variables
+- Better script indicator synchronization across UI components
+- Streamlined recent requests single-click behavior
+
+### 📚 Developer Experience
+- Cleaner tab management with comprehensive context menu
+- Faster debugging with automatic Request Details display on errors
+- More intuitive variable inspection with tooltips for all variable types
+
+---
+
 ## [1.9.9] - 2025-11-19
 
 ### ✨ New Features

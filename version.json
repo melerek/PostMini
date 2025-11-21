@@ -1,11 +1,11 @@
 {
-  "latest_version": "1.9.9",
-  "release_date": "2025-11-19",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v1.9.9/PostMini_Setup_v1.9.9.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v1.9.9",
-  "checksum": "sha256:6E4F32547CB794ACA3835998AC8970F42080EB1FE74D139480DBE96DF26CE404",
-  "exe_sha256": "7DE245974F0D3C1432813B6B56DAAB0179AC2E61CA5A6524240961D94BEC3320",
-  "installer_sha256": "6E4F32547CB794ACA3835998AC8970F42080EB1FE74D139480DBE96DF26CE404",
+  "latest_version": "2.0.0",
+  "release_date": "2025-11-21",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v2.0.0/PostMini_Setup_v2.0.0.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v2.0.0",
+  "checksum": "sha256:B21725EC69B1C35FBED2DB1F148141F246AB6A03077387CA3A4FB8BA69E39107",
+  "exe_sha256": "C4E3FC2836FB1706DD5D8999A946353278E461EF7E9197234922B563979D560E",
+  "installer_sha256": "B21725EC69B1C35FBED2DB1F148141F246AB6A03077387CA3A4FB8BA69E39107",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [

@@ -16,7 +16,7 @@ from datetime import datetime
 class RecentRequestItem(QWidget):
     """Custom widget for recent request list items."""
     
-    clicked = pyqtSignal(int)  # request_id - emit on single click
+    clicked = pyqtSignal(int)  # request_id - emit on single click (opens persistent tab)
     pin_toggled = pyqtSignal(int, bool)  # request_id, is_pinned
     
     def __init__(self, request_id: int, name: str, method: str, url: str, is_pinned: bool = False):
@@ -81,7 +81,7 @@ class RecentRequestItem(QWidget):
         self.pin_toggled.emit(self.request_id, self.is_pinned)
     
     def mousePressEvent(self, event):
-        """Handle single click to open request."""
+        """Handle single click to open request in persistent mode."""
         if event.button() == Qt.MouseButton.LeftButton:
             # Don't emit if clicking the pin button
             if not self.pin_btn.geometry().contains(event.pos()):
@@ -92,7 +92,7 @@ class RecentRequestItem(QWidget):
 class RecentRequestsWidget(QWidget):
     """Widget displaying recently accessed requests."""
     
-    request_selected = pyqtSignal(int)  # request_id
+    request_selected = pyqtSignal(int)  # request_id - single click opens persistent tab
     
     def __init__(self, db):
         super().__init__()
@@ -123,6 +123,15 @@ class RecentRequestsWidget(QWidget):
         header_layout.addWidget(header_label)
         
         header_layout.addStretch()  # Push buttons to the right
+        
+        # Open pinned button - opens all pinned requests in tabs
+        open_pinned_btn = QPushButton()
+        open_pinned_btn.setObjectName("recentRequestsOpenPinnedButton")
+        open_pinned_btn.setText("📌 Open pinned")
+        open_pinned_btn.setMaximumHeight(28)
+        open_pinned_btn.setToolTip("Open all pinned requests in tabs")
+        open_pinned_btn.clicked.connect(self._open_pinned_requests)
+        header_layout.addWidget(open_pinned_btn)
         
         # Clear button with modern flat style
         clear_btn = QPushButton()
@@ -173,6 +182,10 @@ class RecentRequestsWidget(QWidget):
             # Table might not exist yet, create it
             self._init_recent_requests_table()
     
+    def refresh(self):
+        """Public method to refresh the recent requests list (e.g., after deletions)."""
+        self._load_recent_requests()
+    
     def _init_recent_requests_table(self):
         """Initialize the recent requests table if it doesn't exist."""
         try:
@@ -218,7 +231,7 @@ class RecentRequestsWidget(QWidget):
                 request['url'],
                 bool(is_pinned)
             )
-            item_widget.clicked.connect(self.request_selected.emit)  # Single click to open
+            item_widget.clicked.connect(self.request_selected.emit)  # Single click opens persistent tab
             item_widget.pin_toggled.connect(self._toggle_pin)
             
             # Add to list
@@ -313,3 +326,31 @@ class RecentRequestsWidget(QWidget):
             self._load_recent_requests()
         except Exception as e:
             print(f"Failed to clear recent requests: {e}")
+    
+    def _open_pinned_requests(self):
+        """Open all pinned requests in persistent tabs."""
+        try:
+            cursor = self.db.connection.cursor()
+            cursor.execute("""
+                SELECT request_id FROM recent_requests 
+                WHERE is_pinned = 1
+                ORDER BY timestamp DESC
+            """)
+            pinned_requests = cursor.fetchall()
+            
+            if not pinned_requests:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self, "No Pinned Requests",
+                    "No pinned requests to open. Pin requests by clicking the 📍 icon."
+                )
+                return
+            
+            # Emit signal for each pinned request to open them
+            for (request_id,) in pinned_requests:
+                # Verify request still exists
+                request = self.db.get_request(request_id)
+                if request:
+                    self.request_selected.emit(request_id)
+        except Exception as e:
+            print(f"Failed to open pinned requests: {e}")

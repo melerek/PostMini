@@ -245,4 +245,4 @@ class SecurityScanTab(QWidget):
     def show_no_scan_message(self):
         """Show message when no scan was performed."""
         self.clear()
-        self.summary_label.setText("💡 Enable 'Perform security scan on each request' in Settings to automatically scan responses")
+        self.summary_label.setText("💡 Security scans are automatically performed on each request")
