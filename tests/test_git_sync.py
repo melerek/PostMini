@@ -293,8 +293,8 @@ class TestGitSyncManager(unittest.TestCase):
         
         self.assertTrue(success)
         
-        # Should have only the imported request
-        requests = self.db.get_requests_by_collection(new_coll_id)
+        # Should have only the imported request (check imported_id, not new_coll_id, because collection was recreated)
+        requests = self.db.get_requests_by_collection(imported_id)
         self.assertEqual(len(requests), 1)
         self.assertEqual(requests[0]['name'], 'Request 1')
     

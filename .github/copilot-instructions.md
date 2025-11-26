@@ -1,5 +1,24 @@
 # PostMini - AI Coding Agent Instructions
 
+## ⚠️ CRITICAL: Schema Change Protocol
+
+**MANDATORY CHECKLIST - Execute EVERY time database schema changes:**
+
+When you modify database schema (add columns, tables, or change structure), you MUST immediately update these files:
+
+1. ✅ **`src/core/database.py`** - Add migration code
+2. ✅ **`src/features/collection_io.py`** - Update `CollectionExporter.export_collection()` and `CollectionImporter.import_collection()` methods
+3. ✅ **`src/features/git_sync_manager.py`** - Verify it uses `CollectionExporter`/`CollectionImporter` (should NEVER duplicate export/import logic)
+4. ✅ **`src/features/postman_converter.py`** - Update Postman format conversion if applicable
+5. ✅ **Test export/import** - Create test that exports and reimports collection, verifying ALL data preserved
+
+**Why This Matters**: GitSync previously destroyed user collections because it had outdated export logic that didn't include folders, scripts, variables, or order_index. This caused **catastrophic data loss**.
+
+**Pattern to Follow**:
+- `CollectionExporter` and `CollectionImporter` in `collection_io.py` are the **SINGLE SOURCE OF TRUTH** for export/import logic
+- All other export/import features (GitSync, UI dialogs, etc.) MUST delegate to these classes
+- **NEVER duplicate export/import logic** - always use CollectionExporter/CollectionImporter
+
 ## Project Overview
 PostMini is a desktop API client (Postman alternative) built with PyQt6. It's a single-window desktop application focused on **Postman compatibility**, **privacy (100% local storage)**, and **Git-based collaboration**.
 
@@ -34,6 +53,7 @@ User Action → MainWindow method → Feature module → DatabaseManager → SQL
 - **ScriptEngine** (`src/features/script_engine.py`): PyMiniRacer (V8) for executing Postman-compatible JavaScript pre/post scripts. Implements `pm` API.
 - **EnvironmentManager** (`src/features/variable_substitution.py`): Resolves variables in 4 scopes with priority: `{{ext.*}}` > `{{col.*}}` > `{{env.*}}` > `{{$dynamic}}`. Handles nested substitution (max depth: 10).
 - **AppPaths** (`src/core/app_paths.py`): Stores data in `%APPDATA%\PostMini` on Windows. SQLite DB + secrets live there.
+- **CollectionExporter/Importer** (`src/features/collection_io.py`): **SINGLE SOURCE OF TRUTH** for collection export/import. Handles complete schema (folders, scripts, variables, order_index).
 
 ## Postman Compatibility
 
@@ -43,6 +63,7 @@ User Action → MainWindow method → Feature module → DatabaseManager → SQL
 - **Collections**: `PostmanConverter` converts between internal format and Postman v2.1 schema
 - **Environments**: `PostmanEnvironmentConverter` handles Postman env format with secret/non-secret value distinction
 - **Variable Syntax**: Support both prefixed `{{env.var}}` and legacy `{{var}}` (checks all scopes for backward compat)
+- **GitSync**: Uses `CollectionExporter`/`CollectionImporter` to ensure complete schema support
 
 ### Drag & Drop Ordering
 **Postman-style validation** (see `ReorderableTreeWidget.dropMimeData`):

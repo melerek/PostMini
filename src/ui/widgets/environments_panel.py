@@ -8,9 +8,9 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
     QDialog, QDialogButtonBox, QScrollArea, QFrame, QFileDialog,
-    QRadioButton
+    QRadioButton, QMenu
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QFont, QIcon
 from typing import Optional
 
@@ -73,11 +73,14 @@ class EnvironmentListItem(QWidget):
     edit_clicked = pyqtSignal(int)  # environment_id
     delete_clicked = pyqtSignal(int)  # environment_id
     variables_clicked = pyqtSignal(int)  # environment_id - to switch to variables panel
+    sync_toggled = pyqtSignal(int, int)  # environment_id, sync_to_git (0 or 1)
     
-    def __init__(self, env_id: int, name: str, var_count: int, theme: str = 'dark', parent=None):
+    def __init__(self, env_id: int, name: str, var_count: int, sync_to_git: int = 0, theme: str = 'dark', parent=None):
         super().__init__(parent)
         self.env_id = env_id
+        self.sync_to_git = sync_to_git
         self.count_label = None  # Store reference for updates
+        self.sync_btn = None  # Store reference for sync button
         self.theme = theme
         self._init_ui(name, var_count)
     
@@ -89,31 +92,14 @@ class EnvironmentListItem(QWidget):
     def _update_button_styles(self):
         """Update button styles based on current theme."""
         if self.theme == 'dark':
-            # Dark theme styles (original)
-            self.vars_btn.setStyleSheet("""
-                QPushButton {
-                    border: 1px solid rgba(33, 150, 243, 0.3);
-                    border-radius: 3px;
-                    background: rgba(33, 150, 243, 0.1);
-                    font-size: 11px;
-                    color: #64B5F6;
-                    padding: 0px 10px;
-                }
-                QPushButton:hover {
-                    background: rgba(33, 150, 243, 0.2);
-                    border-color: rgba(33, 150, 243, 0.5);
-                    color: #90CAF9;
-                }
-            """)
-            
-            self.edit_btn.setStyleSheet("""
+            self.menu_btn.setStyleSheet("""
                 QPushButton {
                     border: 1px solid rgba(255, 255, 255, 0.15);
                     border-radius: 3px;
                     background: transparent;
-                    font-size: 11px;
+                    font-size: 18px;
                     color: #ccc;
-                    padding: 0px 10px;
+                    padding: 0px;
                 }
                 QPushButton:hover {
                     background: rgba(255, 255, 255, 0.08);
@@ -121,72 +107,20 @@ class EnvironmentListItem(QWidget):
                     color: #fff;
                 }
             """)
-            
-            self.delete_btn.setStyleSheet("""
-                QPushButton {
-                    border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 3px;
-                    background: transparent;
-                    font-size: 11px;
-                    color: #ccc;
-                    padding: 0px 10px;
-                }
-                QPushButton:hover {
-                    background: rgba(255, 80, 80, 0.15);
-                    border-color: rgba(255, 80, 80, 0.3);
-                    color: #ff6b6b;
-                }
-            """)
         else:
-            # Light theme styles - better contrast
-            self.vars_btn.setStyleSheet("""
-                QPushButton {
-                    border: 1px solid #1976D2;
-                    border-radius: 3px;
-                    background: #E3F2FD;
-                    font-size: 11px;
-                    color: #1565C0;
-                    font-weight: 500;
-                    padding: 0px 10px;
-                }
-                QPushButton:hover {
-                    background: #BBDEFB;
-                    border-color: #1565C0;
-                    color: #0D47A1;
-                }
-            """)
-            
-            self.edit_btn.setStyleSheet("""
+            self.menu_btn.setStyleSheet("""
                 QPushButton {
                     border: 1px solid #9E9E9E;
                     border-radius: 3px;
                     background: #FFFFFF;
-                    font-size: 11px;
+                    font-size: 18px;
                     color: #424242;
-                    font-weight: 500;
-                    padding: 0px 10px;
+                    padding: 0px;
                 }
                 QPushButton:hover {
                     background: #F5F5F5;
                     border-color: #616161;
                     color: #212121;
-                }
-            """)
-            
-            self.delete_btn.setStyleSheet("""
-                QPushButton {
-                    border: 1px solid #E57373;
-                    border-radius: 3px;
-                    background: #FFEBEE;
-                    font-size: 11px;
-                    color: #C62828;
-                    font-weight: 500;
-                    padding: 0px 10px;
-                }
-                QPushButton:hover {
-                    background: #FFCDD2;
-                    border-color: #D32F2F;
-                    color: #B71C1C;
                 }
             """)
     
@@ -202,12 +136,14 @@ class EnvironmentListItem(QWidget):
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
         
-        # Name and variable count
+        # Name and variable count with sync icon
         info_layout = QVBoxLayout()
         info_layout.setSpacing(3)
         info_layout.setContentsMargins(0, 0, 0, 0)
         
-        name_label = QLabel(name)
+        # Add sync status icon (🌐 for public/synced, 🔒 for private/local)
+        sync_icon = "🌐" if self.sync_to_git == 1 else "🔒"
+        name_label = QLabel(f"{sync_icon} {name}")
         name_label.setStyleSheet("font-size: 12px; font-weight: 500; background: transparent; color: #fff;")
         name_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         info_layout.addWidget(name_label)
@@ -220,32 +156,106 @@ class EnvironmentListItem(QWidget):
         layout.addLayout(info_layout)
         layout.addStretch()
         
-        # Variables button - switch to variables panel with this environment
-        self.vars_btn = QPushButton("Variables")
-        self.vars_btn.setFixedHeight(26)
-        self.vars_btn.setToolTip("View and manage variables for this environment")
-        self.vars_btn.clicked.connect(lambda: self.variables_clicked.emit(self.env_id))
-        layout.addWidget(self.vars_btn)
-        
-        # Edit button - flat style with text
-        self.edit_btn = QPushButton("Edit")
-        self.edit_btn.setFixedHeight(26)
-        self.edit_btn.setToolTip("Rename environment")
-        self.edit_btn.clicked.connect(lambda: self.edit_clicked.emit(self.env_id))
-        layout.addWidget(self.edit_btn)
-        
-        # Delete button - flat style with text
-        self.delete_btn = QPushButton("Delete")
-        self.delete_btn.setFixedHeight(26)
-        self.delete_btn.setToolTip("Delete environment")
-        self.delete_btn.clicked.connect(lambda: self.delete_clicked.emit(self.env_id))
-        layout.addWidget(self.delete_btn)
+        # Menu button ("...")
+        self.menu_btn = QPushButton("⋯")
+        self.menu_btn.setFixedSize(32, 26)
+        self.menu_btn.setToolTip("Environment actions")
+        self.menu_btn.clicked.connect(self._show_menu)
+        layout.addWidget(self.menu_btn)
         
         # Apply theme-specific button styles
         self._update_button_styles()
         
         # Set transparent background for the widget itself
         self.setStyleSheet("background: transparent;")
+    
+    def _show_menu(self):
+        """Show context menu with environment actions."""
+        menu = QMenu(self)
+        
+        # Apply theme-specific menu styling
+        if self.theme == 'dark':
+            menu.setStyleSheet("""
+                QMenu {
+                    background-color: #2d2d2d;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    padding: 4px;
+                }
+                QMenu::item {
+                    padding: 6px 20px;
+                    color: #e0e0e0;
+                    background-color: transparent;
+                }
+                QMenu::item:selected {
+                    background-color: #404040;
+                    color: #ffffff;
+                }
+                QMenu::separator {
+                    height: 1px;
+                    background: #555;
+                    margin: 4px 8px;
+                }
+            """)
+        else:
+            menu.setStyleSheet("""
+                QMenu {
+                    background-color: #ffffff;
+                    border: 1px solid #cccccc;
+                    border-radius: 4px;
+                    padding: 4px;
+                }
+                QMenu::item {
+                    padding: 6px 20px;
+                    color: #212121;
+                    background-color: transparent;
+                }
+                QMenu::item:selected {
+                    background-color: #e3f2fd;
+                    color: #1565C0;
+                }
+                QMenu::separator {
+                    height: 1px;
+                    background: #e0e0e0;
+                    margin: 4px 8px;
+                }
+            """)
+        
+        # Variables action
+        vars_action = menu.addAction("📊 Variables")
+        vars_action.triggered.connect(lambda: self.variables_clicked.emit(self.env_id))
+        
+        menu.addSeparator()
+        
+        # Sync toggle action
+        if self.sync_to_git == 1:
+            sync_action = menu.addAction("🔒 Make Private")
+        else:
+            sync_action = menu.addAction("🌐 Make Public")
+        sync_action.triggered.connect(self._toggle_sync)
+        
+        menu.addSeparator()
+        
+        # Edit action
+        edit_action = menu.addAction("✏️ Rename")
+        edit_action.triggered.connect(lambda: self.edit_clicked.emit(self.env_id))
+        
+        # Delete action
+        delete_action = menu.addAction("🗑️ Delete")
+        delete_action.triggered.connect(lambda: self.delete_clicked.emit(self.env_id))
+        
+        # Show menu at button position
+        menu.exec(self.menu_btn.mapToGlobal(QPoint(0, self.menu_btn.height())))
+    
+    def _toggle_sync(self):
+        """Toggle sync status and emit signal."""
+        new_status = 0 if self.sync_to_git == 1 else 1
+        self.sync_toggled.emit(self.env_id, new_status)
+    
+    def update_sync_status(self, sync_to_git: int):
+        """Update the sync status display."""
+        self.sync_to_git = sync_to_git
+        # No button text to update anymore
     
     def update_variable_count(self, var_count: int):
         """Update the variable count display."""
@@ -397,7 +407,7 @@ class EnvironmentsPanel(QWidget):
                 border-color: rgba(255, 255, 255, 0.2);
             }
         """)
-        content_layout.addWidget(self.env_list)
+        content_layout.addWidget(self.env_list, stretch=1)  # Give list stretch factor to fill space
         
         # Empty state
         self.empty_label = QLabel("No environments yet.\nClick '+ Add' to create one.")
@@ -431,12 +441,14 @@ class EnvironmentsPanel(QWidget):
                 # Count variables
                 variables = env.get('variables', {})
                 var_count = len(variables) if variables else 0
+                sync_to_git = env.get('sync_to_git', 0)
                 
                 # Create custom widget
-                item_widget = EnvironmentListItem(env['id'], env['name'], var_count, self.current_theme)
+                item_widget = EnvironmentListItem(env['id'], env['name'], var_count, sync_to_git, self.current_theme)
                 item_widget.edit_clicked.connect(self._edit_environment)
                 item_widget.delete_clicked.connect(self._delete_environment)
                 item_widget.variables_clicked.connect(self._open_variables_panel)
+                item_widget.sync_toggled.connect(self._toggle_environment_sync)
                 
                 # Create list item
                 list_item = QListWidgetItem(self.env_list)
@@ -611,6 +623,39 @@ class EnvironmentsPanel(QWidget):
                 "Error",
                 f"Failed to delete environment:\n{str(e)}"
             )
+    
+    def _toggle_environment_sync(self, env_id: int, sync_to_git: int):
+        """Toggle sync status of an environment."""
+        try:
+            self.db.set_environment_sync_status(env_id, sync_to_git)
+            status_text = "public (will sync to Git)" if sync_to_git == 1 else "private (local only)"
+            env = self.db.get_environment(env_id)
+            env_name = env.get('name', 'Environment') if env else 'Environment'
+            
+            # Get main window to access git_sync_manager
+            main_window = self.parent()
+            while main_window and not hasattr(main_window, 'git_sync_manager'):
+                main_window = main_window.parent()
+            
+            if main_window and hasattr(main_window, 'git_sync_manager') and main_window.git_sync_manager:
+                if sync_to_git == 1:
+                    # Making public - export to Git
+                    if hasattr(main_window, '_auto_sync_to_filesystem'):
+                        main_window._auto_sync_to_filesystem()
+                else:
+                    # Making private - remove file from Git sync folder
+                    success, message = main_window.git_sync_manager.remove_environment_file(env_id)
+                    # Don't show error if file doesn't exist, that's fine
+            
+            # Show success message (you may want to integrate this with main window status bar)
+            # For now, just refresh to update UI
+            self.refresh()
+            
+            # Optional: Emit signal to notify main window
+            self.environment_updated.emit(env_id)
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to update sync status: {str(e)}")
     
     def _open_variables_panel(self, env_id: int):
         """Switch to variables panel with the specified environment active."""

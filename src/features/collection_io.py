@@ -55,8 +55,8 @@ class CollectionExporter:
         # Get all folders for this collection
         folders = self.db.get_folders_by_collection(collection_id)
         
-        # Get all collection variables
-        collection_variables = self.db.get_collection_variables(collection_id)
+        # Get all collection variables (with metadata so we get list of dicts)
+        collection_variables = self.db.get_collection_variables_with_metadata(collection_id)
         
         # Build folder path map for folders
         folder_paths = {}
@@ -116,6 +116,19 @@ class CollectionExporter:
             if request.get('folder_id'):
                 folder_path = folder_full_paths.get(request['folder_id'], [])
             
+            # Get test assertions for this request
+            test_assertions = self.db.get_test_assertions(request['id'])
+            tests_export = [
+                {
+                    "type": test['assertion_type'],
+                    "operator": test['operator'],
+                    "field": test.get('field'),
+                    "expected_value": test.get('expected_value'),
+                    "enabled": test.get('enabled', True)
+                }
+                for test in test_assertions
+            ]
+            
             request_data = {
                 "name": request['name'],
                 "method": request['method'],
@@ -128,7 +141,8 @@ class CollectionExporter:
                 "pre_request_script": request.get('pre_request_script'),
                 "post_response_script": request.get('post_response_script'),
                 "folder_path": folder_path,
-                "order_index": request.get('order_index')
+                "order_index": request.get('order_index'),
+                "tests": tests_export
             }
             export_data["collection"]["requests"].append(request_data)
         
@@ -353,7 +367,7 @@ class CollectionImporter:
                 # Use order_index from data if present, otherwise use position in array
                 request_order_index = request_data.get('order_index', idx * 100)
                 
-                self.db.create_request(
+                request_id = self.db.create_request(
                     collection_id=collection_id,
                     name=request_data["name"],
                     method=request_data["method"],
@@ -368,6 +382,18 @@ class CollectionImporter:
                     post_response_script=request_data.get("post_response_script"),
                     order_index=request_order_index
                 )
+                
+                # Import test assertions
+                for test in request_data.get('tests', []):
+                    self.db.create_test_assertion(
+                        request_id=request_id,
+                        assertion_type=test['type'],
+                        operator=test['operator'],
+                        field=test.get('field'),
+                        expected_value=test.get('expected_value'),
+                        enabled=test.get('enabled', True)
+                    )
+                
                 requests_imported += 1
             
             folders_imported = len(folder_map)

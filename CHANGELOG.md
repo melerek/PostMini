@@ -11,6 +11,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] - 2025-11-26
+
+### ✨ Major New Features
+
+#### 🌐🔒 Selective Git Sync - Public/Private Collections & Environments
+**Revolutionary Feature**: Choose what to sync with your team! Collections and environments can now be marked as "Public" (synced to Git) or "Private" (local only), enabling personal workspace organization alongside team collaboration.
+
+**Key Capabilities**:
+- **🌐 Public (Sync to Git)**: Share with your team via Git - perfect for shared API collections, staging/production environments, and collaborative work
+- **🔒 Private (Local Only)**: Keep personal collections/environments private - ideal for experimental work, personal scripts, or local testing
+- **🔐 Secret Variables**: Mark sensitive environment variables (API keys, tokens, passwords) as secrets - they're stored locally only, never committed to Git
+- **Visual Indicators**: See sync status at a glance with 🌐 (public) and 🔒 (private) icons next to collection/environment names
+- **Easy Toggle**: Right-click context menu on collections, or "Make Public/Private" button on environments
+- **Automatic Git Integration**: Making something public triggers automatic export to `.postmini/` folder (Git-tracked), while marking private automatically removes the file
+- **Import Intelligence**: Collections/environments imported from Git are automatically marked as public; manual imports default to private
+
+**Full Feature Set**:
+1. ✅ **Backend**: Database schema migrations (`sync_to_git` column), export/import filtering, secret tracking (`environment_variable_secrets` table)
+2. ✅ **Collections UI**: 🌐/🔒 icons in tree, context menu toggle with auto-export/cleanup
+3. ✅ **Environments UI**: 🌐/🔒 icons on cards, "Make Public/Private" buttons with auto-export/cleanup
+4. ✅ **Secret Variables UI**: 🔐 icon in Variables Inspector, masked values (●●●●●●●●), "Mark as Secret/Regular" context menu
+5. ✅ **Variables Inspector**: TYPE column with sync/secret icons, environment/collection headers show sync status
+6. ✅ **Git Sync Dialog**: Modern styling (Inter font, consistent sizing), public/private/secret counts in status panel
+7. ✅ **Automatic File Management**: Making collection/environment public exports to Git folder; making private removes file
+8. ✅ **Testing**: 12 comprehensive tests covering all functionality
+
+**How It Works**:
+1. **Collections**: Right-click any collection → "Make Public (Sync to Git)" - file is auto-created in `.postmini/collections/`
+2. **Collections**: Right-click public collection → "Make Private (Don't Sync)" - file is auto-removed from Git folder
+3. **Environments**: Click "Make Public" button on environment card - file is auto-created in `.postmini/environments/`
+4. **Environments**: Click "Make Private" button on public environment - file is auto-removed from Git folder
+5. **Secret Variables**: Right-click any environment variable in Variables Inspector → "Mark as Secret" - value is masked with ●●●●
+6. **GitSync**: Only public items are exported when you push to Git - private items and secrets are excluded automatically
+
+### 🐛 Bug Fixes
+
+#### GitSync Status Detection
+- **Fixed persistent "import available" status**: GitSync now correctly compares file content with database content instead of relying on in-memory hashes that were cleared on app restart
+- **Fixed false "modified" detection**: Comparison now excludes `export_date` timestamp that changes on every export
+- **Fixed conflict detection**: Now only checks public collections/environments instead of flagging private items as conflicts
+
+#### UI/UX Improvements
+- **Fixed transparent menu text**: Environment context menus now have proper styling for both dark and light themes
+- **Fixed unnecessary scrolling**: Environments list now expands to fill available space instead of scrolling with only a few items
+- **Improved menu button styling**: "⋯" menu button on environment cards now has consistent theming
+
+### 🔧 Technical Improvements
+- Replaced in-memory hash-based change detection with real-time content comparison in `GitSyncManager._is_modified()`
+- Added `remove_collection_file()` and `remove_environment_file()` methods to `GitSyncManager` for automatic cleanup
+- Updated toggle handlers to call auto-sync for export and auto-cleanup for removal
+- Fixed `detect_changes()` to only compare public collections/environments against files (private items are correctly ignored)
+- Removed obsolete `_last_sync_hashes` dictionary and `_update_hash()` method
+
+---
+
 ## [2.0.0] - 2025-11-21
 
 ### ✨ Major New Features

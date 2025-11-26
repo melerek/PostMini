@@ -1,7 +1,7 @@
 # PostMini vs Postman - Feature Comparison
 
-**Last Updated:** November 21, 2025  
-**PostMini Version:** 2.0.0
+**Last Updated:** November 26, 2025  
+**PostMini Version:** 2.0.1
 
 This document provides a detailed comparison between PostMini, Postman Free, and Postman Enterprise to help you choose the right API testing tool for your needs.
 

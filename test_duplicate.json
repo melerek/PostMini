@@ -1,0 +1,27 @@
+{
+  "export_version": "1.0",
+  "export_date": "2025-11-25T22:51:52.072562",
+  "collection": {
+    "name": "Duplicate Test",
+    "order_index": 400,
+    "folders": [],
+    "variables": [],
+    "requests": [
+      {
+        "name": "Request 1",
+        "method": "GET",
+        "url": "https://example.com",
+        "params": null,
+        "headers": null,
+        "body": null,
+        "auth_type": "None",
+        "auth_token": null,
+        "pre_request_script": null,
+        "post_response_script": null,
+        "folder_path": [],
+        "order_index": 500,
+        "tests": []
+      }
+    ]
+  }
+}

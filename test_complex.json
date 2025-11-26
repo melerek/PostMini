@@ -1,0 +1,78 @@
+{
+  "export_version": "1.0",
+  "export_date": "2025-11-25T22:51:52.286023",
+  "collection": {
+    "name": "Complex API Tests",
+    "order_index": 600,
+    "folders": [],
+    "variables": [],
+    "requests": [
+      {
+        "name": "Variable Request",
+        "method": "GET",
+        "url": "{{baseUrl}}/{{version}}/users",
+        "params": {
+          "token": "{{apiKey}}"
+        },
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "body": null,
+        "auth_type": "None",
+        "auth_token": null,
+        "pre_request_script": null,
+        "post_response_script": null,
+        "folder_path": [],
+        "order_index": 700,
+        "tests": []
+      },
+      {
+        "name": "JSON Body Request",
+        "method": "POST",
+        "url": "https://api.example.com/create",
+        "params": null,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"user\": {\"name\": \"Test\", \"age\": 30}, \"settings\": {\"theme\": \"dark\"}}",
+        "auth_type": "None",
+        "auth_token": null,
+        "pre_request_script": null,
+        "post_response_script": null,
+        "folder_path": [],
+        "order_index": 800,
+        "tests": []
+      },
+      {
+        "name": "Authenticated Request",
+        "method": "GET",
+        "url": "https://api.example.com/secure",
+        "params": null,
+        "headers": null,
+        "body": null,
+        "auth_type": "Bearer Token",
+        "auth_token": "super-secret-token-123",
+        "pre_request_script": null,
+        "post_response_script": null,
+        "folder_path": [],
+        "order_index": 900,
+        "tests": []
+      },
+      {
+        "name": "Simple Request",
+        "method": "GET",
+        "url": "https://api.example.com/simple",
+        "params": null,
+        "headers": null,
+        "body": null,
+        "auth_type": "None",
+        "auth_token": null,
+        "pre_request_script": null,
+        "post_response_script": null,
+        "folder_path": [],
+        "order_index": 1000,
+        "tests": []
+      }
+    ]
+  }
+}

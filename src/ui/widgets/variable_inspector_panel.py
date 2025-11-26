@@ -147,10 +147,10 @@ class VariableInspectorPanel(QWidget):
         
         # Tree widget for variables
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["NAME", "VALUE"])
+        self.tree.setHeaderLabels(["TYPE", "NAME", "VALUE"])
         self.tree.setAlternatingRowColors(True)
-        self.tree.setColumnWidth(0, 150)
-        self.tree.setColumnWidth(1, 200)
+        self.tree.setColumnWidth(0, 50)  # Type/Icon column (🌐/🔒/🔐)
+        self.tree.setColumnWidth(1, 200)  # Name column
         self.tree.itemClicked.connect(self._on_item_clicked)
         self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -239,49 +239,83 @@ class VariableInspectorPanel(QWidget):
         # Environment variables
         if environment_vars:
             env_parent = QTreeWidgetItem(self.tree)
-            env_title = f"🌍 Environment: {environment_name or 'Unknown'} ({len(environment_vars)})"
-            env_parent.setText(0, env_title)
-            env_parent.setFont(0, QFont("Arial", 10, QFont.Weight.Bold))
+            # Get environment sync status for icon
+            env_icon = "🔒"  # Default to private
+            if environment_id and self.tree.property('db_manager'):
+                env = self.tree.property('db_manager').get_environment(environment_id)
+                if env and env.get('sync_to_git', 0) == 1:
+                    env_icon = "🌐"
+            
+            env_title = f"{env_icon} Environment: {environment_name or 'Unknown'} ({len(environment_vars)})"
+            env_parent.setText(1, env_title)
+            env_parent.setFont(1, QFont("Arial", 10, QFont.Weight.Bold))
             env_parent.setExpanded(True)
-            env_parent.setFirstColumnSpanned(True)
+            env_parent.setFirstColumnSpanned(False)
             
             for var_name, var_value in sorted(environment_vars.items()):
                 item = QTreeWidgetItem(env_parent)
-                display_value = self._truncate_value(var_value)
                 
-                item.setText(0, var_name)
-                item.setText(1, display_value)
-                item.setToolTip(1, str(var_value))
+                # Check if variable is secret
+                is_secret = False
+                if environment_id and self.tree.property('db_manager'):
+                    is_secret = self.tree.property('db_manager').is_variable_secret(environment_id, var_name)
                 
-                item.setData(0, Qt.ItemDataRole.UserRole, {
+                # Type column: 🔐 for secrets, empty for regular
+                type_icon = "🔐" if is_secret else ""
+                item.setText(0, type_icon)
+                
+                # Name column
+                item.setText(1, var_name)
+                item.setForeground(1, QColor("#4CAF50"))  # Green
+                
+                # Value column: mask if secret
+                if is_secret:
+                    display_value = "●●●●●●●●●●●●●●●●"  # 16 dots
+                    item.setToolTip(2, "Secret variable (value hidden)")
+                else:
+                    display_value = self._truncate_value(var_value)
+                    item.setToolTip(2, str(var_value))
+                
+                item.setText(2, display_value)
+                
+                item.setData(1, Qt.ItemDataRole.UserRole, {
                     'name': var_name,
                     'value': var_value,
                     'scope': 'environment',
                     'environment_id': environment_id,
-                    'editable': True
+                    'editable': True,
+                    'is_secret': is_secret
                 })
-                
-                item.setForeground(0, QColor("#4CAF50"))  # Green
                 
                 total_count += 1
         
         # Collection variables
         if collection_vars:
             coll_parent = QTreeWidgetItem(self.tree)
-            coll_parent.setText(0, f"📦 Collection ({len(collection_vars)})")
-            coll_parent.setFont(0, QFont("Arial", 10, QFont.Weight.Bold))
+            # Get collection sync status for icon
+            coll_icon = "🔒"  # Default to private
+            if collection_id and self.tree.property('db_manager'):
+                collection = self.tree.property('db_manager').get_collection(collection_id)
+                if collection and collection.get('sync_to_git', 0) == 1:
+                    coll_icon = "🌐"
+            
+            coll_parent.setText(0, "")  # Type column empty for parent
+            coll_parent.setText(1, f"{coll_icon} Collection ({len(collection_vars)})")
+            coll_parent.setFont(1, QFont("Arial", 10, QFont.Weight.Bold))
             coll_parent.setExpanded(True)
-            coll_parent.setFirstColumnSpanned(True)
+            coll_parent.setFirstColumnSpanned(False)
             
             for var in sorted(collection_vars, key=lambda x: x['key']):
                 item = QTreeWidgetItem(coll_parent)
                 display_value = self._truncate_value(var['value'])
                 
-                item.setText(0, var['key'])
-                item.setText(1, display_value)
-                item.setToolTip(1, str(var['value']))
+                # No secret tracking for collection variables (only environment)
+                item.setText(0, "")  # Type column empty
+                item.setText(1, var['key'])
+                item.setText(2, display_value)
+                item.setToolTip(2, str(var['value']))
                 
-                item.setData(0, Qt.ItemDataRole.UserRole, {
+                item.setData(1, Qt.ItemDataRole.UserRole, {
                     'name': var['key'],
                     'value': var['value'],
                     'scope': 'collection',
@@ -499,14 +533,25 @@ class VariableInspectorPanel(QWidget):
             print(f"[DEBUG] No item at position")
             return
         
-        print(f"[DEBUG] Item found: {item.text(0)}")
-        data = item.data(0, Qt.ItemDataRole.UserRole)
+        print(f"[DEBUG] Item found: {item.text(1)}")
+        data = item.data(1, Qt.ItemDataRole.UserRole)
         if not data or not data.get('editable'):
             print(f"[DEBUG] Item not editable or no data: {data}")
             return
         
         print(f"[DEBUG] Item data: {data}")
         menu = QMenu(self)
+        
+        # Mark as Secret/Regular action (only for environment variables)
+        if data.get('scope') == 'environment' and data.get('environment_id'):
+            is_secret = data.get('is_secret', False)
+            if is_secret:
+                secret_action = menu.addAction("🔓 Mark as Regular")
+                secret_action.triggered.connect(lambda: self._toggle_secret_status(item, data, False))
+            else:
+                secret_action = menu.addAction("🔐 Mark as Secret")
+                secret_action.triggered.connect(lambda: self._toggle_secret_status(item, data, True))
+            menu.addSeparator()
         
         # Delete action only (edit is via double-click now)
         delete_action = menu.addAction("🗑️ Delete")
@@ -541,6 +586,30 @@ class VariableInspectorPanel(QWidget):
             self.variable_deleted.emit(scope, var_name)
             print(f"[DEBUG] Signal emitted successfully")
             self.status_label.setText(f"✓ Deleted: {var_name}")
+    
+    def _toggle_secret_status(self, item: QTreeWidgetItem, data: dict, mark_as_secret: bool):
+        """Toggle secret status of an environment variable."""
+        var_name = data['name']
+        environment_id = data.get('environment_id')
+        
+        if not environment_id or not self.tree.property('db_manager'):
+            return
+        
+        db = self.tree.property('db_manager')
+        if mark_as_secret:
+            db.mark_variable_as_secret(environment_id, var_name)
+            self.status_label.setText(f"✓ Marked '{var_name}' as secret")
+        else:
+            db.mark_variable_as_regular(environment_id, var_name)
+            self.status_label.setText(f"✓ Marked '{var_name}' as regular")
+        
+        # Request refresh from parent
+        self.refresh_requested.emit()
+    
+    def set_db_manager(self, db):
+        """Set the database manager for accessing secret status."""
+        self.db = db
+        self.tree.setProperty('db_manager', db)
     
     def _filter_variables(self, text: str):
         """Filter variables based on search text."""

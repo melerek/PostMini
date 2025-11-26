@@ -165,15 +165,28 @@ class GitSyncDialog(QDialog):
         status_layout = QVBoxLayout()
         
         self.sync_status_label = QLabel("No workspace active")
-        self.sync_status_label.setStyleSheet("font-size: 12px; font-weight: 600;")  # Use Inter from global
+        self.sync_status_label.setStyleSheet("font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif;")
         status_layout.addWidget(self.sync_status_label)
         
         self.sync_message_label = QLabel("")
         self.sync_message_label.setWordWrap(True)
+        self.sync_message_label.setStyleSheet("font-size: 11px; font-family: 'Inter', sans-serif;")
         status_layout.addWidget(self.sync_message_label)
         
         status_group.setLayout(status_layout)
         layout.addWidget(status_group)
+        
+        # Selective Sync Statistics
+        stats_group = QGroupBox("Selective Sync")
+        stats_layout = QVBoxLayout()
+        
+        self.sync_stats_label = QLabel("Loading statistics...")
+        self.sync_stats_label.setWordWrap(True)
+        self.sync_stats_label.setStyleSheet("font-size: 11px; font-family: 'Inter', sans-serif; line-height: 1.6;")
+        stats_layout.addWidget(self.sync_stats_label)
+        
+        stats_group.setLayout(stats_layout)
+        layout.addWidget(stats_group)
         
         # Changes detected
         changes_group = QGroupBox("Detected Changes")
@@ -182,6 +195,7 @@ class GitSyncDialog(QDialog):
         self.changes_text = QTextEdit()
         self.changes_text.setReadOnly(True)
         self.changes_text.setMaximumHeight(150)
+        self.changes_text.setStyleSheet("font-size: 11px; font-family: 'Inter', sans-serif;")
         changes_layout.addWidget(self.changes_text)
         
         changes_group.setLayout(changes_layout)
@@ -455,6 +469,27 @@ class GitSyncDialog(QDialog):
         
         self.sync_status_label.setText(status_text)
         self.sync_message_label.setText(status.message)
+        
+        # Update selective sync statistics
+        public_collections = self.db.get_public_collections()
+        private_collections = [c for c in self.db.get_all_collections() if c.get('sync_to_git', 0) == 0]
+        public_envs = self.db.get_public_environments()
+        private_envs = [e for e in self.db.get_all_environments() if e.get('sync_to_git', 0) == 0]
+        
+        # Count secret variables
+        secret_count = 0
+        for env in self.db.get_all_environments():
+            secret_vars = self.db.get_secret_variables(env['id'])
+            secret_count += len(secret_vars)
+        
+        stats_html = (
+            f"<b>Collections:</b> 🌐 {len(public_collections)} public (synced) | "
+            f"🔒 {len(private_collections)} private (local only)<br>"
+            f"<b>Environments:</b> 🌐 {len(public_envs)} public (synced) | "
+            f"🔒 {len(private_envs)} private (local only)<br>"
+            f"<b>Secret Variables:</b> 🔐 {secret_count} marked as secret (never synced)"
+        )
+        self.sync_stats_label.setText(stats_html)
         
         # Display changes
         changes = status.changes

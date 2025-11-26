@@ -349,6 +349,36 @@ class DatabaseManager:
             # Column already exists, ignore
             pass
         
+        # Add sync_to_git column to collections table (selective Git sync feature)
+        try:
+            cursor.execute("ALTER TABLE collections ADD COLUMN sync_to_git INTEGER DEFAULT 0")
+            # Existing collections default to private (safe by default)
+            cursor.execute("UPDATE collections SET sync_to_git = 0 WHERE sync_to_git IS NULL")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
+        # Add sync_to_git column to environments table (selective Git sync feature)
+        try:
+            cursor.execute("ALTER TABLE environments ADD COLUMN sync_to_git INTEGER DEFAULT 0")
+            # Existing environments default to private (safe by default)
+            cursor.execute("UPDATE environments SET sync_to_git = 0 WHERE sync_to_git IS NULL")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
+        # Create table to track which environment variables are secrets
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS environment_variable_secrets (
+                environment_id INTEGER NOT NULL,
+                variable_key TEXT NOT NULL,
+                PRIMARY KEY (environment_id, variable_key),
+                FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE
+            )
+        """)
+        
         self.connection.commit()
     
     # ==================== Collection Operations ====================
@@ -704,6 +734,134 @@ class DatabaseManager:
         cursor = self.connection.cursor()
         cursor.execute("DELETE FROM environments WHERE id = ?", (environment_id,))
         self.connection.commit()
+    
+    # ==================== Environment Secret Variables Operations ====================
+    
+    def mark_variable_as_secret(self, environment_id: int, variable_key: str):
+        """
+        Mark an environment variable as secret.
+        
+        Args:
+            environment_id: ID of the environment
+            variable_key: Key of the variable to mark as secret
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            INSERT OR IGNORE INTO environment_variable_secrets (environment_id, variable_key)
+            VALUES (?, ?)
+        """, (environment_id, variable_key))
+        self.connection.commit()
+    
+    def mark_variable_as_regular(self, environment_id: int, variable_key: str):
+        """
+        Mark an environment variable as regular (not secret).
+        
+        Args:
+            environment_id: ID of the environment
+            variable_key: Key of the variable to unmark from secret
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            DELETE FROM environment_variable_secrets 
+            WHERE environment_id = ? AND variable_key = ?
+        """, (environment_id, variable_key))
+        self.connection.commit()
+    
+    def is_variable_secret(self, environment_id: int, variable_key: str) -> bool:
+        """
+        Check if an environment variable is marked as secret.
+        
+        Args:
+            environment_id: ID of the environment
+            variable_key: Key of the variable to check
+            
+        Returns:
+            True if variable is secret, False otherwise
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT 1 FROM environment_variable_secrets
+            WHERE environment_id = ? AND variable_key = ?
+        """, (environment_id, variable_key))
+        return cursor.fetchone() is not None
+    
+    def get_secret_variables(self, environment_id: int) -> List[str]:
+        """
+        Get list of secret variable keys for an environment.
+        
+        Args:
+            environment_id: ID of the environment
+            
+        Returns:
+            List of variable keys that are marked as secret
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT variable_key FROM environment_variable_secrets
+            WHERE environment_id = ?
+        """, (environment_id,))
+        return [row['variable_key'] for row in cursor.fetchall()]
+    
+    # ==================== Sync Status Operations ====================
+    
+    def set_collection_sync_status(self, collection_id: int, sync_to_git: bool):
+        """
+        Set the Git sync status for a collection.
+        
+        Args:
+            collection_id: ID of the collection
+            sync_to_git: True to sync to Git (public), False for local only (private)
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            UPDATE collections SET sync_to_git = ? WHERE id = ?
+        """, (1 if sync_to_git else 0, collection_id))
+        self.connection.commit()
+    
+    def set_environment_sync_status(self, environment_id: int, sync_to_git: bool):
+        """
+        Set the Git sync status for an environment.
+        
+        Args:
+            environment_id: ID of the environment
+            sync_to_git: True to sync to Git (public), False for local only (private)
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            UPDATE environments SET sync_to_git = ? WHERE id = ?
+        """, (1 if sync_to_git else 0, environment_id))
+        self.connection.commit()
+    
+    def get_public_collections(self) -> List[Dict]:
+        """
+        Get all collections marked as public (sync_to_git = 1).
+        
+        Returns:
+            List of public collections
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM collections WHERE sync_to_git = 1 ORDER BY order_index, id")
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def get_public_environments(self) -> List[Dict]:
+        """
+        Get all environments marked as public (sync_to_git = 1).
+        
+        Returns:
+            List of public environments with variables
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM environments WHERE sync_to_git = 1 ORDER BY name")
+        rows = cursor.fetchall()
+        
+        environments = []
+        for row in rows:
+            env = dict(row)
+            if env['variables']:
+                env['variables'] = json.loads(env['variables'])
+            environments.append(env)
+        
+        return environments
     
     # ==================== Request History Operations ====================
     

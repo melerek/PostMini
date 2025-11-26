@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.core.database import DatabaseManager
+from src.features.collection_io import CollectionExporter, CollectionImporter
 
 
 class GitSyncConfig:
@@ -65,6 +66,7 @@ class SyncStatus:
 class GitSyncManager:
     """
     Manages Git-based collaboration by syncing database contents to file system.
+    Delegates to CollectionExporter/CollectionImporter for data integrity.
     """
     
     EXPORT_VERSION = "1.0"
@@ -79,7 +81,10 @@ class GitSyncManager:
         """
         self.db = db
         self.config = config
-        self._last_sync_hashes = {}
+        
+        # Use proper collection exporter/importer for data integrity
+        self.exporter = CollectionExporter(db)
+        self.importer = CollectionImporter(db)
     
     # ==================== Workspace Setup ====================
     
@@ -185,7 +190,8 @@ class GitSyncManager:
     
     def export_collection_to_file(self, collection_id: int) -> Tuple[bool, str]:
         """
-        Export a single collection to the file system.
+        Export a single collection to the file system using CollectionExporter.
+        This ensures complete schema support (folders, scripts, variables, order_index).
         
         Args:
             collection_id: ID of the collection to export
@@ -198,71 +204,88 @@ class GitSyncManager:
             if not collection:
                 return False, f"Collection {collection_id} not found"
             
-            # Get all requests
-            requests = self.db.get_requests_by_collection(collection_id)
-            
-            # Get test assertions for each request
-            requests_with_tests = []
-            for request in requests:
-                test_assertions = self.db.get_test_assertions(request['id'])
-                request_data = {
-                    "name": request['name'],
-                    "method": request['method'],
-                    "url": request['url'],
-                    "params": request.get('params'),
-                    "headers": request.get('headers'),
-                    "body": request.get('body'),
-                    "auth_type": request.get('auth_type', 'None'),
-                    "auth_token": request.get('auth_token'),
-                    "description": request.get('description'),
-                    "tests": [
-                        {
-                            "type": t['assertion_type'],
-                            "operator": t['operator'],
-                            "field": t.get('field'),
-                            "expected_value": t.get('expected_value'),
-                            "enabled": t.get('enabled', True)
-                        }
-                        for t in test_assertions
-                    ]
-                }
-                requests_with_tests.append(request_data)
-            
-            # Build export data
-            export_data = {
-                "export_version": self.EXPORT_VERSION,
-                "export_date": datetime.now().isoformat(),
-                "collection": {
-                    "id": collection_id,
-                    "name": collection['name'],
-                    "requests": requests_with_tests
-                }
-            }
-            
             # Generate filename
             filename = self._sanitize_filename(collection['name']) + ".json"
             file_path = self.config.collections_path / filename
             
-            # Write file
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(export_data, f, indent=2, ensure_ascii=False)
+            # Use CollectionExporter to export with complete schema
+            success = self.exporter.export_collection_to_file(collection_id, str(file_path), format='internal')
             
-            # Update hash
-            self._update_hash('collection', collection_id, export_data)
+            if not success:
+                return False, "Export failed"
             
             return True, str(file_path)
             
         except Exception as e:
             return False, f"Export failed: {str(e)}"
     
+    def remove_collection_file(self, collection_id: int) -> Tuple[bool, str]:
+        """
+        Remove a collection's file from the file system when marked as private.
+        
+        Args:
+            collection_id: ID of the collection
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        try:
+            collection = self.db.get_collection(collection_id)
+            if not collection:
+                return False, f"Collection {collection_id} not found"
+            
+            # Generate filename
+            filename = self._sanitize_filename(collection['name']) + ".json"
+            file_path = self.config.collections_path / filename
+            
+            # Remove file if it exists
+            if file_path.exists():
+                file_path.unlink()
+                return True, f"Removed file: {filename}"
+            else:
+                return True, "File does not exist (already removed)"
+            
+        except Exception as e:
+            return False, f"Failed to remove file: {str(e)}"
+    
+    def remove_environment_file(self, environment_id: int) -> Tuple[bool, str]:
+        """
+        Remove an environment's file from the file system when marked as private.
+        
+        Args:
+            environment_id: ID of the environment
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        try:
+            environment = self.db.get_environment(environment_id)
+            if not environment:
+                return False, f"Environment {environment_id} not found"
+            
+            # Generate filename
+            filename = self._sanitize_filename(environment['name']) + ".json"
+            file_path = self.config.environments_path / filename
+            
+            # Remove file if it exists
+            if file_path.exists():
+                file_path.unlink()
+                return True, f"Removed file: {filename}"
+            else:
+                return True, "File does not exist (already removed)"
+            
+        except Exception as e:
+            return False, f"Failed to remove file: {str(e)}"
+    
     def export_all_collections(self) -> Tuple[bool, str, List[str]]:
         """
-        Export all collections to file system.
+        Export all PUBLIC collections to file system (only collections with sync_to_git=1).
         
         Returns:
             Tuple of (success, message, list_of_file_paths)
         """
-        collections = self.db.get_all_collections()
+        # Get only public collections
+        collections = self.db.get_public_collections()
         exported_files = []
         failed = []
         
@@ -277,11 +300,11 @@ class GitSyncManager:
             message = f"Exported {len(exported_files)}/{len(collections)} collections. Failures: {', '.join(failed)}"
             return False, message, exported_files
         else:
-            return True, f"Exported {len(exported_files)} collections", exported_files
+            return True, f"Exported {len(exported_files)} public collections", exported_files
     
     def export_environment_to_file(self, environment_id: int, include_secrets: bool = False) -> Tuple[bool, str]:
         """
-        Export an environment to file system.
+        Export an environment to file system, separating secret variables.
         
         Args:
             environment_id: ID of the environment
@@ -295,19 +318,17 @@ class GitSyncManager:
             if not environment:
                 return False, f"Environment {environment_id} not found"
             
+            # Get list of secret variable keys from database
+            secret_keys = self.db.get_secret_variables(environment_id)
+            
             # Separate secrets from regular variables
             variables = environment.get('variables', {})
             public_vars = {}
-            secret_placeholders = {}
             
             for key, value in variables.items():
-                # Heuristic: keys containing 'secret', 'key', 'token', 'password' are secrets
-                is_secret = any(keyword in key.lower() for keyword in ['secret', 'key', 'token', 'password', 'auth'])
-                
-                if is_secret and not include_secrets:
-                    # Replace with placeholder
+                if key in secret_keys and not include_secrets:
+                    # Secret variables get placeholder in public file
                     public_vars[key] = f"{{{{SECRET_{key}}}}}"
-                    secret_placeholders[f"SECRET_{key}"] = value
                 else:
                     public_vars[key] = value
             
@@ -317,7 +338,8 @@ class GitSyncManager:
                 "environment": {
                     "id": environment_id,
                     "name": environment['name'],
-                    "variables": public_vars if not include_secrets else variables
+                    "variables": public_vars if not include_secrets else variables,
+                    "secret_keys": secret_keys if not include_secrets else []  # Track which keys are secrets
                 }
             }
             
@@ -337,12 +359,13 @@ class GitSyncManager:
     
     def export_all_environments(self) -> Tuple[bool, str, List[str]]:
         """
-        Export all environments to file system.
+        Export all PUBLIC environments to file system (only environments with sync_to_git=1).
         
         Returns:
             Tuple of (success, message, list_of_file_paths)
         """
-        environments = self.db.get_all_environments()
+        # Get only public environments
+        environments = self.db.get_public_environments()
         exported_files = []
         
         for env in environments:
@@ -350,13 +373,15 @@ class GitSyncManager:
             if success:
                 exported_files.append(result)
         
-        return True, f"Exported {len(exported_files)} environments", exported_files
+        return True, f"Exported {len(exported_files)} public environments", exported_files
     
     # ==================== Import from File System ====================
     
     def import_collection_from_file(self, file_path: str, update_existing: bool = True) -> Tuple[bool, str, Optional[int]]:
         """
-        Import a collection from file system to database.
+        Import a collection from file system to database using CollectionImporter.
+        This ensures complete schema support (folders, scripts, variables, order_index).
+        Collections imported from Git sync are automatically marked as public (sync_to_git=1).
         
         Args:
             file_path: Path to the JSON file
@@ -366,6 +391,7 @@ class GitSyncManager:
             Tuple of (success, message, collection_id)
         """
         try:
+            # Read file
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
@@ -377,52 +403,27 @@ class GitSyncManager:
             existing_collection = next((c for c in existing_collections if c['name'] == collection_name), None)
             
             if existing_collection and update_existing:
-                # Update existing collection
+                # Delete existing collection entirely to reimport
                 collection_id = existing_collection['id']
+                self.db.delete_collection(collection_id)
                 
-                # Delete existing requests
-                existing_requests = self.db.get_requests_by_collection(collection_id)
-                for req in existing_requests:
-                    self.db.delete_request(req['id'])
+                # Use CollectionImporter to import with complete schema
+                success, message, collection_id = self.importer.import_collection(data, rename_if_exists=False, skip_if_exists=False)
                 
             elif existing_collection and not update_existing:
                 # Skip
                 return False, f"Collection '{collection_name}' already exists (skipped)", None
                 
             else:
-                # Create new collection
-                collection_id = self.db.create_collection(collection_name)
+                # Use CollectionImporter to import new collection with complete schema
+                success, message, collection_id = self.importer.import_collection(data, rename_if_exists=False, skip_if_exists=False)
             
-            # Import requests
-            for request_data in collection_data.get('requests', []):
-                request_id = self.db.create_request(
-                    name=request_data['name'],
-                    url=request_data['url'],
-                    method=request_data['method'],
-                    collection_id=collection_id,
-                    params=request_data.get('params'),
-                    headers=request_data.get('headers'),
-                    body=request_data.get('body'),
-                    auth_type=request_data.get('auth_type', 'None'),
-                    auth_token=request_data.get('auth_token'),
-                    description=request_data.get('description')
-                )
-                
-                # Import test assertions
-                for test in request_data.get('tests', []):
-                    self.db.create_test_assertion(
-                        request_id=request_id,
-                        assertion_type=test['type'],
-                        operator=test['operator'],
-                        field=test.get('field'),
-                        expected_value=test.get('expected_value'),
-                        enabled=test.get('enabled', True)
-                    )
+            if not success:
+                return False, message, None
             
-            # Update hash
-            self._update_hash('collection', collection_id, data)
+            # Mark as public (sync_to_git=1) since it came from Git sync
+            self.db.set_collection_sync_status(collection_id, 1)
             
-            message = f"Imported collection '{collection_name}' with {len(collection_data.get('requests', []))} requests"
             return True, message, collection_id
             
         except Exception as e:
@@ -457,6 +458,8 @@ class GitSyncManager:
     def import_environment_from_file(self, file_path: str, update_existing: bool = True) -> Tuple[bool, str, Optional[int]]:
         """
         Import an environment from file system.
+        Restores secret variable tracking from secret_keys field.
+        Environments imported from Git sync are automatically marked as public (sync_to_git=1).
         
         Args:
             file_path: Path to the JSON file
@@ -472,6 +475,7 @@ class GitSyncManager:
             env_data = data['environment']
             env_name = env_data['name']
             variables = env_data.get('variables', {})
+            secret_keys = env_data.get('secret_keys', [])  # List of variable keys that are secrets
             
             # Check if environment exists
             existing_envs = self.db.get_all_environments()
@@ -487,8 +491,12 @@ class GitSyncManager:
                 # Create
                 env_id = self.db.create_environment(env_name, variables)
             
-            # Update hash
-            self._update_hash('environment', env_id, data)
+            # Mark as public (sync_to_git=1) since it came from Git sync
+            self.db.set_environment_sync_status(env_id, 1)
+            
+            # Restore secret variable tracking
+            for key in secret_keys:
+                self.db.mark_variable_as_secret(env_id, key)
             
             return True, f"Imported environment '{env_name}'", env_id
             
@@ -590,8 +598,8 @@ class GitSyncManager:
         if not self.is_workspace_initialized():
             return changes
         
-        # Check collections
-        db_collections = {c['name']: c for c in self.db.get_all_collections()}
+        # Check collections - ONLY public ones (sync_to_git=1)
+        db_collections = {c['name']: c for c in self.db.get_public_collections()}
         
         if self.config.collections_path.exists():
             file_collections = {}
@@ -607,7 +615,7 @@ class GitSyncManager:
                 except Exception:
                     continue
             
-            # Detect new files
+            # Detect new files (files on disk not in DB as public collection)
             for name, info in file_collections.items():
                 if name not in db_collections:
                     changes['new_files'].append({
@@ -625,7 +633,7 @@ class GitSyncManager:
                             'path': info['path']
                         })
             
-            # Detect new db items
+            # Detect new db items (public collections in DB not on disk)
             for name, coll in db_collections.items():
                 if name not in file_collections:
                     changes['new_db_items'].append({
@@ -707,19 +715,65 @@ class GitSyncManager:
         json_str = json.dumps(data, sort_keys=True)
         return hashlib.sha256(json_str.encode()).hexdigest()
     
-    def _update_hash(self, item_type: str, item_id: int, data: Dict):
-        """Update stored hash for an item."""
-        key = f"{item_type}_{item_id}"
-        self._last_sync_hashes[key] = self._compute_hash(data)
-    
-    def _is_modified(self, item_type: str, item_id: int, current_data: Dict) -> bool:
-        """Check if item has been modified since last sync."""
-        key = f"{item_type}_{item_id}"
-        if key not in self._last_sync_hashes:
-            return True
+    def _is_modified(self, item_type: str, item_id: int, file_data: Dict) -> bool:
+        """
+        Check if item has been modified by comparing file content with database content.
         
-        current_hash = self._compute_hash(current_data)
-        return current_hash != self._last_sync_hashes[key]
+        Args:
+            item_type: 'collection' or 'environment'
+            item_id: ID of the item in database
+            file_data: The data loaded from the file
+            
+        Returns:
+            True if file differs from database, False if identical
+        """
+        try:
+            if item_type == 'collection':
+                # Export current DB state and compare with file
+                db_export = self.exporter.export_collection(item_id)
+                if not db_export:
+                    return True
+                
+                # Compare just the collection content (name, folders, requests, variables)
+                # Ignore export metadata that changes each time
+                file_collection = file_data.get('collection', {})
+                db_collection = db_export.get('collection', {})
+                
+                # Compare collection data
+                file_hash = self._compute_hash(file_collection)
+                db_hash = self._compute_hash(db_collection)
+                
+                return file_hash != db_hash
+                
+            elif item_type == 'environment':
+                # Get environment from DB
+                env = self.db.get_environment(item_id)
+                if not env:
+                    return True
+                
+                # Compare name and variables (ignore secret placeholders)
+                file_env = file_data.get('environment', {})
+                file_name = file_env.get('name')
+                file_vars = file_env.get('variables', {})
+                
+                if env['name'] != file_name:
+                    return True
+                
+                # Compare variables (excluding secret placeholders)
+                db_vars = env.get('variables', {})
+                secret_keys = self.db.get_secret_variables(item_id)
+                
+                # Remove secret placeholders from file vars for comparison
+                file_vars_clean = {k: v for k, v in file_vars.items() 
+                                  if not (k in secret_keys and v.startswith('{{SECRET_'))}
+                db_vars_clean = {k: v for k, v in db_vars.items() if k not in secret_keys}
+                
+                return file_vars_clean != db_vars_clean
+                
+            return True
+        except Exception:
+            # If comparison fails, assume modified to be safe
+            return True
     
     def cleanup_deleted_files(self):
         """Remove files from filesystem for deleted database items."""

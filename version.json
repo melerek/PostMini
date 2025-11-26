@@ -1,19 +1,19 @@
 {
-  "latest_version": "2.0.0",
-  "release_date": "2025-11-21",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v2.0.0/PostMini_Setup_v2.0.0.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v2.0.0",
-  "checksum": "sha256:B21725EC69B1C35FBED2DB1F148141F246AB6A03077387CA3A4FB8BA69E39107",
-  "exe_sha256": "C4E3FC2836FB1706DD5D8999A946353278E461EF7E9197234922B563979D560E",
-  "installer_sha256": "B21725EC69B1C35FBED2DB1F148141F246AB6A03077387CA3A4FB8BA69E39107",
+  "latest_version": "2.0.1",
+  "release_date": "2025-11-26",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v2.0.1/PostMini_Setup_v2.0.1.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v2.0.1",
+  "checksum": "sha256:08F890DE4A02BD05DEE31861785DFE6BBA5DA8A2903BC8A64D0A83B3A4508B2D",
+  "exe_sha256": "089F72636B6D5038797BB0086871CABE66C06189322155DEBCF81DF816F65C82",
+  "installer_sha256": "08F890DE4A02BD05DEE31861785DFE6BBA5DA8A2903BC8A64D0A83B3A4508B2D",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "🔒 NEW: OWASP-based Security Scanner with 25 vulnerability checks",
-    "🤖 AUTO-SCAN: Optional automatic scanning on every request",
-    "📊 REPORTS: Export security findings to HTML or JSON",
-    "📜 HISTORY: Enhanced request history with Security Scan tab",
-    "🐛 FIXED: Request history now shows correct collection names"
+    "🌐🔒 NEW: Selective Git Sync - Mark collections/environments as Public or Private",
+    "🔐 NEW: Secret Variables - Mark sensitive variables as secrets (masked with ●●●●)",
+    "✨ NEW: Automatic file management - Making items public/private auto-syncs Git folder",
+    "🐛 FIXED: GitSync status now correctly detects file changes after app restart",
+    "🐛 FIXED: Environment sync toggle now properly exports/removes files"
   ]
 }
 

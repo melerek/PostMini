@@ -1101,6 +1101,7 @@ class MainWindow(QMainWindow):
         self.variable_inspector_pane = VariableInspectorPanel(self)
         self.variable_inspector_pane.setVisible(False)  # Hidden by default
         self.variable_inspector_pane.db = self.db  # Set database reference
+        self.variable_inspector_pane.set_db_manager(self.db)  # Set database manager for secret tracking
         self.variable_inspector_pane.set_theme(self.current_theme)  # Set initial theme
         main_splitter.addWidget(self.variable_inspector_pane)
         
@@ -1604,8 +1605,12 @@ class MainWindow(QMainWindow):
             self.body_input.setPlainText(state.get('body', ''))
             
             # Load auth
-            self.auth_type_combo.setCurrentText(state.get('auth_type', 'None'))
+            auth_type = state.get('auth_type', 'None')
+            self.auth_type_combo.setCurrentText(auth_type)
             self.auth_token_input.setText(state.get('auth_token', ''))
+            # Manually update widget visibility since signals are blocked
+            self.bearer_token_widget.setVisible(auth_type == 'Bearer Token')
+            self.oauth_widget.setVisible(auth_type == 'OAuth 2.0')
             
             # Load description
             self._current_description = state.get('description', '')
@@ -3082,6 +3087,20 @@ class MainWindow(QMainWindow):
         self.auth_type_combo = QComboBox()
         self.auth_type_combo.addItems(['None', 'Bearer Token', 'OAuth 2.0'])
         self.auth_type_combo.currentTextChanged.connect(self._on_auth_type_changed)
+        self.auth_type_combo.setMinimumWidth(120)
+        self.auth_type_combo.setFixedHeight(24)
+        self.auth_type_combo.setStyleSheet("""
+            QComboBox {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 20px;
+                padding: 4px 8px;
+            }
+        """)
         type_layout.addWidget(self.auth_type_combo)
         type_layout.addStretch()
         layout.addLayout(type_layout)
@@ -3304,8 +3323,11 @@ class MainWindow(QMainWindow):
             all_requests = self.db.get_requests_by_collection(collection['id'])
             request_count = len(all_requests)
             
+            # Add sync status icon (🌐 for public/synced, 🔒 for private/local)
+            sync_icon = "🌐" if collection.get('sync_to_git', 0) == 1 else "🔒"
+            
             # Create collection item with custom icon
-            collection_name = f"{collection['name']} [{request_count}]"
+            collection_name = f"{sync_icon} {collection['name']} [{request_count}]"
             collection_item = QTreeWidgetItem([collection_name])
             collection_item.setData(0, Qt.ItemDataRole.UserRole, 
                                    {'type': 'collection', 'id': collection['id'], 'name': collection['name']})
@@ -4115,6 +4137,22 @@ class MainWindow(QMainWindow):
             
             menu.addSeparator()
             
+            # Add sync status actions
+            collection_id = data['id']
+            collection = self.db.get_collection(collection_id)
+            if collection:
+                is_public = collection.get('sync_to_git', 0) == 1
+                if is_public:
+                    make_private_action = QAction("🔒 Make Private (Don't Sync)", self)
+                    make_private_action.triggered.connect(lambda: self._toggle_collection_sync_status(collection_id, 0))
+                    menu.addAction(make_private_action)
+                else:
+                    make_public_action = QAction("🌐 Make Public (Sync to Git)", self)
+                    make_public_action.triggered.connect(lambda: self._toggle_collection_sync_status(collection_id, 1))
+                    menu.addAction(make_public_action)
+            
+            menu.addSeparator()
+            
             export_action = QAction("📤 Export Collection", self)
             export_action.triggered.connect(lambda: self._export_collection_from_menu(data['id']))
             menu.addAction(export_action)
@@ -4595,6 +4633,31 @@ class MainWindow(QMainWindow):
         dialog = CollectionVariablesDialog(self, self.db, collection_id, collection_name)
         dialog.exec()
     
+    def _toggle_collection_sync_status(self, collection_id: int, sync_to_git: int):
+        """Toggle sync status of a collection between public (1) and private (0)."""
+        try:
+            self.db.set_collection_sync_status(collection_id, sync_to_git)
+            status_text = "public (will sync to Git)" if sync_to_git == 1 else "private (local only)"
+            collection = self.db.get_collection(collection_id)
+            collection_name = collection.get('name', 'Collection') if collection else 'Collection'
+            self._show_status(f"Collection '{collection_name}' marked as {status_text}", "success")
+            
+            # Reload tree to update icon
+            self._load_collections()
+            
+            # Auto-sync to filesystem if Git sync is enabled
+            if sync_to_git == 1:
+                # Making public - export to Git
+                self._auto_sync_to_filesystem()
+            else:
+                # Making private - remove from Git
+                if hasattr(self, 'git_sync_manager') and self.git_sync_manager:
+                    success, message = self.git_sync_manager.remove_collection_file(collection_id)
+                    if success:
+                        self._show_status(f"Removed '{collection_name}' from Git sync folder", "success")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to update sync status: {str(e)}")
+    
     def _delete_selected(self):
         """Delete the currently selected collection, folder, or request."""
         current_item = self.collections_tree.currentItem()
@@ -4733,9 +4796,13 @@ class MainWindow(QMainWindow):
             self.body_input.setPlainText(body)
             
             # Load auth
-            self.auth_type_combo.setCurrentText(request.get('auth_type', 'None'))
+            auth_type = request.get('auth_type', 'None')
+            self.auth_type_combo.setCurrentText(auth_type)
             auth_token = request.get('auth_token', '') or ''
             self.auth_token_input.setText(auth_token)
+            # Manually update widget visibility since signals are blocked
+            self.bearer_token_widget.setVisible(auth_type == 'Bearer Token')
+            self.oauth_widget.setVisible(auth_type == 'OAuth 2.0')
             
             # Load description
             description = request.get('description', '') or ''
@@ -8450,6 +8517,10 @@ class MainWindow(QMainWindow):
             auth_token = history_entry.get('request_auth_token') or ''
             self.auth_token_input.setText(auth_token)
             
+            # Update widget visibility (signals aren't blocked here, but set explicitly for consistency)
+            self.bearer_token_widget.setVisible(auth_type == 'Bearer Token')
+            self.oauth_widget.setVisible(auth_type == 'OAuth 2.0')
+            
             # Mark tab as having unsaved changes
             self.tab_states[tab_index]['has_changes'] = True
             self.tab_states[tab_index]['name'] = f"{history_entry['method']} (from history)"
@@ -10006,6 +10077,9 @@ class MainWindow(QMainWindow):
             self.body_input.setPlainText(body)
             self.auth_type_combo.setCurrentText(auth_type)
             self.auth_token_input.setText(auth_token)
+            # Update widget visibility explicitly
+            self.bearer_token_widget.setVisible(auth_type == 'Bearer Token')
+            self.oauth_widget.setVisible(auth_type == 'OAuth 2.0')
             
             # Load scripts
             self.scripts_tab.load_scripts(pre_request_script, post_response_script)
