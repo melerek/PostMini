@@ -122,16 +122,81 @@ class PostmanConverter:
         
         # Add body if present
         body = request.get('body')
+        body_type = request.get('body_type', 'raw')
+        
         if body:
-            postman_request["body"] = {
-                "mode": "raw",
-                "raw": body,
-                "options": {
-                    "raw": {
-                        "language": "json"
+            # Map our internal body types to Postman body types
+            internal_to_postman_body_type = {
+                'raw': 'raw',
+                'form-data': 'formdata',
+                'x-www-form-urlencoded': 'urlencoded',
+                'none': None  # No body
+            }
+            postman_mode = internal_to_postman_body_type.get(body_type, 'raw')
+            
+            if postman_mode == 'formdata':
+                # Convert JSON body to Postman formdata array
+                try:
+                    body_dict = json.loads(body) if isinstance(body, str) else body
+                    formdata_items = []
+                    for key, value in body_dict.items():
+                        formdata_items.append({
+                            "key": key,
+                            "value": str(value),
+                            "type": "text"
+                        })
+                    postman_request["body"] = {
+                        "mode": "formdata",
+                        "formdata": formdata_items
+                    }
+                except (json.JSONDecodeError, AttributeError):
+                    # Fallback to raw if JSON parsing fails
+                    postman_request["body"] = {
+                        "mode": "raw",
+                        "raw": body,
+                        "options": {
+                            "raw": {
+                                "language": "json"
+                            }
+                        }
+                    }
+            elif postman_mode == 'urlencoded':
+                # Convert JSON body to Postman urlencoded array
+                try:
+                    body_dict = json.loads(body) if isinstance(body, str) else body
+                    urlencoded_items = []
+                    for key, value in body_dict.items():
+                        urlencoded_items.append({
+                            "key": key,
+                            "value": str(value),
+                            "type": "text"
+                        })
+                    postman_request["body"] = {
+                        "mode": "urlencoded",
+                        "urlencoded": urlencoded_items
+                    }
+                except (json.JSONDecodeError, AttributeError):
+                    # Fallback to raw if JSON parsing fails
+                    postman_request["body"] = {
+                        "mode": "raw",
+                        "raw": body,
+                        "options": {
+                            "raw": {
+                                "language": "json"
+                            }
+                        }
+                    }
+            else:
+                # Raw mode or fallback
+                postman_request["body"] = {
+                    "mode": "raw",
+                    "raw": body,
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
                     }
                 }
-            }
         
         # Add authentication
         auth_type = request.get('auth_type', 'None')
@@ -321,27 +386,53 @@ class PostmanConverter:
                 if not query.get('disabled', False):
                     params[query.get('key', '')] = query.get('value', '')
         
-        # Extract body
+        # Extract body and body type
         body = None
+        body_type = 'raw'  # Default
         body_data = request_data.get('body', {})
         if body_data:
             mode = body_data.get('mode', 'raw')
+            
+            # Map Postman body types to our internal body types
+            postman_to_internal_body_type = {
+                'raw': 'raw',
+                'formdata': 'form-data',
+                'urlencoded': 'x-www-form-urlencoded',
+                'file': 'raw',  # Binary/file mode - treat as raw
+                'graphql': 'raw'  # GraphQL - treat as raw JSON
+            }
+            body_type = postman_to_internal_body_type.get(mode, 'raw')
+            
             if mode == 'raw':
                 body = body_data.get('raw', '')
             elif mode == 'formdata':
-                # Convert form data to JSON
+                # Store form data as JSON dict for internal format
                 form_data = {}
                 for item_data in body_data.get('formdata', []):
                     if not item_data.get('disabled', False):
                         form_data[item_data.get('key', '')] = item_data.get('value', '')
                 body = json.dumps(form_data)
+                # Set appropriate Content-Type header if not already set
+                if 'Content-Type' not in headers:
+                    headers['Content-Type'] = 'multipart/form-data'
             elif mode == 'urlencoded':
-                # Convert urlencoded to JSON
+                # Store urlencoded data as JSON dict for internal format
                 urlencoded_data = {}
                 for item_data in body_data.get('urlencoded', []):
                     if not item_data.get('disabled', False):
                         urlencoded_data[item_data.get('key', '')] = item_data.get('value', '')
                 body = json.dumps(urlencoded_data)
+                # Set appropriate Content-Type header if not already set
+                if 'Content-Type' not in headers:
+                    headers['Content-Type'] = 'application/x-www-form-urlencoded'
+            elif mode == 'binary':
+                # Binary mode stores file path or binary data
+                # For now, store as empty - binary upload would need UI support
+                body = body_data.get('file', {}).get('src', '')
+            elif mode == 'graphql':
+                # GraphQL body - store the query
+                graphql_data = body_data.get('graphql', {})
+                body = json.dumps(graphql_data)
         
         # Extract authentication
         auth_type = "None"
@@ -396,6 +487,7 @@ class PostmanConverter:
             "params": params if params else None,
             "headers": headers if headers else None,
             "body": body,
+            "body_type": body_type,
             "auth_type": auth_type,
             "auth_token": auth_token,
             "pre_request_script": pre_request_script,

@@ -289,6 +289,27 @@ When fixing a bug in AI-generated code:
   ```
 - **When to Apply**: All `QTreeWidget` and `QTreeWidgetItem` operations, especially in drag & drop and context menus
 
+**Pattern**: Path Parameter Substitution Branch Parity (REGRESSION FIX - v2.0.1)
+- **Issue**: Path parameters (`:paramName` syntax) only substituted when active environment exists, but NOT when no environment active
+- **Root Cause**: `_send_request()` has TWO code paths: one with environment (`self.env_manager.substitute_in_request()`) and one without (manual `VariableSubstitution.substitute()` calls). The environment path calls `substitute_path_params()` internally, but the no-environment path forgot to call it.
+- **Correct Pattern**: ALWAYS call `substitute_path_params()` after `substitute()` for URL substitution in BOTH code paths
+- **Example**:
+  ```python
+  # In _send_request(), no-environment path:
+  # First substitute {{variables}}
+  url, _ = VariableSubstitution.substitute(url, None, collection_variables, extracted_variables)
+  # Then MUST substitute :pathParams
+  url, _ = VariableSubstitution.substitute_path_params(url, None, collection_variables, extracted_variables)
+  
+  # Same for pre-request script re-substitution path
+  url, _ = VariableSubstitution.substitute(original_url, None, collection_variables, extracted_variables)
+  url, _ = VariableSubstitution.substitute_path_params(url, None, collection_variables, extracted_variables)
+  ```
+- **When to Apply**: All request execution paths in `MainWindow._send_request()`, including pre-request script re-substitution
+- **Why It Matters**: Users rely on path parameters regardless of environment state. Missing this breaks Postman compatibility.
+- **Files**: `src/ui/main_window.py` lines ~5730 (no-env initial) and ~5935 (no-env re-substitution)
+- **Test Coverage**: `tests/test_path_param_no_environment.py` ensures regression doesn't happen again
+
 ## Code Style
 
 - **Imports**: Group by standard lib, third-party, local (separated by blank lines)

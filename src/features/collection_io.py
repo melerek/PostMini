@@ -136,6 +136,7 @@ class CollectionExporter:
                 "params": request.get('params'),
                 "headers": request.get('headers'),
                 "body": request.get('body'),
+                "body_type": request.get('body_type', 'raw'),
                 "auth_type": request.get('auth_type', 'None'),
                 "auth_token": request.get('auth_token'),
                 "pre_request_script": request.get('pre_request_script'),
@@ -380,7 +381,8 @@ class CollectionImporter:
                     folder_id=folder_id,  # Link to folder
                     pre_request_script=request_data.get("pre_request_script"),
                     post_response_script=request_data.get("post_response_script"),
-                    order_index=request_order_index
+                    order_index=request_order_index,
+                    body_type=request_data.get("body_type", "raw")
                 )
                 
                 # Import test assertions

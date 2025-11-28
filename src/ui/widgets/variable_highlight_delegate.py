@@ -17,6 +17,7 @@ class VariableTooltipWidget(QWidget):
     def __init__(self, var_name, var_value, parent=None):
         super().__init__(parent)
         self.var_value = var_value
+        self.line_edit_parent = None  # Will be set by HighlightedLineEdit
         self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
@@ -84,6 +85,11 @@ class VariableTooltipWidget(QWidget):
         self.hide_timer.timeout.connect(self.hide)
         
         self.setMouseTracking(True)
+        
+        # Global event filter timer to check mouse position
+        self.position_check_timer = QTimer()
+        self.position_check_timer.timeout.connect(self._check_mouse_position)
+        self.position_check_timer.setInterval(100)  # Check every 100ms
     
     def _copy_to_clipboard(self):
         """Copy variable value to clipboard."""
@@ -120,14 +126,53 @@ class VariableTooltipWidget(QWidget):
                 }
             """)
     
+    def showEvent(self, event):
+        """Tooltip shown - start position checking."""
+        super().showEvent(event)
+        self.position_check_timer.start()
+    
+    def hideEvent(self, event):
+        """Tooltip hidden - stop position checking."""
+        super().hideEvent(event)
+        self.position_check_timer.stop()
+    
+    def _check_mouse_position(self):
+        """Check if mouse is still over tooltip or source widget."""
+        global_pos = QCursor.pos()
+        
+        # Check if mouse is over the tooltip itself
+        if self.geometry().contains(self.mapFromGlobal(global_pos)):
+            # Mouse is over tooltip - keep showing and reset grace period
+            self.hide_timer.stop()
+            return  # Keep showing
+        
+        # Check if mouse is over the line edit parent
+        if self.line_edit_parent and self.line_edit_parent.isVisible():
+            if self.line_edit_parent.geometry().contains(self.line_edit_parent.mapFromGlobal(global_pos)):
+                # Check if still over a variable region
+                local_pos = self.line_edit_parent.mapFromGlobal(global_pos)
+                for region_data in self.line_edit_parent._variable_regions:
+                    if len(region_data) >= 2:
+                        region_rect = region_data[0]
+                        if region_rect.contains(local_pos):
+                            # Mouse is over variable - keep showing and reset grace period
+                            self.hide_timer.stop()
+                            return  # Keep showing
+        
+        # Mouse not over tooltip or variable region - start grace period if not already started
+        if not self.hide_timer.isActive():
+            self.hide_timer.start(1000)  # 1 second grace period to click copy button
+    
     def enterEvent(self, event):
-        """Mouse entered - cancel hide timer."""
+        """Mouse entered tooltip - cancel hide timer."""
         self.hide_timer.stop()
         super().enterEvent(event)
     
     def leaveEvent(self, event):
-        """Mouse left - start hide timer."""
-        self.hide_timer.start(500)  # Hide after 500ms
+        """Mouse left tooltip - start grace period for clicking copy button."""
+        # Start 1 second grace period when leaving tooltip
+        if not self.hide_timer.isActive():
+            self.hide_timer.start(1000)
         super().leaveEvent(event)
 
 
@@ -524,6 +569,8 @@ class HighlightedLineEdit(QLineEdit):
                     # Show custom tooltip with copy button
                     if not hasattr(self, '_tooltip_widget') or self._tooltip_widget is None:
                         self._tooltip_widget = VariableTooltipWidget(display_ref, value)
+                        # Set the line edit as parent for proper hiding behavior
+                        self._tooltip_widget.line_edit_parent = self
                     else:
                         # Update existing tooltip
                         self._tooltip_widget.var_value = value
@@ -532,6 +579,10 @@ class HighlightedLineEdit(QLineEdit):
                         if value_labels:
                             value_labels[0].setText(value)
                     
+                    # Cancel any pending hide timer when showing tooltip
+                    if hasattr(self, '_tooltip_widget') and self._tooltip_widget:
+                        self._tooltip_widget.hide_timer.stop()
+                    
                     # Position tooltip near mouse
                     global_pos = event.globalPosition().toPoint()
                     self._tooltip_widget.move(global_pos.x() + 10, global_pos.y() + 10)
@@ -539,9 +590,8 @@ class HighlightedLineEdit(QLineEdit):
                     tooltip_shown = True
                     break
         
-        if not tooltip_shown:
-            if hasattr(self, '_tooltip_widget') and self._tooltip_widget:
-                self._tooltip_widget.hide()
+        # Mouse not over any variable - tooltip hiding handled by position check timer with grace period
+        # The timer will start a 1-second grace period if not already active
     
     def _get_variable_value_by_ref(self, var_ref):
         """Get variable value based on reference with prefix.

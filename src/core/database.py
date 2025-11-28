@@ -229,6 +229,15 @@ class DatabaseManager:
             # Column already exists, ignore
             pass
         
+        # Add body_type column to requests table if it doesn't exist (migration)
+        # Stores Postman body types: 'none', 'raw', 'formdata', 'urlencoded', 'binary', 'graphql'
+        try:
+            cursor.execute("ALTER TABLE requests ADD COLUMN body_type TEXT DEFAULT 'raw'")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
         # Create extracted variables table for request chaining
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS extracted_variables (
@@ -490,7 +499,8 @@ class DatabaseManager:
                       body: Optional[str] = None, auth_type: str = 'None',
                       auth_token: Optional[str] = None, description: Optional[str] = None,
                       folder_id: Optional[int] = None, pre_request_script: Optional[str] = None,
-                      post_response_script: Optional[str] = None, order_index: Optional[int] = None) -> int:
+                      post_response_script: Optional[str] = None, order_index: Optional[int] = None,
+                      body_type: str = 'raw') -> int:
         """
         Create a new request in a collection.
         
@@ -509,6 +519,7 @@ class DatabaseManager:
             pre_request_script: Optional JavaScript pre-request script
             post_response_script: Optional JavaScript post-response script
             order_index: Optional order index for sorting (defaults to id * 100 if not provided)
+            body_type: Body type ('raw', 'formdata', 'urlencoded', 'binary', 'graphql')
             
         Returns:
             ID of the newly created request
@@ -522,17 +533,17 @@ class DatabaseManager:
         if order_index is not None:
             cursor.execute("""
                 INSERT INTO requests 
-                (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, order_index)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, order_index, body_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (collection_id, name, method, url, params_json, headers_json, 
-                  body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, order_index))
+                  body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, order_index, body_type))
         else:
             cursor.execute("""
                 INSERT INTO requests 
-                (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (collection_id, name, method, url, params, headers, body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, body_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (collection_id, name, method, url, params_json, headers_json, 
-                  body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script))
+                  body, auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, body_type))
             request_id = cursor.lastrowid
             # Set default order_index = id * 100
             cursor.execute("UPDATE requests SET order_index = ? WHERE id = ?", (request_id * 100, request_id))
@@ -596,27 +607,30 @@ class DatabaseManager:
         
         return request
     
-    def update_request(self, request_id: int, name: str, method: str, url: str,
+    def update_request(self, request_id: int, name: str, url: str, method: str,
                       params: Optional[Dict] = None, headers: Optional[Dict] = None,
                       body: Optional[str] = None, auth_type: str = 'None',
                       auth_token: Optional[str] = None, description: Optional[str] = None,
-                      pre_request_script: Optional[str] = None, post_response_script: Optional[str] = None):
+                      folder_id: Optional[int] = None, pre_request_script: Optional[str] = None,
+                      post_response_script: Optional[str] = None, body_type: str = 'raw'):
         """
         Update an existing request.
         
         Args:
             request_id: ID of the request to update
             name: New name for the request
-            method: HTTP method
             url: Request URL
+            method: HTTP method
             params: Query parameters as dictionary
             headers: Request headers as dictionary
             body: Request body
             auth_type: Type of authentication
             auth_token: Authentication token
             description: Optional description/notes for the request
+            folder_id: Optional folder ID for organization
             pre_request_script: Optional JavaScript pre-request script
             post_response_script: Optional JavaScript post-response script
+            body_type: Body type ('raw', 'formdata', 'urlencoded', 'binary', 'graphql')
         """
         cursor = self.connection.cursor()
         
@@ -628,10 +642,10 @@ class DatabaseManager:
             UPDATE requests 
             SET name = ?, method = ?, url = ?, params = ?, headers = ?, 
                 body = ?, auth_type = ?, auth_token = ?, description = ?,
-                pre_request_script = ?, post_response_script = ?
+                folder_id = ?, pre_request_script = ?, post_response_script = ?, body_type = ?
             WHERE id = ?
         """, (name, method, url, params_json, headers_json, body, 
-              auth_type, auth_token, description, pre_request_script, post_response_script, request_id))
+              auth_type, auth_token, description, folder_id, pre_request_script, post_response_script, body_type, request_id))
         
         self.connection.commit()
     

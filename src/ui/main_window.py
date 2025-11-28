@@ -1557,6 +1557,7 @@ class MainWindow(QMainWindow):
             'params': self._get_table_as_dict(self.params_table),
             'headers': self._get_table_as_dict(self.headers_table),
             'body': self.body_input.toPlainText(),
+            'body_type': self.body_type_combo.currentText(),
             'auth_type': self.auth_type_combo.currentText(),
             'auth_token': self.auth_token_input.text(),
             'description': self._current_description,  # Use string instead of widget
@@ -1579,6 +1580,7 @@ class MainWindow(QMainWindow):
         self.params_table.blockSignals(True)
         self.headers_table.blockSignals(True)
         self.body_input.blockSignals(True)
+        self.body_type_combo.blockSignals(True)
         self.auth_type_combo.blockSignals(True)
         self.auth_token_input.blockSignals(True)
         # description_input removed - now using _current_description string
@@ -1601,8 +1603,11 @@ class MainWindow(QMainWindow):
             # Load headers
             self._load_dict_to_table(state.get('headers', {}), self.headers_table)
             
-            # Load body
+            # Load body and body type
             self.body_input.setPlainText(state.get('body', ''))
+            body_type = state.get('body_type', 'raw')
+            self.body_type_combo.setCurrentText(body_type)
+            self._update_body_editor_for_type(body_type)
             
             # Load auth
             auth_type = state.get('auth_type', 'None')
@@ -1683,6 +1688,7 @@ class MainWindow(QMainWindow):
             self.params_table.blockSignals(False)
             self.headers_table.blockSignals(False)
             self.body_input.blockSignals(False)
+            self.body_type_combo.blockSignals(False)
             self.auth_type_combo.blockSignals(False)
             self.auth_token_input.blockSignals(False)
             # description_input removed - now using _current_description string
@@ -2735,6 +2741,35 @@ class MainWindow(QMainWindow):
         # Body tab
         body_widget = QWidget()
         body_layout = QVBoxLayout(body_widget)
+        
+        # Body type selector (Postman-style)
+        body_type_row = QHBoxLayout()
+        body_type_label = QLabel("Body Type:")
+        body_type_label.setFixedWidth(80)
+        self.body_type_combo = QComboBox()
+        self.body_type_combo.addItems(["none", "form-data", "x-www-form-urlencoded", "raw"])
+        self.body_type_combo.setCurrentText("raw")
+        self.body_type_combo.currentTextChanged.connect(self._on_body_type_changed)
+        self.body_type_combo.currentTextChanged.connect(self._mark_as_changed)
+        self.body_type_combo.setMinimumWidth(180)
+        self.body_type_combo.setFixedHeight(24)
+        self.body_type_combo.setStyleSheet("""
+            QComboBox {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView {
+                font-size: 11px;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 20px;
+                padding: 4px 8px;
+            }
+        """)
+        body_type_row.addWidget(body_type_label)
+        body_type_row.addWidget(self.body_type_combo)
+        body_type_row.addStretch()
+        body_layout.addLayout(body_type_row)
+        
         # Use AutocompleteTextEdit for variable autocomplete support
         from src.ui.widgets.variable_autocomplete import AutocompleteTextEdit
         self.body_input = AutocompleteTextEdit(theme=self.current_theme)
@@ -4402,7 +4437,8 @@ class MainWindow(QMainWindow):
                     collection_id=self.current_collection_id,
                     name=name,
                     method=method,
-                    url=''
+                    url='',
+                    body_type='raw'
                 )
                 self._load_collections()
                 
@@ -4459,7 +4495,8 @@ class MainWindow(QMainWindow):
                     collection_id=collection_id,
                     name=name,
                     method=method,
-                    url=''
+                    url='',
+                    body_type='raw'
                 )
                 self._load_collections()
                 self._show_status(f"Request '{name}' created", "success")
@@ -4544,7 +4581,8 @@ class MainWindow(QMainWindow):
                     collection_id=collection_id,
                     name=name,
                     method=method,
-                    url=''
+                    url='',
+                    body_type='raw'
                 )
                 # Move request to folder
                 self.db.move_request_to_folder(request_id, folder_id)
@@ -4794,6 +4832,13 @@ class MainWindow(QMainWindow):
             # Load body
             body = request.get('body', '') or ''
             self.body_input.setPlainText(body)
+            
+            # Load body type
+            body_type = request.get('body_type', 'raw')
+            self.body_type_combo.blockSignals(True)
+            self.body_type_combo.setCurrentText(body_type)
+            self.body_type_combo.blockSignals(False)
+            self._update_body_editor_for_type(body_type)
             
             # Load auth
             auth_type = request.get('auth_type', 'None')
@@ -5066,6 +5111,7 @@ class MainWindow(QMainWindow):
             'params': self._get_table_as_dict(self.params_table),
             'headers': self._get_table_as_dict(self.headers_table),
             'body': self.body_input.toPlainText(),
+            'body_type': self.body_type_combo.currentText(),
             'auth_type': self.auth_type_combo.currentText(),
             'auth_token': self.auth_token_input.text(),
             'description': self._current_description,  # Use string instead of widget
@@ -5139,6 +5185,93 @@ class MainWindow(QMainWindow):
                 height: 12px;
             }}
         """)
+    
+    def _on_body_type_changed(self, body_type: str):
+        """Handle body type selection change."""
+        self._update_body_editor_for_type(body_type)
+        self._auto_set_content_type_header(body_type)
+    
+    def _auto_set_content_type_header(self, body_type: str):
+        """
+        Automatically set Content-Type header based on body type selection.
+        
+        Args:
+            body_type: Selected body type ('none', 'raw', 'form-data', 'x-www-form-urlencoded')
+        """
+        # Map body types to Content-Type values
+        content_type_map = {
+            'none': None,  # No Content-Type needed
+            'raw': 'application/json',  # Default to JSON for raw
+            'form-data': 'multipart/form-data',
+            'x-www-form-urlencoded': 'application/x-www-form-urlencoded'
+        }
+        
+        new_content_type = content_type_map.get(body_type)
+        
+        if new_content_type is None and body_type != 'none':
+            return  # Unknown body type, don't modify headers
+        
+        # Check if Content-Type header already exists
+        content_type_row = -1
+        for row in range(self.headers_table.rowCount()):
+            key_item = self.headers_table.item(row, 0)
+            if key_item and key_item.text().strip().lower() == 'content-type':
+                content_type_row = row
+                break
+        
+        if body_type == 'none':
+            # Remove Content-Type header if body type is none
+            if content_type_row >= 0:
+                self.headers_table.removeRow(content_type_row)
+                # Ensure at least 1 empty row remains
+                if self.headers_table.rowCount() == 0:
+                    self.headers_table.setRowCount(1)
+        else:
+            # Set or update Content-Type header
+            if content_type_row >= 0:
+                # Update existing Content-Type value
+                value_item = self.headers_table.item(content_type_row, 1)
+                if value_item:
+                    value_item.setText(new_content_type)
+                else:
+                    self.headers_table.setItem(content_type_row, 1, QTableWidgetItem(new_content_type))
+            else:
+                # Add new Content-Type header
+                # Find first empty row or add new row
+                empty_row = -1
+                for row in range(self.headers_table.rowCount()):
+                    key_item = self.headers_table.item(row, 0)
+                    if not key_item or not key_item.text().strip():
+                        empty_row = row
+                        break
+                
+                if empty_row >= 0:
+                    # Use existing empty row
+                    self.headers_table.setItem(empty_row, 0, QTableWidgetItem('Content-Type'))
+                    self.headers_table.setItem(empty_row, 1, QTableWidgetItem(new_content_type))
+                else:
+                    # Add new row
+                    row_count = self.headers_table.rowCount()
+                    self.headers_table.insertRow(row_count)
+                    self.headers_table.setItem(row_count, 0, QTableWidgetItem('Content-Type'))
+                    self.headers_table.setItem(row_count, 1, QTableWidgetItem(new_content_type))
+        
+        # Update tab counts to reflect header change
+        self._update_tab_counts()
+    
+    def _update_body_editor_for_type(self, body_type: str):
+        """Update body editor UI based on selected body type."""
+        if body_type == 'none':
+            self.body_input.setEnabled(False)
+            self.body_input.setPlaceholderText("No body for this request")
+        else:
+            self.body_input.setEnabled(True)
+            if body_type == 'raw':
+                self.body_input.setPlaceholderText("Enter request body (e.g., JSON)")
+            elif body_type == 'form-data':
+                self.body_input.setPlaceholderText('Enter form data as JSON: {"key": "value", "file": "path"}')
+            elif body_type == 'x-www-form-urlencoded':
+                self.body_input.setPlaceholderText('Enter form data as JSON: {"key": "value"}')
     
     def _update_tab_counts(self):
         """Update tab labels to show item counts and status indicators."""
@@ -5379,7 +5512,9 @@ class MainWindow(QMainWindow):
                 auth_token=self.auth_token_input.text(),
                 description=self._current_description,  # Use string instead of widget
                 pre_request_script=self.scripts_tab.get_pre_request_script(),
-                post_response_script=self.scripts_tab.get_post_response_script()
+                post_response_script=self.scripts_tab.get_post_response_script(),
+                folder_id=request.get('folder_id'),
+                body_type=self.body_type_combo.currentText()
             )
             
             # Save test assertions
@@ -5732,7 +5867,11 @@ class MainWindow(QMainWindow):
             
             # Substitute URL (no env vars, but collection and extracted vars work)
             url, _ = VariableSubstitution.substitute(url, None, collection_variables, extracted_variables)
-            print(f"[DEBUG] URL after substitution: {url}")
+            print(f"[DEBUG] URL after {{variable}} substitution: {url}")
+            
+            # Substitute path parameters (:paramName syntax) in URL
+            url, _ = VariableSubstitution.substitute_path_params(url, None, collection_variables, extracted_variables)
+            print(f"[DEBUG] URL after :pathParam substitution: {url}")
             
             # Substitute params
             if params:
@@ -5932,6 +6071,8 @@ class MainWindow(QMainWindow):
                     
                     # Re-substitute from ORIGINAL unsubstituted values
                     url, _ = VariableSubstitution.substitute(original_url, None, collection_variables, extracted_variables)
+                    # Re-substitute path parameters (:paramName syntax) in URL
+                    url, _ = VariableSubstitution.substitute_path_params(url, None, collection_variables, extracted_variables)
                     
                     # Re-substitute params
                     if original_params:
@@ -6614,6 +6755,53 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'test_results_tab_index'):
             self.response_tabs.setTabVisible(self.test_results_tab_index, False)
     
+    def _convert_body_for_display(self, body: str, headers: Dict[str, str]) -> str:
+        """
+        Convert body to the format that was actually sent to the server.
+        This mirrors the conversion logic in ApiClient.execute_request().
+        
+        Args:
+            body: The body string (may be JSON)
+            headers: Request headers containing Content-Type
+            
+        Returns:
+            The body in the format that was sent (URL-encoded, multipart, or JSON)
+        """
+        if not body:
+            return body
+            
+        # Check Content-Type header
+        content_type = ''
+        for key, value in (headers or {}).items():
+            if key.lower() == 'content-type':
+                content_type = value.lower()
+                break
+        
+        if 'application/x-www-form-urlencoded' in content_type:
+            # Convert JSON to URL-encoded format
+            try:
+                import json
+                from urllib.parse import urlencode
+                body_dict = json.loads(body)
+                return urlencode(body_dict)
+            except (json.JSONDecodeError, ValueError):
+                # If not JSON, return as-is (already URL-encoded)
+                return body
+        elif 'multipart/form-data' in content_type:
+            # For multipart, show the key-value pairs (requests library handles encoding)
+            try:
+                import json
+                body_dict = json.loads(body)
+                result = "Multipart Form Data:\n"
+                for key, value in body_dict.items():
+                    result += f"  {key}: {value}\n"
+                return result.rstrip()
+            except (json.JSONDecodeError, ValueError):
+                return body
+        else:
+            # For JSON or other content types, return as-is
+            return body
+    
     def _update_request_details_viewer(self):
         """Update the request details viewer with the current request information."""
         if not self.current_request_details:
@@ -6635,7 +6823,12 @@ class MainWindow(QMainWindow):
                 request_text += f"  {key}: {value}\n"
         
         if details.get('body'):
-            request_text += f"\nBody:\n{details['body']}\n"
+            # Convert body to the format that was actually sent
+            display_body = self._convert_body_for_display(
+                details['body'], 
+                details.get('headers', {})
+            )
+            request_text += f"\nBody:\n{display_body}\n"
         
         if details.get('auth_type') and details['auth_type'] != 'None':
             request_text += f"\nAuth Type: {details['auth_type']}\n"
@@ -7514,7 +7707,8 @@ class MainWindow(QMainWindow):
                 method=request_data['method'],
                 params=request_data.get('params'),
                 headers=request_data.get('headers'),
-                body=request_data.get('body')
+                body=request_data.get('body'),
+                body_type='raw'
             )
             
             # Reload the collection tree
@@ -7649,7 +7843,8 @@ class MainWindow(QMainWindow):
                         name=request['name'],
                         url=request['url'],
                         method=request['method'],
-                        description=request.get('description', '')
+                        description=request.get('description', ''),
+                        body_type='raw'
                     )
                     
                     # Update request with all details at once
@@ -7663,7 +7858,9 @@ class MainWindow(QMainWindow):
                         body=request.get('body'),
                         auth_type=request.get('auth_type', 'None'),
                         auth_token=request.get('auth_token'),
-                        description=request.get('description', '')
+                        description=request.get('description', ''),
+                        folder_id=None,
+                        body_type='raw'
                     )
                     
                     created_count += 1
@@ -9645,7 +9842,8 @@ class MainWindow(QMainWindow):
                     headers=json.loads(request.get('headers', '{}')) if isinstance(request.get('headers'), str) else request.get('headers', {}),
                     body=request.get('body', ''),
                     auth_type=request.get('auth_type', 'No Auth'),
-                    auth_token=request.get('auth_token', '')
+                    auth_token=request.get('auth_token', ''),
+                    body_type=request.get('body_type', 'raw')
                 )
             
             self._auto_sync_to_filesystem()
@@ -10011,7 +10209,8 @@ class MainWindow(QMainWindow):
                 auth_type=request.get('auth_type', 'No Auth'),
                 auth_token=request.get('auth_token', ''),
                 pre_request_script=request.get('pre_request_script', ''),
-                post_response_script=request.get('post_response_script', '')
+                post_response_script=request.get('post_response_script', ''),
+                body_type=request.get('body_type', 'raw')
             )
             self._auto_sync_to_filesystem()
             self._load_collections()

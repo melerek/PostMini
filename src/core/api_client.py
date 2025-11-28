@@ -110,12 +110,39 @@ class ApiClient:
         # Prepare request data
         data = None
         json_data = None
+        files = None
         
-        # If body is provided, try to parse as JSON, otherwise send as raw data
+        # If body is provided, determine how to send it based on Content-Type
         if body:
-            # Check if Content-Type suggests JSON
+            # Check Content-Type header
             content_type = request_headers.get('Content-Type', '')
-            if 'application/json' in content_type.lower() or self._is_json(body):
+            
+            if 'multipart/form-data' in content_type.lower():
+                # For form-data, convert JSON to files dict for requests library
+                try:
+                    import json
+                    body_dict = json.loads(body)
+                    # requests library handles multipart encoding automatically with 'files' param
+                    # We send as 'data' parameter which requests will encode as form-data
+                    data = body_dict
+                    # Remove Content-Type header - let requests set it with boundary
+                    request_headers.pop('Content-Type', None)
+                except (json.JSONDecodeError, ValueError):
+                    # If body is not JSON, send as raw data
+                    data = body
+            elif 'application/x-www-form-urlencoded' in content_type.lower():
+                # For form-urlencoded, convert JSON to URL-encoded format
+                try:
+                    import json
+                    from urllib.parse import urlencode
+                    body_dict = json.loads(body)
+                    # Convert dict to URL-encoded string
+                    data = urlencode(body_dict)
+                except (json.JSONDecodeError, ValueError):
+                    # If body is not JSON, assume it's already URL-encoded
+                    data = body
+            elif 'application/json' in content_type.lower() or self._is_json(body):
+                # For JSON content type, parse and send as json parameter
                 try:
                     import json
                     json_data = json.loads(body)
@@ -123,6 +150,7 @@ class ApiClient:
                     # If JSON parsing fails, send as raw data
                     data = body
             else:
+                # For other content types, send as raw data
                 data = body
         
         # Record start time

@@ -175,7 +175,7 @@ def main():
     # Set application metadata
     app.setApplicationName("PostMini")
     app.setOrganizationName("PostMini")
-    app.setApplicationVersion("2.0.1")
+    app.setApplicationVersion("2.0.2")
     
     # Load custom fonts BEFORE loading stylesheets
     load_custom_fonts()

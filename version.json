@@ -1,19 +1,25 @@
 {
-  "latest_version": "2.0.1",
-  "release_date": "2025-11-26",
-  "download_url": "https://github.com/melerek/PostMini/releases/download/v2.0.1/PostMini_Setup_v2.0.1.exe",
-  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v2.0.1",
-  "checksum": "sha256:08F890DE4A02BD05DEE31861785DFE6BBA5DA8A2903BC8A64D0A83B3A4508B2D",
-  "exe_sha256": "089F72636B6D5038797BB0086871CABE66C06189322155DEBCF81DF816F65C82",
-  "installer_sha256": "08F890DE4A02BD05DEE31861785DFE6BBA5DA8A2903BC8A64D0A83B3A4508B2D",
+  "latest_version": "2.0.2",
+  "release_date": "2025-11-28",
+  "download_url": "https://github.com/melerek/PostMini/releases/download/v2.0.2/PostMini_Setup_v2.0.2.exe",
+  "changelog_url": "https://github.com/melerek/PostMini/releases/tag/v2.0.2",
+  "checksum": "sha256:A88F211BDEB0619692B1EF4034644E458A0C8B66B770CF096632D15D086AB4B2",
+  "exe_sha256": "83B7056189433F54FB8E89C3909DFC98EC94151953D3215088F0946C3596587C",
+  "installer_sha256": "A88F211BDEB0619692B1EF4034644E458A0C8B66B770CF096632D15D086AB4B2",
   "min_version": "1.0.0",
   "critical": false,
   "release_notes": [
-    "🌐🔒 NEW: Selective Git Sync - Mark collections/environments as Public or Private",
-    "🔐 NEW: Secret Variables - Mark sensitive variables as secrets (masked with ●●●●)",
-    "✨ NEW: Automatic file management - Making items public/private auto-syncs Git folder",
-    "🐛 FIXED: GitSync status now correctly detects file changes after app restart",
-    "🐛 FIXED: Environment sync toggle now properly exports/removes files"
+    "📄 NEW: Comprehensive Body Type Support - x-www-form-urlencoded, form-data, JSON, raw, binary",
+    "🔧 NEW: Auto Content-Type Headers - Automatically sets correct headers when body type changes",
+    "📋 NEW: Postman Body Type Import - Correctly imports urlencoded/formdata from Postman collections",
+    "✅ IMPROVED: Request Details Display - Shows actual sent format (URL-encoded, multipart, etc.)",
+    "🎨 IMPROVED: Body Type Dropdown Styling - Professional appearance matching other UI elements",
+    "🖱️ IMPROVED: Variable Tooltip Behavior - 1-second grace period to click copy button",
+    "🐛 FIXED: Request Details now converts JSON body to actual sent format",
+    "🐛 FIXED: Postman imports with urlencoded/formdata no longer show as 'raw'",
+    "🐛 FIXED: Tooltip stays visible long enough to click copy button",
+    "🐛 FIXED: Body type dropdown height and font size consistency",
+    "🐛 FIXED: Path parameters now substitute correctly when no environment active"
   ]
 }
 

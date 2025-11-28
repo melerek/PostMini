@@ -11,6 +11,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.2] - 2025-11-28
+
+### ✨ New Features
+
+#### Comprehensive Postman Body Type Support (COMPLETE END-TO-END)
+- **Added**: Full support for all Postman body types: `none`, `raw`, `form-data`, `x-www-form-urlencoded`
+- **UI Enhancement**: Body type selector dropdown in request editor (Postman-style)
+  - Options: none, form-data, x-www-form-urlencoded, raw
+  - Smart placeholder text updates based on selection
+  - Disables editor when "none" is selected
+- **Database**: Added `body_type` column to `requests` table with migration (default: 'raw')
+- **Postman Import**: Collection imports now preserve original body types instead of converting everything to JSON
+- **API Execution**: 
+  - `multipart/form-data`: Sends data as dict with automatic boundary handling
+  - `application/x-www-form-urlencoded`: Converts JSON to URL-encoded format
+  - `application/json`: Uses JSON parameter (existing behavior)
+- **Auto-Headers**: Postman converter automatically sets `Content-Type` headers for formdata and urlencoded bodies
+- **MainWindow Integration**: All create_request/update_request calls updated to pass body_type parameter
+- **Collection Export/Import**: `.postmini` format includes body_type field for Git Sync compatibility
+- **Tab State Management**: Body type preserved when switching between tabs
+- **Impact**: Postman collections with different body types now work identically after import to PostMini
+- **Test Coverage**: 15 comprehensive tests covering all scenarios (11 unit + 4 integration tests, all passing)
+
+### 🐛 Bug Fixes
+
+#### Form-Urlencoded Content Type Handling
+- **Fixed**: Requests with `Content-Type: application/x-www-form-urlencoded` now correctly convert JSON body to URL-encoded format
+- **Issue**: When user entered JSON body (`{"key": "value"}`) with form-urlencoded content type, the app sent raw JSON instead of URL-encoded format (`key=value`)
+- **Root Cause**: `ApiClient.execute_request()` only checked for `application/json` content type but didn't handle form-urlencoded conversion
+- **Resolution**: Added logic to detect form-urlencoded content type and convert JSON body to proper URL-encoded format using `urllib.parse.urlencode()`
+- **Impact**: OAuth token endpoints and other APIs requiring form-urlencoded data now work correctly (e.g., `grant_type=password&username=user&password=pass`)
+- **Example**: Body `{"grant_type": "password", "username": "admin@ecovadis.com"}` now correctly sends as `grant_type=password&username=admin%40ecovadis.com`
+
+#### Path Parameter Substitution Without Active Environment  
+- **Fixed**: Path parameters (`:paramName` syntax) not being substituted when no environment is active
+- **Issue**: When user had no active environment, URLs like `/users/:userId` showed parameters in tooltips but weren't replaced in actual HTTP requests
+- **Root Cause**: `_send_request()` method only called `substitute_path_params()` when `env_manager.has_active_environment()` was True
+- **Resolution**: Added `substitute_path_params()` call to both non-environment paths (initial substitution and pre-request script re-substitution)
+- **Impact**: Path parameters now work correctly with collection and extracted variables, regardless of environment status
+- **Example**: `{{baseUrl}}/order/v1/Rating/:invitationId` now properly resolves both `{{}}` and `:` syntax without active environment
+
+---
+
 ## [2.0.1] - 2025-11-26
 
 ### ✨ Major New Features
