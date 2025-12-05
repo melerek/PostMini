@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.3] - 2025-12-05
+
+### 🐛 Bug Fixes
+
+#### Collection Variable Adding from Variables Panel
+- **Fixed**: "delete_collection_variable() takes 2 positional arguments but 3 were given" error when adding collection variables from the Variables panel
+- **Issue**: When user tried to add a collection variable via the Variables panel, the operation failed with a signature mismatch error
+- **Root Cause**: `_on_collection_variable_added()` method called `delete_collection_variable(collection_id, name)` but the DatabaseManager method signature is `delete_collection_variable(variable_id)`
+- **Resolution**: Changed logic to first find existing variable by name using `get_collection_variables()`, then call `delete_collection_variable(existing_var['id'])` with the correct ID
+- **Impact**: Users can now add, update, and manage collection variables through the Variables panel without errors
+
+#### Collection Variables Not Recognized in URL Path Parameters
+- **Fixed**: Collection variables (e.g., `{{col.organizationId}}`) showing as "Undefined" in URL path parameters despite being defined
+- **Issue**: When user added a collection variable and used it in URL (like `/organizations/:organizationId`), the tooltip showed "Undefined" and the variable wasn't substituted
+- **Root Cause**: `HighlightedLineEdit._is_path_param_defined()` method uses `self.main_window.current_collection_id` to check collection variables, but the `url_input` widget never had its `main_window` reference set
+- **Resolution**: Added `set_main_window(self)` calls for `url_input`, `auth_token_input`, and `test_tab` widgets during MainWindow initialization
+- **Impact**: Collection variables are now properly recognized and substituted in all input fields, including URL path parameters
+
+---
+
 ## [2.0.2] - 2025-11-28
 
 ### ✨ New Features
