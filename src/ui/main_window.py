@@ -8324,7 +8324,8 @@ class MainWindow(QMainWindow):
             # Check if variable already exists
             existing_vars = self.db.get_collection_variables_with_metadata(collection_id)
             # Note: Database returns 'key' not 'name'
-            if any(var['key'] == name for var in existing_vars):
+            existing_var = next((var for var in existing_vars if var['key'] == name), None)
+            if existing_var:
                 reply = QMessageBox.question(
                     self,
                     "Variable Exists",
@@ -8334,8 +8335,8 @@ class MainWindow(QMainWindow):
                 )
                 if reply == QMessageBox.StandardButton.No:
                     return
-                # Delete existing variable
-                self.db.delete_collection_variable(collection_id, name)
+                # Delete existing variable by ID (not by collection_id, name)
+                self.db.delete_collection_variable(existing_var['id'])
             
             # Add the variable to the collection
             self.db.create_collection_variable(collection_id, name, value)

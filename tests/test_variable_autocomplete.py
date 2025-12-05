@@ -35,7 +35,7 @@ def test_variable_autocomplete():
         'userId': '42'
     }
     for key, value in col_vars.items():
-        window.db.update_collection_variable(col_id, key, value)
+        window.db.create_collection_variable(col_id, key, value)
     
     # Create an environment with variables
     env_name = f"Test Env {timestamp}"
