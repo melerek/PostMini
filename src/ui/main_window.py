@@ -841,6 +841,7 @@ class MainWindow(QMainWindow):
         
         # Connect environment manager to URL input for variable highlighting
         self.url_input.set_environment_manager(self.env_manager)
+        self.url_input.set_main_window(self)  # Set main window for collection variable resolution
         
         # Connect environment manager to table delegates for variable tooltips
         if hasattr(self, 'params_table') and hasattr(self.params_table, '_custom_delegate'):
@@ -853,6 +854,7 @@ class MainWindow(QMainWindow):
         # Connect environment manager to test tab for variable highlighting in test fields
         if hasattr(self, 'test_tab'):
             self.test_tab.set_environment_manager(self.env_manager)
+            self.test_tab.set_main_window(self)
         
         self._setup_shortcuts()
         self._load_collections()
@@ -3152,6 +3154,7 @@ class MainWindow(QMainWindow):
         # Use HighlightedLineEdit for variable highlighting with status colors
         self.auth_token_input = HighlightedLineEdit(theme=self.current_theme)
         self.auth_token_input.environment_manager = self.env_manager
+        self.auth_token_input.main_window = self  # Set main window for collection variable resolution
         self.auth_token_input.setPlaceholderText("Enter bearer token or use {{variable}}")
         self.auth_token_input.textChanged.connect(self._update_tab_counts)
         token_layout.addWidget(self.auth_token_input)

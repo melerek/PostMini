@@ -36,6 +36,14 @@ class TestTabWidget(QWidget):
         if hasattr(self, 'value_input'):
             self.value_input.set_environment_manager(env_manager)
     
+    def set_main_window(self, main_window):
+        """Set the main window reference for collection variable resolution."""
+        self.main_window = main_window
+        if hasattr(self, 'field_input'):
+            self.field_input.set_main_window(main_window)
+        if hasattr(self, 'value_input'):
+            self.value_input.set_main_window(main_window)
+    
     def _init_ui(self):
         """Initialize the user interface."""
         # Create scroll area
